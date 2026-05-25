@@ -221,18 +221,23 @@
           bidderTimeout: cfg.timeout,
           cache: { url: cfg.cacheUrl },
           priceGranularity: { buckets: buckets },
-          // Auto-detect any TCF v2 / USP CMP on the page. If no CMP is present,
-          // Prebid proceeds without consent strings and each bidder applies its
-          // own default policy. EU pubs must place a CMP on the page for this
-          // to surface real consent signals.
+          // Consent defaults are tuned for non-EU traffic. We declare GDPR
+          // as not-applicable via a static TCF config so the bundled
+          // tcfControl module does not cancel the auction when no CMP is
+          // detected on the page. USP is auto-detected from a CCPA CMP if
+          // present. GPP is intentionally NOT activated — the GPP module
+          // cancels the auction outright when no GPP CMP responds.
           //
-          // GPP is intentionally NOT activated by default: the consentManagementGpp
-          // module cancels the auction when no GPP CMP responds. Publishers in
-          // US state privacy jurisdictions should override with their own
-          // consentManagement.gpp config via a wrapping pbjs.setConfig call.
+          // EU / California / other-state-privacy publishers should override
+          // by wrapping a pbjs.setConfig({consentManagement:{...}}) call AFTER
+          // this script loads (use the pbjs.onEvent('auctionInit') hook or
+          // call before the engine's auction fires).
           consentManagement: {
-            gdpr: { cmpApi: "iab", timeout: 3000, defaultGdprScope: false, allowAuctionWithoutConsent: true },
-            usp:  { cmpApi: "iab", timeout: 100 }
+            gdpr: {
+              cmpApi: "static",
+              consentData: { getTCData: { tcString: "", gdprApplies: false } }
+            },
+            usp: { cmpApi: "iab", timeout: 100 }
           }
         });
       } catch (e) { warn("setConfig: " + e.message); }
