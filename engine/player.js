@@ -36,16 +36,24 @@
   function roundGran(c) { return Math.floor(c / 0.10) * 0.10; }
   function applyBias(raw) { return parseFloat(roundGran(raw + cfg.floorBias).toFixed(2)); }
 
-  function stitchTag(base, bidder, cpm) {
+  // Stitch full Prebid targeting key-value set into GAM cust_params.
+  // `targeting` is a flat string→string map: { hb_pb, hb_bidder, hb_uuid, hb_size,
+  // hb_format, hb_adid, hb_pb_<bidder>, hb_uuid_<bidder>, ... }
+  // hb_uuid is the cache UUID — without it, GAM cannot resolve the winning
+  // bidder's cached VAST creative and no ad will play.
+  function stitchTag(base, targeting) {
     try {
       var u = new URL(base);
       u.searchParams.set("correlator", Date.now().toString());
-      var hb = "hb_pb=" + cpm.toFixed(2) + "&hb_bidder=" + (bidder || "none");
+      var hb = Object.keys(targeting || {}).map(function (k) {
+        return encodeURIComponent(k) + "=" + encodeURIComponent(targeting[k]);
+      }).join("&");
       var existing = u.searchParams.get("cust_params") || "";
       u.searchParams.set("cust_params", existing ? existing + "&" + hb : hb);
       return u.toString();
     } catch (e) { warn("stitch: " + e.message); return base; }
   }
+  function noBidTargeting() { return { hb_pb: "0.00", hb_bidder: "none" }; }
 
   function loadCss(href) {
     if (!href || document.querySelector('link[data-atp="' + href + '"]')) return;
@@ -202,22 +210,43 @@
     step(1, "Auction Initialized via CDN. Target: limelightDigital | Timeout: " + cfg.timeout + "ms");
     if (typeof pbjs === "undefined") {
       warn("Prebid failed network retrieval — Fallback active.");
-      setupPlayer(stitchTag(cfg.adTagUrl, "none", 0));
+      setupPlayer(stitchTag(cfg.adTagUrl, noBidTargeting()));
       return;
     }
     pbjs.que.push(function () {
       try {
         var buckets = [];
         for (var i = 0; i <= 30; i++) buckets.push({ min: (i * 0.10).toFixed(2), max: ((i + 1) * 0.10).toFixed(2), increment: 0.10 });
-        pbjs.setConfig({ bidderTimeout: cfg.timeout, cache: { url: cfg.cacheUrl }, priceGranularity: { buckets: buckets } });
+        pbjs.setConfig({
+          bidderTimeout: cfg.timeout,
+          cache: { url: cfg.cacheUrl },
+          priceGranularity: { buckets: buckets },
+          // Auto-detect any TCF v2 / USP / GPP CMP on the page. If no CMP is
+          // present, Prebid will proceed without consent strings and each
+          // bidder applies its own default policy. EU publishers must place
+          // a CMP on the page for this to surface real consent signals.
+          consentManagement: {
+            gdpr: { cmpApi: "iab", timeout: 3000, defaultGdprScope: false, allowAuctionWithoutConsent: true },
+            usp:  { cmpApi: "iab", timeout: 100 },
+            gpp:  { cmpApi: "iab", timeout: 3000 }
+          }
+        });
       } catch (e) { warn("setConfig: " + e.message); }
+
+      // Measure the actual rendered mount size at auction time so the bid
+      // request represents the real inventory. Falls back to 640x360 if the
+      // mount hasn't laid out yet (rare — auction runs after DOM ready).
+      var mountEl = document.getElementById(cfg.divId);
+      var mountRect = mountEl ? mountEl.getBoundingClientRect() : null;
+      var pw = (mountRect && mountRect.width)  ? Math.round(mountRect.width)  : 640;
+      var ph = (mountRect && mountRect.height) ? Math.round(mountRect.height) : 360;
 
       var code = "atp-" + Date.now();
       try {
-        pbjs.addAdUnits([{ code: code, mediaTypes: { video: { context: "instream", playerSize: [640, 360], mimes: ["video/mp4", "application/x-mpegURL"], protocols: [1,2,3,4,5,6], playbackmethod: [2], skip: 0 } }, bids: [{ bidder: "limelightDigital", params: { host: cfg.bidderHost, publisherId: cfg.publisherId, adUnitId: parseInt(cfg.adUnitId, 10), adUnitType: "video" } }] }]);
+        pbjs.addAdUnits([{ code: code, mediaTypes: { video: { context: "instream", playerSize: [pw, ph], mimes: ["video/mp4", "application/x-mpegURL"], protocols: [1,2,3,4,5,6], playbackmethod: [2], skip: 0 } }, bids: [{ bidder: "limelightDigital", params: { host: cfg.bidderHost, publisherId: cfg.publisherId, adUnitId: parseInt(cfg.adUnitId, 10), adUnitType: "video" } }] }]);
       } catch (e) { warn("addAdUnits: " + e.message); }
 
-      step(1.5, "Requesting video ad payload from Limelight routing networks.");
+      step(1.5, "Requesting video ad payload from Limelight routing networks. Player size: " + pw + "x" + ph);
       try {
         pbjs.requestBids({
           timeout: cfg.timeout,
@@ -229,10 +258,27 @@
               winLog(winner.bidder, winner.cpm);
               var finalCpm = applyBias(winner.cpm);
               step(3, "Math Engine processing. Target CPM calibrated to granular bucket bounds.");
-              finalUrl = stitchTag(cfg.adTagUrl, winner.bidder, finalCpm);
+
+              // Pull the full Prebid targeting set (hb_pb, hb_bidder, hb_uuid,
+              // hb_size, hb_format, hb_adid, plus bidder-suffixed variants).
+              // hb_uuid is the cache UUID — required for GAM to resolve the
+              // winning bidder's cached VAST creative.
+              var targeting = {};
+              try { targeting = pbjs.getAdserverTargetingForAdUnitCode(code) || {}; }
+              catch (e) { warn("getAdserverTargeting: " + e.message); }
+
+              // Apply our floor bias to the price bucket (and the bidder-
+              // suffixed variant if present) so GAM line items targeting
+              // hb_pb still match the adjusted bucket.
+              var cpmStr = finalCpm.toFixed(2);
+              if (targeting.hb_pb) targeting.hb_pb = cpmStr;
+              var bidderKey = "hb_pb_" + winner.bidder;
+              if (targeting[bidderKey]) targeting[bidderKey] = cpmStr;
+
+              finalUrl = stitchTag(cfg.adTagUrl, targeting);
             } else {
               noBidLog();
-              finalUrl = stitchTag(cfg.adTagUrl, "none", 0);
+              finalUrl = stitchTag(cfg.adTagUrl, noBidTargeting());
             }
             try { if (pbjs.removeAdUnit) pbjs.removeAdUnit(code); } catch (_) {}
             setupPlayer(finalUrl);
@@ -240,7 +286,7 @@
         });
       } catch (e) {
         warn("requestBids execution break: " + e.message);
-        setupPlayer(stitchTag(cfg.adTagUrl, "none", 0));
+        setupPlayer(stitchTag(cfg.adTagUrl, noBidTargeting()));
       }
     });
   }
@@ -252,6 +298,6 @@
       loadScript("https://cdn.jsdelivr.net/npm/video.js@8/dist/video.min.js"),
       loadScript("https://imasdk.googleapis.com/js/sdkloader/ima3.js"),
       loadScript(cfg.prebidUrl)
-    ]).then(runAuction).catch(function (e) { warn("Dependency boot break: " + e.message); setupPlayer(stitchTag(cfg.adTagUrl, "none", 0)); });
+    ]).then(runAuction).catch(function (e) { warn("Dependency boot break: " + e.message); setupPlayer(stitchTag(cfg.adTagUrl, noBidTargeting())); });
   });
 })();
