@@ -1,0 +1,36 @@
+name: Version drift check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure embedded URLs match VERSION
+        run: |
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          EXPECTED="@v${VERSION}/"
+          echo "Expected ref token: ${EXPECTED}"
+
+          fail=0
+          for f in index.html demo/publisher-test.html; do
+            # Find any jsDelivr URL pointing at this repo with a ref token
+            mismatches=$(grep -oE 'cdn\.jsdelivr\.net/gh/aryanvani-pm/bidding-player@[^/"]+/' "$f" | grep -v -F "$EXPECTED" || true)
+            if [ -n "$mismatches" ]; then
+              echo "::error file=$f::Found jsDelivr URLs not matching VERSION ($VERSION):"
+              echo "$mismatches"
+              fail=1
+            fi
+          done
+
+          if [ "$fail" -eq 1 ]; then
+            echo ""
+            echo "Bump VERSION and update the @vX.Y.Z refs in index.html and demo/publisher-test.html together."
+            exit 1
+          fi
+          echo "OK: all embedded jsDelivr URLs match VERSION ${VERSION}."

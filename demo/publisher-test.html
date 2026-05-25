@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comparos Premium Publisher Platform</title>
+  
+  <link rel="icon" href="data:,">
+
+  <style>
+    /* Publisher Base Layout Styling */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #0b0c10;
+      color: #c5c6c7;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+    }
+    .site-container {
+      max-width: 800px;
+      width: 100%;
+      background: #1f2833;
+      margin: 40px 20px;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      border: 1px solid #45a29e;
+    }
+    .meta-category {
+      color: #66fcf1;
+      text-transform: uppercase;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 2px;
+    }
+    h1 {
+      color: #ffffff;
+      margin-top: 10px;
+      font-size: 32px;
+      font-weight: 600;
+    }
+    .article-text {
+      font-size: 16px;
+      line-height: 1.8;
+      color: #eaeded;
+      margin-bottom: 30px;
+    }
+
+    /* ════════════════════════════════════════════════════════════════ */
+    /* 🛡️ THE ENVIRONMENT LAYER SHIELD                                 */
+    /* ════════════════════════════════════════════════════════════════ */
+    
+    /* Target any ad container slot built inside your dynamic mount point */
+    #comparos-video-placement .adtech-ad-overlay,
+    #comparos-video-placement [class*="ima"],
+    #comparos-video-placement div[style*="z-index"] {
+      pointer-events: none !important;
+      z-index: -1 !important;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    /* Elevate and unlock pointer events ONLY when an ad is explicitly running */
+    #comparos-video-placement.vjs-ad-playing .adtech-ad-overlay,
+    #comparos-video-placement.vjs-ad-playing [class*="ima"],
+    #comparos-video-placement.vjs-ad-playing div[style*="z-index"],
+    .ad-active .adtech-ad-overlay {
+      pointer-events: auto !important;
+      z-index: 2147483647 !important; /* Forces layout depth above player skin skins */
+      display: block !important;
+      opacity: 1 !important;
+    }
+    /* ════════════════════════════════════════════════════════════════ */
+
+    .video-placement-wrapper {
+      background: #000000;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #1f2833;
+      margin: 35px 0;
+    }
+    .ad-banner-notice {
+      text-align: center;
+      font-size: 11px;
+      color: #45a29e;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+    code {
+      background: #0b0c10;
+      color: #66fcf1;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="site-container">
+    <div class="meta-category">AdTech Integration Testing</div>
+    <h1>Premium Publisher Video Sandbox</h1>
+    
+    <p class="article-text">
+      This page layout simulates a live enterprise publisher integration frame. The video player container underneath handles real-time header bidding auctions via custom wrapper logic.
+    </p>
+
+    <div class="video-placement-wrapper">
+      <div class="ad-banner-notice">Sponsored Premium Video Stream</div>
+      
+      <script src="https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v1.0.0/engine/player.js"
+              id="adtech-player-core"
+              data-pub-id="649658371"
+              data-adunit-id="972556929"
+              data-tag="https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator="
+              data-timeout="1200"
+              data-bias="0.10"
+              data-video="https://vjs.zencdn.net/v/oceans.mp4"
+              data-autoplay="true"
+              data-muted="true"
+              data-fluid="true"
+              data-loop="false"
+              data-preload="metadata"
+              data-vpaid="insecure"
+              data-div-id="comparos-video-placement"
+              data-host="ads-jbi003.rtba.bidsxchange.com"
+              data-cache="https://prebid.adnxs.com/pbc/v1/cache"
+              data-prebid-url="https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v1.0.0/prebid/prebid.js"
+              async></script>
+      </div>
+
+    <p class="article-text">
+      To observe full system auction telemetry parameters and key-value targeting mutations, load this page inside your browser with the debugging flag active: <code>?debug=true</code>.
+    </p>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video Ad Sandbox</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/video.js@8/dist/video-js.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/video.js@8/dist/video.min.js"></script>
+
+  <script src="https://imasdk.googleapis.com/js/sdkloader/ima3.js"></script>
+
+  <script src="prebid/prebid.js" async></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #080810;
+      --surface: #131324;
+      --surface2: #0b0b16;
+      --border: #232343;
+      --accent: #a370f7;
+      --accent-glow: rgba(163,112,247,0.18);
+      --danger: #ff6b6b;
+      --danger-glow: rgba(255,107,107,0.15);
+      --success: #4ade80;
+      --success-glow: rgba(74,222,128,0.15);
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --muted: var(--text-muted);
+      --label: var(--text-muted);
+      --radius: 6px;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 15px;
+      font-weight: 400;
+      letter-spacing: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 28px 16px 48px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    header {
+      width: 100%;
+      max-width: 960px;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--accent), #7c4dff);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+
+    header h1 { font-size: 22px; font-weight: 400; letter-spacing: -.2px; }
+    header p  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    .badge {
+      margin-left: auto;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .live-badge {
+      background: rgba(52,211,153,.10);
+      border: 1px solid var(--success);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      color: var(--success);
+      font-weight: 500;
+      letter-spacing: .4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .live-badge .pulse {
+      width: 7px; height: 7px;
+      background: var(--success);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--success);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: .4; }
+    }
+
+    .tab-nav {
+      width: 100%;
+      max-width: 960px;
+      display: flex;
+      gap: 4px;
+      margin-bottom: 28px;
+      padding: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .tab-btn {
+      flex: 1;
+      background: transparent;
+      color: var(--label);
+      border: none;
+      padding: 11px 18px;
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 400;
+      letter-spacing: .2px;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: background .15s, color .15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      background: var(--accent);
+      color: #0a1424;
+      font-weight: 500;
+    }
+    .tab-pane { display: none; width: 100%; max-width: 960px; flex-direction: column; align-items: center; }
+    .tab-pane.active { display: flex; }
+
+    .card {
+      width: 100%;
+      max-width: 960px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .card-header {
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      color: var(--label);
+    }
+
+    .card-header .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+
+    thead th {
+      padding: 10px 20px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--muted);
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:last-child { border-bottom: none; }
+
+    td { padding: 12px 20px; vertical-align: top; }
+
+    td.label-cell {
+      width: 220px;
+      color: var(--label);
+      font-size: 13px;
+      padding-top: 16px;
+    }
+
+    td.label-cell .req { color: var(--danger); margin-left: 2px; }
+    td.label-cell .hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    td.input-cell { padding-top: 12px; padding-bottom: 12px; }
+
+    input[type="text"],
+    input[type="number"],
+    textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+      resize: vertical;
+    }
+
+    input:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    input.error, textarea.error {
+      border-color: var(--danger) !important;
+      box-shadow: 0 0 0 3px var(--danger-glow) !important;
+    }
+
+    textarea { min-height: 80px; font-size: 12px; line-height: 1.5; }
+
+    .action-bar {
+      width: 100%;
+      max-width: 960px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    #runBtn {
+      background: var(--accent);
+      color: #0a1424;
+      border: none;
+      border-radius: var(--radius);
+      padding: 12px 28px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      letter-spacing: .2px;
+      transition: opacity .15s, transform .1s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #runBtn:hover  { opacity: .9; }
+    #runBtn:active { transform: scale(.98); }
+    #runBtn:disabled { opacity: .5; cursor: not-allowed; }
+
+    #runBtn .spinner {
+      display: none;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #resetBtn {
+      background: var(--surface);
+      color: var(--label);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 11px 20px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    #resetBtn:hover { background: var(--surface2); }
+
+    #statusMsg {
+      flex: 1;
+      font-size: 12px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      display: none;
+    }
+    #statusMsg.error   { background: var(--danger-glow); color: var(--danger); border: 1px solid var(--danger); display: block; }
+    #statusMsg.success { background: rgba(62,207,142,.12); color: var(--success); border: 1px solid rgba(62,207,142,.3); display: block; }
+    #statusMsg.info    { background: rgba(61,126,255,.1); color: var(--accent); border: 1px solid rgba(61,126,255,.3); display: block; }
+
+    #playerCard { display: none; }
+    #playerWrap { padding: 20px; background: #000; }
+    #videoContainer { width: 100%; max-width: 920px; margin: 0 auto; aspect-ratio: 16/9; background: #000; border-radius: 6px; overflow: hidden; position: relative; }
+    #videoContainer .video-js { width: 100% !important; height: 100% !important; }
+
+    #adContainer {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      pointer-events: none;
+    }
+    #adContainer.ad-active { z-index: 100; pointer-events: auto; }
+    #adContainer > div, #adContainer > video {
+      position: absolute !important;
+      top: 0 !important; left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    .video-js.vjs-fluid {
+      padding-top: 0 !important;
+      height: 100% !important;
+    }
+
+    #logOutput {
+      padding: 14px 20px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      max-height: 260px;
+      overflow-y: auto;
+      color: var(--muted);
+    }
+    #logOutput::-webkit-scrollbar { width: 5px; }
+    #logOutput::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .log-line { display: flex; gap: 12px; }
+    .log-ts   { color: #444d60; flex-shrink: 0; }
+    .log-err  { color: var(--danger); }
+    .log-ok   { color: var(--success); }
+    .log-info { color: var(--accent); }
+    .log-warn { color: #f0a050; }
+
+    .bid-info {
+      display: flex;
+      gap: 10px;
+      padding: 10px 20px;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 11px;
+      color: var(--label);
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+    .pill .val { color: var(--text); font-weight: 600; }
+
+    /* ──────────────────────────────────────────────────────
+       AD OPS TAG GENERATOR STYLES
+    ────────────────────────────────────────────────────── */
+    .adops-section {
+      width: 100%;
+      max-width: 960px;
+      margin: 40px 0 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .adops-header {
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(135deg, rgba(61,126,255,.08), rgba(124,77,255,.08));
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .4px;
+      color: var(--text);
+    }
+    .adops-header .adops-pill {
+      background: var(--accent);
+      color: #0a1424;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+    }
+    .adops-body { padding: 20px 22px; }
+    .adops-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px 18px;
+    }
+    .adops-grid .full { grid-column: 1 / -1; }
+    .adops-field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+      color: var(--label);
+      margin-bottom: 5px;
+    }
+    .adops-field input, .adops-field textarea, .adops-field select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 9px 12px;
+      outline: none;
+    }
+    .adops-field input:focus, .adops-field textarea:focus, .adops-field select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .adops-advanced {
+      margin-top: 16px;
+      padding: 14px 16px;
+      background: var(--surface2);
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+    }
+    .adops-advanced-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 10px;
+    }
+    .adops-actions {
+      display: flex;
+      gap: 12px;
+      margin: 20px 0 14px;
+      flex-wrap: wrap;
+    }
+    .adops-btn {
+      background: linear-gradient(135deg, #a370f7, #7c4dff);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 11px 22px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: .3px;
+    }
+    .adops-btn.secondary {
+      background: var(--surface2);
+      color: var(--label);
+      border: 1px solid var(--border);
+    }
+    .adops-output-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--label);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin: 16px 0 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .adops-output-label .adops-meta {
+      color: var(--muted);
+      font-weight: normal;
+      text-transform: none;
+    }
+    .adops-settings {
+      margin-top: 18px;
+      padding: 18px 20px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .adops-settings-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .adops-settings-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px 18px;
+    }
+    .toggle-wrap { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
+    .toggle-switch {
+      position: relative;
+      width: 38px; height: 22px;
+      background: var(--border);
+      border-radius: 11px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .toggle-switch::after {
+      content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: var(--text); border-radius: 50%; transition: transform .2s;
+    }
+    .toggle-switch.on { background: var(--accent); }
+    .toggle-switch.on::after { transform: translateX(16px); }
+    .toggle-label { font-size: 13px; color: var(--text); user-select: none; }
+    .toggle-hint { font-size: 11px; color: var(--muted); margin-top: 2px; display: block; }
+
+    .adops-readme-wrap {
+      margin-top: 24px;
+      padding: 18px 20px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .adops-readme-title { font-size: 12px; font-weight: 500; color: var(--accent); text-transform: uppercase; margin-bottom: 12px; }
+    #adopsReadme {
+      width: 100%; min-height: 240px; background: var(--bg); color: #cbd5e1; border: 1px solid var(--border); border-radius: 6px; padding: 16px; font-family: monospace; font-size: 12px; line-height: 1.65; resize: vertical; outline: none; white-space: pre-wrap;
+    }
+    .adops-copy-feedback { display: inline-block; margin-left: 12px; font-size: 12px; color: var(--success); opacity: 0; transition: opacity .25s; }
+    .adops-copy-feedback.show { opacity: 1; }
+
+    .req-star { color: #ff5d6c; margin-left: 3px; }
+    .field-info { display: block; margin-top: 6px; font-size: 11.5px; color: #94a3b8; line-height: 1.55; }
+    
+    .adops-field.invalid input, .adops-field.invalid textarea, .adops-field.invalid select {
+      border-color: var(--danger) !important; box-shadow: 0 0 0 3px var(--danger-glow) !important; animation: shake-error .35s ease-in-out;
+    }
+    @keyframes shake-error { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+    .adops-btn.is-blocked { opacity: .45; cursor: not-allowed; }
+    .adops-validation-alert { display: none; background: rgba(255,107,107,.10); border: 1px solid var(--danger); border-radius: 6px; padding: 10px 14px; margin: 14px 0 0; font-size: 13px; color: var(--danger); }
+    .adops-validation-alert.show { display: block; }
+
+    .adops-output-block { margin-top: 22px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .adops-output-block .adops-output-label { margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--border); background: linear-gradient(135deg, rgba(163,112,247,.04), transparent); font-size: 12px; color: var(--label); }
+    .adops-output-block textarea { width: 100%; background: var(--bg); color: #cbd5e1; border: none; padding: 14px 16px; font-family: monospace; font-size: 12px; line-height: 1.6; resize: vertical; min-height: 140px; outline: none; }
+    .adops-block-actions { padding: 12px 16px; border-top: 1px solid var(--border); background: linear-gradient(135deg, rgba(163,112,247,.03), transparent); display: flex; align-items: center; gap: 14px; }
+    .adops-engine-note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  </style>
+</head>
+<body>
+
+<nav class="tab-nav" role="tablist">
+  <button class="tab-btn active" data-tab="sandbox"    role="tab">🎛️ Sandbox Testing Suite</button>
+  <button class="tab-btn"        data-tab="production" role="tab">🚀 Production Tag Generator</button>
+</nav>
+
+<div class="tab-pane active" id="tab-sandbox" role="tabpanel">
+  <header>
+    <div class="logo">&#9654;</div>
+    <div>
+      <h1>Video Ad Sandbox</h1>
+      <p>Programmatic Video Header Bidding Test Environment</p>
+    </div>
+    <div class="live-badge"><span class="pulse"></span>Bidder: Limelight Digital (LIVE)</div>
+    <div class="badge">Prebid.js v11.11.0 &bull; IMA SDK v3 &bull; Video.js v8</div>
+  </header>
+
+  <div class="card">
+    <div class="card-header"><div class="dot"></div>Auction Configuration</div>
+    <table>
+      <thead><tr><th>Field</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td class="label-cell">Content URL <span class="req">*</span></td><td class="input-cell"><input type="text" id="contentUrl" value="https://vjs.zencdn.net/v/oceans.mp4" /></td></tr>
+        <tr><td class="label-cell">GAM Base Tag <span class="req">*</span></td><td class="input-cell"><textarea id="gamTag">https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator=</textarea></td></tr>
+        <tr><td class="label-cell">Prebid Timeout</td><td class="input-cell"><input type="number" id="prebidTimeout" value="1200" /></td></tr>
+        <tr><td class="label-cell">Limelight Host <span class="req">*</span></td><td class="input-cell"><input type="text" id="lmltHost" value="ads-jbi003.rtba.bidsxchange.com" /></td></tr>
+        <tr><td class="label-cell">Limelight Publisher ID <span class="req">*</span></td><td class="input-cell"><input type="text" id="lmltPubId" value="649658371" /></td></tr>
+        <tr><td class="label-cell">Limelight Ad Unit ID <span class="req">*</span></td><td class="input-cell"><input type="number" id="lmltAdUnitId" value="972556929" /></td></tr>
+        <tr><td class="label-cell">Prebid Cache URL <span class="req">*</span></td><td class="input-cell"><input type="text" id="prebidCacheUrl" value="https://prebid.adnxs.com/pbc/v1/cache" /></td></tr>
+        <tr><td class="label-cell">Mock Bid CPM</td><td class="input-cell"><input type="number" id="mockCpm" value="2.5" step="0.01" /></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="action-bar">
+    <button id="runBtn"><span class="spinner" id="btnSpinner"></span>&#9654; Run Auction</button>
+    <button id="resetBtn">&#8635; Reset</button>
+    <div id="statusMsg"></div>
+  </div>
+
+  <div class="card" id="playerCard">
+    <div class="card-header"><div class="dot"></div>Ad Player</div>
+    <div id="playerWrap"><div id="videoContainer"></div></div>
+    <div class="bid-info" id="bidInfo"></div>
+  </div>
+
+  <div class="card log-card">
+    <div class="card-header"><div class="dot"></div>Console Log</div>
+    <div id="logOutput"><div class="log-line"><span class="log-ts">--:--:--</span><span class="log-info">Sandbox ready.</span></div></div>
+  </div>
+</div>
+
+<div class="tab-pane" id="tab-production" role="tabpanel">
+<section class="adops-section" id="adopsSection">
+  <div class="adops-header">📋 AD OPS TAG GENERATOR TOOL<span class="adops-pill">Production</span></div>
+  <div class="adops-body">
+    <div class="adops-grid">
+      <div class="adops-field full" data-required="true">
+        <label>🏷️ Release Version / Branch<span class="req-star">*</span></label>
+        <input type="text" id="adopsVersion" value="v1.0.0" />
+        <span class="field-info">Use a tag like <code>v1.0.0</code> for production (immutable, recommended) or a branch name like <code>feat/foo</code> for testing. Both URLs below auto-update from this value.</span>
+      </div>
+      <div class="adops-field full" data-required="true">
+        <label>🌐 Universal Hosted Engine Script URL<span class="req-star">*</span></label>
+        <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v1.0.0/engine/player.js" />
+        <span class="field-info">Auto-derived from the version above. Override only if you know what you are doing.</span>
+      </div>
+      <div class="adops-field full">
+        <label>Video Content URL</label>
+        <input type="text" id="adopsVideoUrl" value="https://vjs.zencdn.net/v/oceans.mp4" />
+      </div>
+      <div class="adops-field full" data-required="true">
+        <label>GAM Master Ad Tag URL<span class="req-star">*</span></label>
+        <textarea id="adopsAdTagUrl">https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator=</textarea>
+      </div>
+      <div class="adops-field" data-required="true">
+        <label>Publisher ID<span class="req-star">*</span></label>
+        <input type="text" id="adopsPublisherId" value="649658371" />
+      </div>
+      <div class="adops-field" data-required="true">
+        <label>Ad Unit ID<span class="req-star">*</span></label>
+        <input type="text" id="adopsAdUnitId" value="972556929" />
+      </div>
+      <div class="adops-field">
+        <label>Bidder Timeout (ms)</label>
+        <input type="number" id="adopsTimeout" value="1200" />
+      </div>
+      <div class="adops-field">
+        <label>Strategic Bias ($)</label>
+        <input type="number" id="adopsFloorBias" value="0.10" step="0.01" />
+      </div>
+      <div class="adops-field full" data-required="true">
+        <label>Prebid.js Hosted Library URL<span class="req-star">*</span></label>
+        <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v1.0.0/prebid/prebid.js" />
+        <span class="field-info">Auto-derived from the version above. Stays in lockstep with the engine URL so they never drift.</span>
+      </div>
+    </div>
+
+    <div class="adops-advanced">
+      <div class="adops-advanced-title">⚙ Advanced</div>
+      <div class="adops-grid">
+        <div class="adops-field">
+          <label>Limelight Host URL</label>
+          <input type="text" id="adopsHost" value="ads-jbi003.rtba.bidsxchange.com" />
+        </div>
+        <div class="adops-field">
+          <label>Prebid Cache URL</label>
+          <input type="text" id="adopsCacheUrl" value="https://prebid.adnxs.com/pbc/v1/cache" />
+        </div>
+        <div class="adops-field">
+          <label>Div ID (Mount Point)</label>
+          <input type="text" id="adopsDivId" value="comparos-video-placement" />
+        </div>
+        <div class="adops-field">
+          <label>Debug Mode by Default?</label>
+          <select id="adopsDebugMode" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font);font-size:13px;padding:9px 12px;outline:none;">
+            <option value="false" selected>false (silent on production sites)</option>
+            <option value="true">true (verbose logging)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="adops-settings">
+      <div class="adops-settings-title">🎚 Advanced Player Settings</div>
+      <div class="adops-settings-grid">
+        <div class="toggle-wrap"><div class="toggle-switch on" id="tglAutoplay" data-on="true"></div><div><div class="toggle-label">Autoplay on Load</div></div></div>
+        <div class="toggle-wrap"><div class="toggle-switch on" id="tglMuted" data-on="true"></div><div><div class="toggle-label">Start Muted</div></div></div>
+        <div class="adops-field">
+          <label>📐 Player Sizing</label>
+          <select id="optSizing"><option value="fluid" selected>Fluid (Responsive / Mobile-Friendly)</option><option value="fixed">Fixed (Static 640x480 Box)</option></select>
+        </div>
+        <div class="adops-field">
+          <label>⏳ Preload Behavior</label>
+          <select id="optPreload"><option value="metadata" selected>metadata (Recommended)</option><option value="auto">auto</option><option value="none">none</option></select>
+        </div>
+        <div class="adops-field">
+          <label>🏆 VPAID Access Mode</label>
+          <select id="optVpaid"><option value="insecure" selected>Insecure (Highest Yield)</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select>
+        </div>
+        <div class="toggle-wrap"><div class="toggle-switch" id="tglLoop" data-on="false"></div><div><div class="toggle-label">Loop Content</div></div></div>
+      </div>
+    </div>
+
+    <div class="adops-actions">
+      <button class="adops-btn" id="adopsGenerateBtn">⚡ Generate Production Tag</button>
+      <span class="adops-copy-feedback" id="adopsCopyFeedback">✓ Copied to clipboard</span>
+    </div>
+
+    <div class="adops-validation-alert" id="adopsValidationAlert">⚠️ Generation Blocked: Please fill in all required fields marked with (*).</div>
+
+    <div class="adops-output-block">
+      <div class="adops-output-label">
+        <span>📋 Publisher Integration HTML Tag</span>
+        <span class="adops-meta" id="adopsEngineMeta">0 lines • Deployment Integration Tag</span>
+      </div>
+      <textarea id="adopsOutputEngine" readonly placeholder="Click ⚡ Generate to yield delivery embed code..."></textarea>
+      <div class="adops-block-actions">
+        <button class="adops-btn secondary" id="adopsCopyEngineBtn">📋 Copy Integration Tag</button>
+        <span class="adops-engine-note">💡 How to use: The publisher copies this tiny, high-performance snippet and inserts it exactly where they want the video player canvas to initialize. The script automatically handles asset streaming and auction tasks remotely.</span>
+      </div>
+    </div>
+
+    <div class="adops-readme-wrap">
+      <div class="adops-readme-title">📋 Integration Blueprint Overview</div>
+      <textarea id="adopsReadme" readonly></textarea>
+    </div>
+  </div>
+</section>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────
+   Tab 1 Sandbox Engineering Script Logic
+───────────────────────────────────────────── */
+const $ = id => document.getElementById(id);
+function ts() { return new Date().toTimeString().slice(0,8); }
+function log(msg, level = 'info') { const out = $('logOutput'); const line = document.createElement('div'); line.className = 'log-line'; line.innerHTML = `<span class="log-ts">${ts()}</span><span class="log-${level}">${msg}</span>`; out.appendChild(line); out.scrollTop = out.scrollHeight; }
+function setStatus(msg, type) { const el = $('statusMsg'); el.textContent = msg; el.className = type; }
+function clearStatus() { const el = $('statusMsg'); el.className = ''; el.style.display = 'none'; }
+
+function milestone(step, msg) { log(`<span style="background:linear-gradient(90deg,#a370f7,#7c4dff);color:#fff;padding:1px 7px;border-radius:3px;font-weight:bold;">${step}</span> <span style="color:#4ade80;">${msg}</span>`, 'info'); }
+function milestoneWinner(bidder, rawCpm) { log(`<span style="background:linear-gradient(90deg,#f1c40f,#e67e22);color:#000;padding:1px 8px;border-radius:3px;font-weight:bold;">🏆 WINNER</span> <span style="color:#f1c40f;font-weight:bold;">${bidder} | Raw CPM: $${rawCpm.toFixed(2)}</span>`, 'info'); }
+function milestoneNoDemand() { log(`<span style="background:#3a3a3a;color:#bdc3c7;padding:1px 8px;border-radius:3px;font-weight:bold;">⚠️ NO DEMAND</span> <span style="color:#bdc3c7;">Fallback path engaged ($0.00 targeting).</span>`, 'warn'); }
+
+function buildCustomGranularity() { const buckets = []; for (let i = 0; i <= 30; i++) buckets.push({ min: (i * 0.10).toFixed(2), max: ((i + 1) * 0.10).toFixed(2), increment: 0.10 }); return { buckets }; }
+function roundToGranularity(cpm) { return Math.floor(cpm / 0.10) * 0.10; }
+function applyBias(cpm) { const raw = parseFloat(cpm); const biased = parseFloat((raw + 0.05).toFixed(2)); const final = parseFloat(roundToGranularity(biased).toFixed(2)); return { raw, biased, final }; }
+
+const MANDATORY = ['contentUrl', 'gamTag', 'lmltHost', 'lmltPubId', 'lmltAdUnitId', 'prebidCacheUrl'];
+function validate() { let ok = true; MANDATORY.forEach(id => { const el = $(id); if (!el.value.trim()) { el.classList.add('error'); ok = false; } else { el.classList.remove('error'); } }); return ok; }
+MANDATORY.forEach(id => $(id).addEventListener('input', () => $(id).classList.remove('error')));
+
+let currentPlayer = null;
+function disposePlayer() { if (currentPlayer) { try { currentPlayer.dispose(); } catch(e) {} currentPlayer = null; } $('videoContainer').innerHTML = ''; }
+function createVideoEl() { const v = document.createElement('video'); v.id = 'adPlayer'; v.className = 'video-js vjs-default-skin vjs-big-play-centered'; v.setAttribute('playsinline', ''); v.setAttribute('controls', ''); $('videoContainer').appendChild(v); return v; }
+function showBidInfo(items) { $('bidInfo').innerHTML = items.map(([k,v]) => `<div class="pill">${k}: <span class="val">${v}</span></div>`).join(''); }
+
+async function runSandbox() {
+  clearStatus(); if (!validate()) { setStatus('Fill in required options.', 'error'); return; }
+  $('runBtn').disabled = true; $('btnSpinner').style.display = 'block'; setStatus('Processing test auction…', 'info');
+  
+  const contentUrl = $('contentUrl').value.trim(); const gamBaseTag = $('gamTag').value.trim();
+  const mockCpmRaw = $('mockCpm').value.trim();
+  
+  let bid = { cpm: 0, bidder: 'none', isMock: true };
+  if (mockCpmRaw !== '') {
+    const math = applyBias(mockCpmRaw); milestoneWinner('mock-bid-injector', math.raw);
+    milestone('STEP 3', `Bias: +$0.05`); milestone('STEP 4', `Rounded target CPM: $${math.final.toFixed(2)}`);
+    bid = { cpm: math.final, bidder: 'mock-bid-injector', isMock: true };
+  } else {
+    milestoneNoDemand();
+  }
+
+  const urlObj = new URL(gamBaseTag);
+  urlObj.searchParams.set('cust_params', `hb_pb=${bid.cpm.toFixed(2)}&hb_bidder=${bid.bidder}`);
+  
+  disposePlayer(); const videoEl = createVideoEl();
+  const player = videojs(videoEl, { autoplay: true, muted: true, controls: true, fluid: true, sources: [{ src: contentUrl, type: 'video/mp4' }] });
+  currentPlayer = player;
+  
+  player.ready(() => {
+    const adContainer = document.createElement('div'); adContainer.id = 'adContainer'; $('videoContainer').appendChild(adContainer);
+    const adc = new google.ima.AdDisplayContainer(adContainer, videoEl); const loader = new google.ima.AdsLoader(adc);
+    loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, () => {
+      adContainer.classList.remove('ad-active');
+      player.play().catch(()=>{});
+    });
+    loader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, (e) => {
+      const mgr = e.getAdsManager(videoEl);
+      mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, () => {
+        adContainer.classList.remove('ad-active');
+        try { mgr.destroy(); } catch (_) {}
+        player.play().catch(()=>{});
+      });
+      mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_PAUSE_REQUESTED, () => { player.pause(); adContainer.classList.add('ad-active'); });
+      mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_RESUME_REQUESTED, () => { adContainer.classList.remove('ad-active'); player.play().catch(()=>{}); });
+      mgr.addEventListener(google.ima.AdEvent.Type.ALL_ADS_COMPLETED, () => {
+        adContainer.classList.remove('ad-active');
+        try { mgr.destroy(); } catch (_) {}
+      });
+      mgr.init(videoEl.offsetWidth, videoEl.offsetHeight, google.ima.ViewMode.NORMAL); mgr.start();
+    });
+    const req = new google.ima.AdsRequest(); req.adTagUrl = urlObj.toString();
+    adc.initialize(); loader.requestAds(req); milestone('STEP 6', 'Dispatched.');
+    showBidInfo([['CPM', `$${bid.cpm.toFixed(2)}`], ['Source', 'Sandbox']]);
+  });
+  
+  $('playerCard').style.display = 'block'; $('runBtn').disabled = false; $('btnSpinner').style.display = 'none'; setStatus('Execution finished.', 'success');
+}
+$('runBtn').addEventListener('click', runSandbox);
+$('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard').style.display = 'none'; clearStatus(); });
+
+/* ─────────────────────────────────────────────
+   Tab 2 Generation Compiler Core Systems
+───────────────────────────────────────────── */
+(function adopsModule() {
+  const get = id => document.getElementById(id).value.trim();
+  function escJs(str) { return String(str || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/<\//g, '<\\/'); }
+
+  function getSettings() {
+    return {
+      engineUrl:   get('adopsEngineCdnUrl'),
+      videoUrl:    get('adopsVideoUrl'),
+      adTagUrl:    get('adopsAdTagUrl'),
+      publisherId: get('adopsPublisherId'),
+      adUnitId:    get('adopsAdUnitId'),
+      timeout:     parseInt(get('adopsTimeout'), 10) || 1200,
+      floorBias:   parseFloat(get('adopsFloorBias')) || 0.10,
+      prebidUrl:   get('adopsPrebidUrl'),
+      host:        get('adopsHost'),
+      cacheUrl:    get('adopsCacheUrl'),
+      divId:       get('adopsDivId') || 'comparos-video-placement',
+      debugMode:   get('adopsDebugMode') === 'true',
+      autoplay:    document.getElementById('tglAutoplay').classList.contains('on'),
+      muted:       document.getElementById('tglMuted').classList.contains('on'),
+      loop:        document.getElementById('tglLoop').classList.contains('on'),
+      sizing:      document.getElementById('optSizing').value,
+      preload:     document.getElementById('optPreload').value,
+      vpaid:       document.getElementById('optVpaid').value,
+    };
+  }
+
+  function buildEngineFile(v) {
+    return [
+      '',
+      '<script src="' + escJs(v.engineUrl) + '"',
+      '        id="adtech-player-core"',
+      '        data-pub-id="' + escJs(v.publisherId) + '"',
+      '        data-adunit-id="' + escJs(v.adUnitId) + '"',
+      '        data-tag="' + escJs(v.adTagUrl) + '"',
+      '        data-timeout="' + v.timeout + '"',
+      '        data-bias="' + v.floorBias.toFixed(2) + '"',
+      '        data-video="' + escJs(v.videoUrl) + '"',
+      '        data-autoplay="' + (v.autoplay ? 'true' : 'false') + '"',
+      '        data-muted="' + (v.muted ? 'true' : 'false') + '"',
+      '        data-fluid="' + (v.sizing === 'fluid' ? 'true' : 'false') + '"',
+      '        data-loop="' + (v.loop ? 'true' : 'false') + '"',
+      '        data-preload="' + v.preload + '"',
+      '        data-vpaid="' + v.vpaid + '"',
+      '        data-div-id="' + escJs(v.divId) + '"',
+      '        data-host="' + escJs(v.host) + '"',
+      '        data-cache="' + escJs(v.cacheUrl) + '"',
+      '        data-prebid-url="' + escJs(v.prebidUrl) + '"',
+      '        async><\/script>'
+    ].join('\n');
+  }
+
+  const REPO_PATH = 'aryanvani-pm/bidding-player';
+  function jsdelivrUrl(ref, path) {
+    return 'https://cdn.jsdelivr.net/gh/' + REPO_PATH + '@' + ref + '/' + path;
+  }
+  function syncUrlsFromVersion() {
+    const ref = document.getElementById('adopsVersion').value.trim() || 'v1.0.0';
+    document.getElementById('adopsEngineCdnUrl').value = jsdelivrUrl(ref, 'engine/player.js');
+    document.getElementById('adopsPrebidUrl').value   = jsdelivrUrl(ref, 'prebid/prebid.js');
+  }
+  document.getElementById('adopsVersion').addEventListener('input', syncUrlsFromVersion);
+
+  const REQUIRED_IDS = ['adopsVersion', 'adopsEngineCdnUrl', 'adopsAdTagUrl', 'adopsPublisherId', 'adopsAdUnitId', 'adopsPrebidUrl'];
+  function findEmptyRequired() { return REQUIRED_IDS.filter(id => !document.getElementById(id).value.trim()); }
+
+  function onGenerate() {
+    const empty = findEmptyRequired();
+    if (empty.length > 0) {
+      empty.forEach(id => document.getElementById(id).closest('.adops-field').classList.add('invalid'));
+      document.getElementById('adopsValidationAlert').classList.add('show');
+      return;
+    }
+    document.querySelectorAll('.adops-field.invalid').forEach(f => f.classList.remove('invalid'));
+    document.getElementById('adopsValidationAlert').classList.remove('show');
+
+    const v = getSettings();
+    const tagContent = buildEngineFile(v);
+    document.getElementById('adopsOutputEngine').value = tagContent;
+    document.getElementById('adopsEngineMeta').textContent = `${tagContent.split('\n').length} lines • Deployment Integration Tag`;
+    
+    document.getElementById('adopsReadme').value = [
+      '📋 DEPLOYMENT SUMMARY',
+      '====================================================',
+      'Provide the snippet generated above to the engineering leads.',
+      'They can paste this structural element anywhere within their HTML document grid.',
+      'The platform loop handles rendering mechanics autonomously.'
+    ].join('\n');
+  }
+
+  document.getElementById('adopsGenerateBtn').addEventListener('click', onGenerate);
+  document.getElementById('adopsCopyEngineBtn').addEventListener('click', () => {
+    const ta = document.getElementById('adopsOutputEngine'); ta.select(); document.execCommand('copy');
+    const fb = document.getElementById('adopsCopyFeedback'); fb.classList.add('show'); setTimeout(() => fb.classList.remove('show'), 2000);
+  });
+
+  function wireToggle(id) { const el = $(id); el.addEventListener('click', () => el.classList.toggle('on')); }
+  ['tglAutoplay', 'tglMuted', 'tglLoop'].forEach(wireToggle);
+})();
+
+(function tabNav() {
+  const tabs = document.querySelectorAll('.tab-btn'); const panes = document.querySelectorAll('.tab-pane');
+  tabs.forEach(btn => btn.addEventListener('click', () => {
+    tabs.forEach(b => b.classList.toggle('active', b === btn));
+    panes.forEach(p => p.classList.toggle('active', p.id === 'tab-' + btn.dataset.tab));
+  }));
+})();
+</script>
+</body>
+</html>
