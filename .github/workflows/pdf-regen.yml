@@ -1,0 +1,63 @@
+name: Auto-regenerate publisher PDF
+
+# Whenever publisher-guide.html changes on main, re-render the PDF with
+# Chrome headless and commit it back. The trigger is path-scoped so the
+# job only runs when the HTML source actually changed, and the bot
+# commits with [skip ci] so this workflow does not re-trigger on its
+# own output.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'publisher-guide.html'
+      - '.github/workflows/pdf-regen.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # We push back to the same branch, so we need a token that can.
+          # The default GITHUB_TOKEN with `permissions.contents: write` is
+          # sufficient when not using protected-branch enforcement.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Google Chrome is available
+        run: |
+          which google-chrome || which google-chrome-stable
+          google-chrome --version || google-chrome-stable --version
+
+      - name: Render publisher-guide.html to PDF
+        run: |
+          # ubuntu-latest ships Google Chrome stable pre-installed.
+          # --no-pdf-header-footer suppresses the browser's auto header/
+          # footer so the @page CSS rule in publisher-guide.html owns
+          # page numbering.
+          google-chrome \
+            --headless \
+            --disable-gpu \
+            --no-pdf-header-footer \
+            --print-to-pdf=publisher-guide.pdf \
+            "file://$PWD/publisher-guide.html"
+          ls -lh publisher-guide.pdf
+
+      - name: Commit and push if PDF changed
+        run: |
+          # `git diff --quiet` exits 0 if no changes, 1 if changes.
+          # Skip the commit entirely when the PDF is byte-identical
+          # (e.g. when the HTML change didn't affect rendered output).
+          if git diff --quiet publisher-guide.pdf; then
+            echo "PDF unchanged — nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add publisher-guide.pdf
+          git commit -m "chore(docs): auto-regenerate publisher-guide.pdf [skip ci]"
+          git push

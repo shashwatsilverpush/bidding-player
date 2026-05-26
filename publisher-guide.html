@@ -19,20 +19,21 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --ink: #1a1a2e;
-    --ink-soft: #404050;
-    --ink-mute: #6b7080;
-    --rule: #d8d8e0;
-    --rule-soft: #e8e8ee;
-    --accent: #5b3dc7;
-    --accent-soft: #f1edff;
-    --warn: #b85c20;
+    /* Claude-brand light variant for print */
+    --ink: #1a1a1a;            /* near-black body text */
+    --ink-soft: #3a3a3a;
+    --ink-mute: #6b6b6b;
+    --rule: #d4d4d0;
+    --rule-soft: #e8e8e4;
+    --accent: #c4633f;          /* Claude coral, slightly darker for print contrast */
+    --accent-soft: #faf0eb;     /* warm cream tint */
+    --warn: #b35c20;
     --warn-soft: #fff4eb;
     --danger: #b8312e;
     --danger-soft: #fdf0ef;
     --ok: #1f7a3a;
     --ok-soft: #ecf8ef;
-    --code-bg: #f5f5fa;
+    --code-bg: #f5f4f0;         /* warm off-white code background */
     --font: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --mono: 'SF Mono', 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
   }
@@ -159,7 +160,7 @@
     font-family: var(--mono);
     font-size: 0.86em;
     background: var(--code-bg);
-    color: #4a2cb8;
+    color: var(--accent);
     padding: 0.5pt 4pt;
     border-radius: 3px;
     border: 1px solid var(--rule-soft);
@@ -269,7 +270,7 @@
   .steps > li {
     counter-increment: step;
     padding: 4mm 5mm 4mm 18mm;
-    background: #fafaff;
+    background: #faf9f5;
     border: 1px solid var(--rule);
     border-radius: 4px;
     margin-bottom: 3mm;
@@ -345,7 +346,7 @@
   /* ─── Misc ─────────────────────────────────────── */
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; page-break-inside: avoid; }
   .card {
-    background: #fafaff;
+    background: #faf9f5;
     border: 1px solid var(--rule);
     border-radius: 4px;
     padding: 3mm 4mm;

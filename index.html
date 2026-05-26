@@ -16,18 +16,27 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #080810;
-      --surface: #131324;
-      --surface2: #0b0b16;
-      --border: #232343;
-      --accent: #a370f7;
-      --accent-glow: rgba(163,112,247,0.18);
-      --danger: #ff6b6b;
-      --danger-glow: rgba(255,107,107,0.15);
+      /* Claude high-contrast dark theme */
+      --bg: #0a0a0a;
+      --surface: #161616;
+      --surface2: #0d0d0d;
+      --surface3: #1f1f1f;
+      --border: #2e2e2e;
+      --border-strong: #3a3a3a;
+      --accent: #d97757;            /* Claude coral / terracotta */
+      --accent-dim: #b8654b;
+      --accent-glow: rgba(217,119,87,0.18);
+      --accent-soft: rgba(217,119,87,0.08);
+      --on-accent: #1a0e08;         /* text color on coral background */
+      --danger: #ef4444;
+      --danger-glow: rgba(239,68,68,0.15);
       --success: #4ade80;
       --success-glow: rgba(74,222,128,0.15);
-      --text: #f3f4f6;
-      --text-muted: #9ca3af;
+      --warning: #f59e0b;
+      --info: #60a5fa;
+      --text: #fafaf7;              /* Claude off-white */
+      --text-muted: #a0a0a0;
+      --text-dim: #6b6b6b;
       --muted: var(--text-muted);
       --label: var(--text-muted);
       --radius: 6px;
@@ -61,7 +70,7 @@
 
     .logo {
       width: 40px; height: 40px;
-      background: linear-gradient(135deg, var(--accent), #7c4dff);
+      background: linear-gradient(135deg, var(--accent), var(--accent-dim));
       border-radius: 10px;
       display: flex; align-items: center; justify-content: center;
       font-size: 20px;
@@ -81,7 +90,7 @@
     }
 
     .live-badge {
-      background: rgba(52,211,153,.10);
+      background: var(--success-glow);
       border: 1px solid var(--success);
       padding: 4px 12px;
       border-radius: 20px;
@@ -137,7 +146,7 @@
     .tab-btn:hover { color: var(--text); }
     .tab-btn.active {
       background: var(--accent);
-      color: #0a1424;
+      color: var(--on-accent);
       font-weight: 500;
     }
     .tab-pane { display: none; width: 100%; max-width: 960px; flex-direction: column; align-items: center; }
@@ -243,7 +252,7 @@
 
     #runBtn {
       background: var(--accent);
-      color: #0a1424;
+      color: var(--on-accent);
       border: none;
       border-radius: var(--radius);
       padding: 12px 28px;
@@ -292,8 +301,8 @@
       display: none;
     }
     #statusMsg.error   { background: var(--danger-glow); color: var(--danger); border: 1px solid var(--danger); display: block; }
-    #statusMsg.success { background: rgba(62,207,142,.12); color: var(--success); border: 1px solid rgba(62,207,142,.3); display: block; }
-    #statusMsg.info    { background: rgba(61,126,255,.1); color: var(--accent); border: 1px solid rgba(61,126,255,.3); display: block; }
+    #statusMsg.success { background: var(--success-glow); color: var(--success); border: 1px solid rgba(74,222,128,.3); display: block; }
+    #statusMsg.info    { background: var(--accent-glow); color: var(--accent); border: 1px solid rgba(217,119,87,.3); display: block; }
 
     #playerCard { display: none; }
     #playerWrap { padding: 20px; background: #000; }
@@ -334,11 +343,11 @@
     #logOutput::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
     .log-line { display: flex; gap: 12px; }
-    .log-ts   { color: #444d60; flex-shrink: 0; }
+    .log-ts   { color: var(--text-dim); flex-shrink: 0; }
     .log-err  { color: var(--danger); }
     .log-ok   { color: var(--success); }
     .log-info { color: var(--accent); }
-    .log-warn { color: #f0a050; }
+    .log-warn { color: var(--warning); }
 
     .bid-info {
       display: flex;
@@ -376,7 +385,7 @@
     .adops-header {
       padding: 16px 22px;
       border-bottom: 1px solid var(--border);
-      background: linear-gradient(135deg, rgba(61,126,255,.08), rgba(124,77,255,.08));
+      background: var(--accent-soft);
       display: flex;
       align-items: center;
       gap: 10px;
@@ -387,7 +396,7 @@
     }
     .adops-header .adops-pill {
       background: var(--accent);
-      color: #0a1424;
+      color: var(--on-accent);
       padding: 2px 8px;
       border-radius: 10px;
       font-size: 10px;
@@ -448,8 +457,8 @@
       flex-wrap: wrap;
     }
     .adops-btn {
-      background: linear-gradient(135deg, #a370f7, #7c4dff);
-      color: #fff;
+      background: var(--accent);
+      color: var(--on-accent);
       border: none;
       border-radius: 7px;
       padding: 11px 22px;
@@ -524,26 +533,26 @@
     }
     .adops-readme-title { font-size: 12px; font-weight: 500; color: var(--accent); text-transform: uppercase; margin-bottom: 12px; }
     #adopsReadme {
-      width: 100%; min-height: 240px; background: var(--bg); color: #cbd5e1; border: 1px solid var(--border); border-radius: 6px; padding: 16px; font-family: monospace; font-size: 12px; line-height: 1.65; resize: vertical; outline: none; white-space: pre-wrap;
+      width: 100%; min-height: 240px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 16px; font-family: monospace; font-size: 12px; line-height: 1.65; resize: vertical; outline: none; white-space: pre-wrap;
     }
     .adops-copy-feedback { display: inline-block; margin-left: 12px; font-size: 12px; color: var(--success); opacity: 0; transition: opacity .25s; }
     .adops-copy-feedback.show { opacity: 1; }
 
-    .req-star { color: #ff5d6c; margin-left: 3px; }
-    .field-info { display: block; margin-top: 6px; font-size: 11.5px; color: #94a3b8; line-height: 1.55; }
+    .req-star { color: var(--danger); margin-left: 3px; }
+    .field-info { display: block; margin-top: 6px; font-size: 11.5px; color: var(--text-muted); line-height: 1.55; }
     
     .adops-field.invalid input, .adops-field.invalid textarea, .adops-field.invalid select {
       border-color: var(--danger) !important; box-shadow: 0 0 0 3px var(--danger-glow) !important; animation: shake-error .35s ease-in-out;
     }
     @keyframes shake-error { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
     .adops-btn.is-blocked { opacity: .45; cursor: not-allowed; }
-    .adops-validation-alert { display: none; background: rgba(255,107,107,.10); border: 1px solid var(--danger); border-radius: 6px; padding: 10px 14px; margin: 14px 0 0; font-size: 13px; color: var(--danger); }
+    .adops-validation-alert { display: none; background: var(--danger-glow); border: 1px solid var(--danger); border-radius: 6px; padding: 10px 14px; margin: 14px 0 0; font-size: 13px; color: var(--danger); }
     .adops-validation-alert.show { display: block; }
 
     .adops-output-block { margin-top: 22px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-    .adops-output-block .adops-output-label { margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--border); background: linear-gradient(135deg, rgba(163,112,247,.04), transparent); font-size: 12px; color: var(--label); }
-    .adops-output-block textarea { width: 100%; background: var(--bg); color: #cbd5e1; border: none; padding: 14px 16px; font-family: monospace; font-size: 12px; line-height: 1.6; resize: vertical; min-height: 140px; outline: none; }
-    .adops-block-actions { padding: 12px 16px; border-top: 1px solid var(--border); background: linear-gradient(135deg, rgba(163,112,247,.03), transparent); display: flex; align-items: center; gap: 14px; }
+    .adops-output-block .adops-output-label { margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--accent-soft); font-size: 12px; color: var(--label); }
+    .adops-output-block textarea { width: 100%; background: var(--bg); color: var(--text); border: none; padding: 14px 16px; font-family: monospace; font-size: 12px; line-height: 1.6; resize: vertical; min-height: 140px; outline: none; }
+    .adops-block-actions { padding: 12px 16px; border-top: 1px solid var(--border); background: var(--accent-soft); display: flex; align-items: center; gap: 14px; }
     .adops-engine-note { font-size: 12px; color: var(--muted); line-height: 1.5; }
   </style>
 </head>
@@ -731,7 +740,7 @@ function log(msg, level = 'info') { const out = $('logOutput'); const line = doc
 function setStatus(msg, type) { const el = $('statusMsg'); el.textContent = msg; el.className = type; }
 function clearStatus() { const el = $('statusMsg'); el.className = ''; el.style.display = 'none'; }
 
-function milestone(step, msg) { log(`<span style="background:linear-gradient(90deg,#a370f7,#7c4dff);color:#fff;padding:1px 7px;border-radius:3px;font-weight:bold;">${step}</span> <span style="color:#4ade80;">${msg}</span>`, 'info'); }
+function milestone(step, msg) { log(`<span style="background:#d97757;color:#1a0e08;padding:1px 7px;border-radius:3px;font-weight:bold;">${step}</span> <span style="color:#4ade80;">${msg}</span>`, 'info'); }
 function milestoneWinner(bidder, rawCpm) { log(`<span style="background:linear-gradient(90deg,#f1c40f,#e67e22);color:#000;padding:1px 8px;border-radius:3px;font-weight:bold;">🏆 WINNER</span> <span style="color:#f1c40f;font-weight:bold;">${bidder} | Raw CPM: $${rawCpm.toFixed(2)}</span>`, 'info'); }
 function milestoneNoDemand() { log(`<span style="background:#3a3a3a;color:#bdc3c7;padding:1px 8px;border-radius:3px;font-weight:bold;">⚠️ NO DEMAND</span> <span style="color:#bdc3c7;">Fallback path engaged ($0.00 targeting).</span>`, 'warn'); }
 
@@ -764,37 +773,71 @@ async function runSandbox() {
     milestoneNoDemand();
   }
 
+  // Stitch bid into the GAM tag's cust_params WITHOUT clobbering existing
+  // pairs (e.g. sample_ct=linear, which the GAM sample ad slot targets).
+  // Earlier this just overwrote cust_params and IMA returned error 303
+  // (No Ads VAST response after one or more Wrappers) because sample_ct
+  // was lost.
   const urlObj = new URL(gamBaseTag);
-  urlObj.searchParams.set('cust_params', `hb_pb=${bid.cpm.toFixed(2)}&hb_bidder=${bid.bidder}`);
+  urlObj.searchParams.set('correlator', Date.now().toString());
+  const existingCust = urlObj.searchParams.get('cust_params') || '';
+  const hbPairs = `hb_pb=${bid.cpm.toFixed(2)}&hb_bidder=${bid.bidder}`;
+  urlObj.searchParams.set('cust_params', existingCust ? `${existingCust}&${hbPairs}` : hbPairs);
   
   disposePlayer(); const videoEl = createVideoEl();
   const player = videojs(videoEl, { autoplay: true, muted: true, controls: true, fluid: true, sources: [{ src: contentUrl, type: 'video/mp4' }] });
   currentPlayer = player;
   
   player.ready(() => {
-    const adContainer = document.createElement('div'); adContainer.id = 'adContainer'; $('videoContainer').appendChild(adContainer);
+    const videoContainer = $('videoContainer');
+    const adContainer = document.createElement('div'); adContainer.id = 'adContainer'; videoContainer.appendChild(adContainer);
     const adc = new google.ima.AdDisplayContainer(adContainer, videoEl); const loader = new google.ima.AdsLoader(adc);
-    loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, () => {
+    function logAdError(scope, e) {
+      let msg = 'unknown';
+      try { const err = e && e.getError && e.getError(); if (err) msg = `[${err.getErrorCode && err.getErrorCode()}] ${err.getMessage && err.getMessage()}`; } catch(_) {}
+      log(`<span style="background:#d93f3f;color:#fff;padding:1px 7px;border-radius:3px;font-weight:bold;">AD_ERROR (${scope})</span> ${msg}`, 'err');
+    }
+    loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, (e) => {
+      logAdError('loader', e);
       adContainer.classList.remove('ad-active');
       player.play().catch(()=>{});
     });
     loader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, (e) => {
+      milestone('STEP 7', 'AdsManager loaded.');
       const mgr = e.getAdsManager(videoEl);
-      mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, () => {
+      mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, (evt) => {
+        logAdError('manager', evt);
         adContainer.classList.remove('ad-active');
         try { mgr.destroy(); } catch (_) {}
         player.play().catch(()=>{});
       });
-      mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_PAUSE_REQUESTED, () => { player.pause(); adContainer.classList.add('ad-active'); });
-      mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_RESUME_REQUESTED, () => { adContainer.classList.remove('ad-active'); player.play().catch(()=>{}); });
+      mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_PAUSE_REQUESTED, () => {
+        log('Ad starting — pausing content.', 'info');
+        player.pause(); adContainer.classList.add('ad-active');
+      });
+      mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_RESUME_REQUESTED, () => {
+        log('Ad ended — resuming content.', 'info');
+        adContainer.classList.remove('ad-active'); player.play().catch(()=>{});
+      });
       mgr.addEventListener(google.ima.AdEvent.Type.ALL_ADS_COMPLETED, () => {
+        log('All ads completed.', 'ok');
         adContainer.classList.remove('ad-active');
         try { mgr.destroy(); } catch (_) {}
       });
-      mgr.init(videoEl.offsetWidth, videoEl.offsetHeight, google.ima.ViewMode.NORMAL); mgr.start();
+      // Use the container's rendered dimensions with safe fallbacks.
+      // videoEl.offsetWidth is unreliable because video.js wraps the element
+      // and IMA can refuse to start the ad if dims are too small or zero.
+      const initW = videoContainer.offsetWidth  || videoEl.offsetWidth  || 640;
+      const initH = videoContainer.offsetHeight || videoEl.offsetHeight || 360;
+      milestone('STEP 8', `IMA init at ${initW}×${initH}.`);
+      try { mgr.init(initW, initH, google.ima.ViewMode.NORMAL); mgr.start(); }
+      catch (err) { log(`mgr.start failed: ${err && err.message}`, 'err'); }
     });
     const req = new google.ima.AdsRequest(); req.adTagUrl = urlObj.toString();
-    adc.initialize(); loader.requestAds(req); milestone('STEP 6', 'Dispatched.');
+    // Hint IMA about the slot size up-front (alongside mgr.init).
+    req.linearAdSlotWidth  = videoContainer.offsetWidth  || 640;
+    req.linearAdSlotHeight = videoContainer.offsetHeight || 360;
+    adc.initialize(); loader.requestAds(req); milestone('STEP 6', 'VAST request dispatched.');
     showBidInfo([['CPM', `$${bid.cpm.toFixed(2)}`], ['Source', 'Sandbox']]);
   });
   
