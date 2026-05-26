@@ -76,19 +76,21 @@ jobs:
           ls -lh "$BUNDLE_FILE"
 
       - name: Commit & push if changed
+        env:
+          BUNDLE_NAME:    ${{ inputs.bundle_name }}
+          PREBID_VERSION: ${{ inputs.prebid_version }}
+          MODULE_LIST:    ${{ steps.modules.outputs.list }}
         run: |
-          if git diff --quiet "prebid/${{ inputs.bundle_name }}.js"; then
+          if git diff --quiet "prebid/${BUNDLE_NAME}.js"; then
             echo "Bundle byte-identical to existing — nothing to commit."
             exit 0
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "prebid/${{ inputs.bundle_name }}.js"
-          git commit -m "feat(bundles): build ${{ inputs.bundle_name }} from Prebid ${{ inputs.prebid_version }}
-
-Modules: ${{ steps.modules.outputs.list }}
-
-Triggered by workflow_dispatch."
+          git add "prebid/${BUNDLE_NAME}.js"
+          # Multi-line commit message via printf to keep YAML block scalar happy
+          MSG=$(printf 'feat(bundles): build %s from Prebid %s\n\nModules: %s\n\nTriggered by workflow_dispatch.' "${BUNDLE_NAME}" "${PREBID_VERSION}" "${MODULE_LIST}")
+          git commit -m "${MSG}"
           git push
 
       - name: Print bundle URL for sharing with publisher
