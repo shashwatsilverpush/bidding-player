@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Video Ad Sandbox</title>
+  <title>Bidding Player — Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 
   <link href="https://cdn.jsdelivr.net/npm/video.js@8/dist/video-js.min.css" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/video.js@8/dist/video.min.js"></script>
@@ -586,6 +587,167 @@
     .adops-output-block textarea { width: 100%; background: var(--bg); color: var(--text); border: none; padding: 14px 16px; font-family: monospace; font-size: 12px; line-height: 1.6; resize: vertical; min-height: 140px; outline: none; }
     .adops-block-actions { padding: 12px 16px; border-top: 1px solid var(--border); background: var(--accent-soft); display: flex; align-items: center; gap: 14px; }
     .adops-engine-note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+    /* Bidder Picker (v2 multi-bidder) — checkbox cards with conditional params */
+    .bidder-picker-wrap {
+      grid-column: 1 / -1;
+      padding: 16px 18px;
+      background: linear-gradient(180deg, var(--accent-soft) 0%, var(--surface2) 100%);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 8px;
+    }
+    .bidder-picker-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .bidder-picker-head .title {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+      color: var(--label);
+    }
+    .bidder-picker-head .pill {
+      background: var(--accent);
+      color: var(--on-accent);
+      padding: 1px 8px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .bidder-picker-hint {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin: 4px 0 14px;
+    }
+    .bidder-picker-hint code {
+      background: var(--bg);
+      padding: 1px 6px;
+      border-radius: 3px;
+      color: var(--accent);
+      font-size: 11px;
+    }
+    .bidder-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 720px) { .bidder-cards { grid-template-columns: 1fr; } }
+    .bidder-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .bidder-card.checked {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-glow);
+    }
+    .bidder-card-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 14px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .bidder-card-head:hover { background: var(--surface3); }
+    .bidder-checkbox {
+      width: 16px; height: 16px;
+      border: 1.5px solid var(--border-strong);
+      border-radius: 3px;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s, border-color .15s;
+    }
+    .bidder-card.checked .bidder-checkbox {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .bidder-checkbox::after {
+      content: '✓';
+      color: var(--on-accent);
+      font-size: 11px;
+      font-weight: 700;
+      opacity: 0;
+      transition: opacity .12s;
+    }
+    .bidder-card.checked .bidder-checkbox::after { opacity: 1; }
+    .bidder-card-name {
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--text);
+      flex: 1;
+    }
+    .bidder-card-module {
+      font-size: 10.5px;
+      color: var(--text-dim);
+      font-family: 'SF Mono', Menlo, monospace;
+    }
+    .bidder-card-body {
+      display: none;
+      padding: 4px 14px 14px;
+      border-top: 1px solid var(--border);
+    }
+    .bidder-card.checked .bidder-card-body { display: block; }
+    .bidder-param {
+      margin-top: 10px;
+    }
+    .bidder-param label {
+      display: block;
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .bidder-param input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      font-family: 'SF Mono', Menlo, monospace;
+      font-size: 12px;
+      padding: 7px 10px;
+      outline: none;
+    }
+    .bidder-param input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+    .bidder-param input.invalid {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 2px var(--danger-glow);
+    }
+    .bidder-card.invalid {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 2px var(--danger-glow);
+    }
+    .bidder-picker-footer {
+      margin-top: 12px;
+      padding: 9px 12px;
+      background: var(--surface);
+      border: 1px dashed var(--border);
+      border-radius: 5px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+    .bidder-picker-footer .warn { color: var(--warning); font-weight: 500; }
+    .bidder-picker-footer code {
+      background: var(--bg);
+      padding: 1px 5px;
+      border-radius: 3px;
+      color: var(--accent);
+      font-size: 11px;
+    }
   </style>
 </head>
 <body>
@@ -593,8 +755,9 @@
 <nav class="tab-nav" role="tablist">
   <button class="tab-btn active" data-tab="sandbox"    role="tab">🎛️ Sandbox Testing Suite</button>
   <button class="tab-btn"        data-tab="production" role="tab">🚀 Production Tag Generator</button>
-  <a class="tab-btn" href="docs.html" style="text-decoration:none;flex:0 0 auto;padding-left:18px;padding-right:18px;">📖 Publisher Docs ↗</a>
-  <a class="tab-btn" href="publisher-guide.pdf" download style="text-decoration:none;flex:0 0 auto;padding-left:18px;padding-right:18px;">📄 PDF ↓</a>
+  <a class="tab-btn" href="docs.html" style="text-decoration:none;flex:0 0 auto;padding-left:14px;padding-right:14px;">📖 Publisher Docs ↗</a>
+  <a class="tab-btn" href="adops-guide.html" style="text-decoration:none;flex:0 0 auto;padding-left:14px;padding-right:14px;">🛠️ Ad Ops Console ↗</a>
+  <a class="tab-btn" href="publisher-guide.pdf" download style="text-decoration:none;flex:0 0 auto;padding-left:14px;padding-right:14px;">📄 PDF ↓</a>
 </nav>
 
 <div class="tab-pane active" id="tab-sandbox" role="tabpanel">
@@ -667,14 +830,6 @@
         <label>GAM Master Ad Tag URL<span class="req-star">*</span></label>
         <textarea id="adopsAdTagUrl">https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator=</textarea>
       </div>
-      <div class="adops-field" data-required="true">
-        <label>Publisher ID<span class="req-star">*</span></label>
-        <input type="text" id="adopsPublisherId" value="649658371" />
-      </div>
-      <div class="adops-field" data-required="true">
-        <label>Ad Unit ID<span class="req-star">*</span></label>
-        <input type="text" id="adopsAdUnitId" value="972556929" />
-      </div>
       <div class="adops-field">
         <label>Bidder Timeout (ms)</label>
         <input type="number" id="adopsTimeout" value="1200" />
@@ -686,33 +841,27 @@
       <div class="adops-field full" data-required="true">
         <label>Prebid.js Hosted Library URL<span class="req-star">*</span></label>
         <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v2.0.0/prebid/prebid.js" />
-        <span class="field-info">Pick a bundle from <code>prebid/</code> that includes every bidder you list below.</span>
+        <span class="field-info">Pick the bundle from <code>prebid/</code> that contains the bidders you tick below. <a href="adops-guide.html#prebid-bundles" target="_blank" rel="noopener" style="color:var(--accent);">How to build a new bundle ↗</a></span>
       </div>
 
-      <div class="adops-field full">
-        <label>🎯 Bidder Configuration (JSON) <span style="background:var(--accent);color:var(--on-accent);padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;margin-left:6px;">v2 multi-bidder</span></label>
-        <textarea id="adopsBiddersJson" style="min-height:120px;font-family:monospace;font-size:12px;line-height:1.55;">[
-  {
-    "bidder": "limelightDigital",
-    "params": {
-      "host": "ads-jbi003.rtba.bidsxchange.com",
-      "publisherId": "649658371",
-      "adUnitId": 972556929,
-      "adUnitType": "video"
-    }
-  }
-]</textarea>
-        <span class="field-info">JSON array of <a href="https://docs.prebid.org/dev-docs/bidders.html" target="_blank" rel="noopener">Prebid bid objects</a>. List every SSP that should compete in this auction — the highest CPM wins. Leave empty to use the legacy single-bidder shortcut built from Publisher / Ad Unit / Host fields above.</span>
+      <div class="bidder-picker-wrap">
+        <div class="bidder-picker-head">
+          <span class="title">🎯 Bidders for this Publisher</span>
+          <span class="pill">v2 multi-bidder</span>
+        </div>
+        <p class="bidder-picker-hint">Tick the SSPs that should compete. The highest CPM wins the impression. Limelight is on by default — add others as your inventory expands.</p>
+
+        <div id="bidderCards" class="bidder-cards"></div>
+
+        <div class="bidder-picker-footer">
+          <span class="warn">⚠ Bundle compatibility:</span> the Prebid URL above must point at a bundle that includes every adapter you tick. If an adapter is missing the bidder is silently dropped at auction time. Need an SSP not listed? <a href="adops-guide.html#prebid-bundles" target="_blank" rel="noopener" style="color:var(--accent);">Trigger a new bundle build ↗</a>
+        </div>
       </div>
     </div>
 
     <div class="adops-advanced">
       <div class="adops-advanced-title">⚙ Advanced</div>
       <div class="adops-grid">
-        <div class="adops-field">
-          <label>Limelight Host URL</label>
-          <input type="text" id="adopsHost" value="ads-jbi003.rtba.bidsxchange.com" />
-        </div>
         <div class="adops-field">
           <label>Prebid Cache URL</label>
           <input type="text" id="adopsCacheUrl" value="https://prebid.adnxs.com/pbc/v1/cache" />
@@ -748,7 +897,7 @@
           <label>🏆 VPAID Access Mode</label>
           <select id="optVpaid"><option value="insecure" selected>Insecure (Highest Yield)</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select>
         </div>
-        <div class="toggle-wrap"><div class="toggle-switch" id="tglLoop" data-on="false"></div><div><div class="toggle-label">Loop Content</div></div></div>
+        <div class="toggle-wrap"><div class="toggle-switch on" id="tglLoop" data-on="true"></div><div><div class="toggle-label">Loop Content</div><span class="toggle-hint">Replays the content video after it ends — recommended for ad refresh continuity.</span></div></div>
       </div>
     </div>
 
@@ -1170,34 +1319,150 @@ $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard')
   const get = id => document.getElementById(id).value.trim();
   function escJs(str) { return String(str || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/<\//g, '<\\/'); }
 
-  function getSettings() {
-    // Bidder JSON — validate + minify. Empty string is legal (engine falls back
-    // to legacy data-host / data-pub-id / data-adunit-id shortcut).
-    const biddersRaw = get('adopsBiddersJson');
-    let biddersMinified = '';
-    let biddersError = '';
-    if (biddersRaw) {
-      try {
-        const parsed = JSON.parse(biddersRaw);
-        if (!Array.isArray(parsed) || !parsed.length) {
-          biddersError = 'Bidder configuration must be a non-empty JSON array.';
-        } else {
-          biddersMinified = JSON.stringify(parsed);
+  /* ─── Bidder catalog ──────────────────────────────────────────────
+     Every entry here is a Prebid bidder code + the param schema it expects.
+     Editing this list is the way to onboard a new SSP — adding/removing a
+     bidder here does NOT change the engine, only what shows up in the picker.
+     The `module` field is the Prebid adapter name used by the CI build
+     workflow (`build-prebid-bundle.yml`) when assembling the bundle.       */
+  const BIDDER_CATALOG = [
+    {
+      id: 'limelightDigital',
+      label: 'Limelight Digital',
+      module: 'limelightDigitalBidAdapter',
+      defaultOn: true,
+      params: [
+        { key: 'host',        label: 'Host',         default: 'ads-jbi003.rtba.bidsxchange.com', required: true },
+        { key: 'publisherId', label: 'Publisher ID', default: '649658371',  required: true },
+        { key: 'adUnitId',    label: 'Ad Unit ID',   default: '972556929',  required: true, type: 'number' },
+        { key: 'adUnitType',  label: '',             default: 'video',      hidden: true },
+      ],
+    },
+    {
+      id: 'appnexus',
+      label: 'AppNexus / Xandr',
+      module: 'appnexusBidAdapter',
+      params: [
+        { key: 'placementId', label: 'Placement ID', default: '', required: true, type: 'number' },
+      ],
+    },
+    {
+      id: 'rubicon',
+      label: 'Magnite (Rubicon)',
+      module: 'rubiconBidAdapter',
+      params: [
+        { key: 'accountId', label: 'Account ID', default: '', required: true, type: 'number' },
+        { key: 'siteId',    label: 'Site ID',    default: '', required: true, type: 'number' },
+        { key: 'zoneId',    label: 'Zone ID',    default: '', required: true, type: 'number' },
+      ],
+    },
+    {
+      id: 'pubmatic',
+      label: 'PubMatic',
+      module: 'pubmaticBidAdapter',
+      params: [
+        { key: 'publisherId', label: 'Publisher ID', default: '', required: true },
+        { key: 'adSlot',      label: 'Ad Slot',      default: '', required: true },
+      ],
+    },
+    {
+      id: 'openx',
+      label: 'OpenX',
+      module: 'openxBidAdapter',
+      params: [
+        { key: 'unit',      label: 'Ad Unit ID',      default: '', required: true },
+        { key: 'delDomain', label: 'Delivery Domain', default: '', required: true },
+      ],
+    },
+  ];
+
+  /* Render the picker cards into #bidderCards */
+  function renderBidderPicker() {
+    const root = document.getElementById('bidderCards');
+    root.innerHTML = BIDDER_CATALOG.map(b => {
+      const checkedCls = b.defaultOn ? ' checked' : '';
+      const paramsHtml = b.params.filter(p => !p.hidden).map(p => {
+        const inputId = 'bp_' + b.id + '_' + p.key;
+        return `
+          <div class="bidder-param">
+            <label for="${inputId}">${p.label}${p.required ? ' <span style="color:var(--danger);">*</span>' : ''}</label>
+            <input type="${p.type === 'number' ? 'text' : 'text'}"
+                   id="${inputId}"
+                   data-bidder="${b.id}"
+                   data-param-key="${p.key}"
+                   data-param-type="${p.type || 'string'}"
+                   data-required="${p.required ? 'true' : 'false'}"
+                   value="${p.default || ''}"
+                   placeholder="${p.label}" />
+          </div>`;
+      }).join('');
+      return `
+        <div class="bidder-card${checkedCls}" data-bidder-id="${b.id}">
+          <div class="bidder-card-head" data-toggle-bidder="${b.id}">
+            <div class="bidder-checkbox"></div>
+            <div class="bidder-card-name">${b.label}</div>
+            <div class="bidder-card-module">${b.module}</div>
+          </div>
+          <div class="bidder-card-body">${paramsHtml}</div>
+        </div>`;
+    }).join('');
+
+    root.querySelectorAll('[data-toggle-bidder]').forEach(head => {
+      head.addEventListener('click', () => {
+        head.closest('.bidder-card').classList.toggle('checked');
+      });
+    });
+  }
+
+  /* Read picker state → array of Prebid bid objects */
+  function readBidders() {
+    const result = [];
+    const errors = [];
+    document.querySelectorAll('#bidderCards .bidder-card.checked').forEach(card => {
+      const bidderId = card.dataset.bidderId;
+      const meta = BIDDER_CATALOG.find(b => b.id === bidderId);
+      if (!meta) return;
+      const params = {};
+      let cardOk = true;
+      meta.params.forEach(p => {
+        if (p.hidden) { params[p.key] = p.default; return; }
+        const input = document.getElementById('bp_' + bidderId + '_' + p.key);
+        if (!input) return;
+        input.classList.remove('invalid');
+        const raw = input.value.trim();
+        if (!raw) {
+          if (p.required) { input.classList.add('invalid'); errors.push(`${meta.label}: ${p.label} is required`); cardOk = false; }
+          return;
         }
-      } catch (e) {
-        biddersError = 'Bidder configuration JSON parse error: ' + e.message;
-      }
+        if (p.type === 'number') {
+          const n = Number(raw);
+          if (!Number.isFinite(n)) { input.classList.add('invalid'); errors.push(`${meta.label}: ${p.label} must be numeric`); cardOk = false; return; }
+          params[p.key] = n;
+        } else {
+          params[p.key] = raw;
+        }
+      });
+      card.classList.toggle('invalid', !cardOk);
+      if (cardOk) result.push({ bidder: bidderId, params });
+    });
+    return { bidders: result, errors };
+  }
+
+  function getSettings() {
+    const picker = readBidders();
+    let biddersError = '';
+    if (!picker.bidders.length && !picker.errors.length) {
+      biddersError = 'Tick at least one bidder.';
+    } else if (picker.errors.length) {
+      biddersError = picker.errors[0];
     }
     return {
       engineUrl:   get('adopsEngineCdnUrl'),
       videoUrl:    get('adopsVideoUrl'),
       adTagUrl:    get('adopsAdTagUrl'),
-      publisherId: get('adopsPublisherId'),
-      adUnitId:    get('adopsAdUnitId'),
       timeout:     parseInt(get('adopsTimeout'), 10) || 1200,
       floorBias:   parseFloat(get('adopsFloorBias')) || 0.10,
       prebidUrl:   get('adopsPrebidUrl'),
-      host:        get('adopsHost'),
       cacheUrl:    get('adopsCacheUrl'),
       divId:       get('adopsDivId') || 'comparos-video-placement',
       debugMode:   get('adopsDebugMode') === 'true',
@@ -1207,35 +1472,23 @@ $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard')
       sizing:      document.getElementById('optSizing').value,
       preload:     document.getElementById('optPreload').value,
       vpaid:       document.getElementById('optVpaid').value,
-      biddersJson: biddersMinified,
+      bidders:     picker.bidders,
       biddersError: biddersError,
     };
   }
 
   function buildEngineFile(v) {
-    // Build the attribute list. If a multi-bidder JSON is present, emit
-    // `data-bidders` (v2 shape, engine prefers this). Otherwise emit the
-    // legacy three-attr shortcut (data-pub-id / data-adunit-id / data-host)
-    // for backwards compatibility with v1 tags.
+    // v2 always emits data-bidders. The engine's legacy single-bidder path
+    // (data-pub-id / data-adunit-id / data-host) stays in place for the
+    // existing v1 tags in the wild — we just don't generate it from the UI.
+    const biddersJson = JSON.stringify(v.bidders);
+    const safeJson = biddersJson.replace(/</g, '\\u003c').replace(/'/g, '&#39;');
+
     const lines = [
       '',
       '<script src="' + escJs(v.engineUrl) + '"',
       '        id="adtech-player-core"',
-    ];
-
-    if (v.biddersJson) {
-      // HTML attribute values use single-quote wrapper so the JSON's double-
-      // quoted keys/strings don't need escaping. We also HTML-escape any "<"
-      // to avoid breaking out of the tag.
-      const safeJson = v.biddersJson.replace(/</g, '\\u003c').replace(/'/g, '&#39;');
-      lines.push("        data-bidders='" + safeJson + "'");
-    } else {
-      lines.push('        data-pub-id="' + escJs(v.publisherId) + '"');
-      lines.push('        data-adunit-id="' + escJs(v.adUnitId) + '"');
-      lines.push('        data-host="' + escJs(v.host) + '"');
-    }
-
-    lines.push(
+      "        data-bidders='" + safeJson + "'",
       '        data-tag="' + escJs(v.adTagUrl) + '"',
       '        data-timeout="' + v.timeout + '"',
       '        data-bias="' + v.floorBias.toFixed(2) + '"',
@@ -1250,7 +1503,7 @@ $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard')
       '        data-cache="' + escJs(v.cacheUrl) + '"',
       '        data-prebid-url="' + escJs(v.prebidUrl) + '"',
       '        async><\/script>'
-    );
+    ];
     return lines.join('\n');
   }
 
@@ -1265,7 +1518,7 @@ $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard')
   }
   document.getElementById('adopsVersion').addEventListener('input', syncUrlsFromVersion);
 
-  const REQUIRED_IDS = ['adopsVersion', 'adopsEngineCdnUrl', 'adopsAdTagUrl', 'adopsPublisherId', 'adopsAdUnitId', 'adopsPrebidUrl'];
+  const REQUIRED_IDS = ['adopsVersion', 'adopsEngineCdnUrl', 'adopsAdTagUrl', 'adopsPrebidUrl'];
   function findEmptyRequired() { return REQUIRED_IDS.filter(id => !document.getElementById(id).value.trim()); }
 
   function onGenerate() {
@@ -1281,14 +1534,13 @@ $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard')
 
     const v = getSettings();
     if (v.biddersError) {
-      document.getElementById('adopsBiddersJson').closest('.adops-field').classList.add('invalid');
       const alert = document.getElementById('adopsValidationAlert');
       alert.classList.add('show');
       alert.textContent = '⚠️ ' + v.biddersError;
       return;
     }
     const tagContent = buildEngineFile(v);
-    const biddersNote = v.biddersJson ? `  •  multi-bidder via data-bidders` : `  •  legacy single-bidder shortcut`;
+    const biddersNote = '  •  ' + v.bidders.length + ' bidder' + (v.bidders.length === 1 ? '' : 's') + ': ' + v.bidders.map(b => b.bidder).join(', ');
     document.getElementById('adopsOutputEngine').value = tagContent;
     document.getElementById('adopsEngineMeta').textContent = `${tagContent.split('\n').length} lines${biddersNote}`;
     
@@ -1322,6 +1574,8 @@ $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard')
 
   function wireToggle(id) { const el = $(id); el.addEventListener('click', () => el.classList.toggle('on')); }
   ['tglAutoplay', 'tglMuted', 'tglLoop'].forEach(wireToggle);
+
+  renderBidderPicker();
 })();
 
 (function tabNav() {

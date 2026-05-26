@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Bidding Player — Publisher Integration Guide (v2.0.0)</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <style>
   @page {
     size: A4;
@@ -428,8 +429,7 @@
     <li><span class="num">07</span><span class="name">Consent management</span></li>
     <li><span class="num">08</span><span class="name">Testing &amp; verification</span></li>
     <li><span class="num">09</span><span class="name">Troubleshooting</span></li>
-    <li><span class="num">10</span><span class="name">Browser support &amp; FAQ</span></li>
-    <li><span class="num">11</span><span class="name">Support</span></li>
+    <li><span class="num">10</span><span class="name">FAQ</span></li>
   </ol>
 </div>
 
@@ -739,57 +739,35 @@ pbjs.que.push(<span class="tok-key">function</span>() {
 </section>
 
 <!-- ════════════════════════════════════════════════════════════════ -->
-<!-- 10 — BROWSER SUPPORT & FAQ                                       -->
+<!-- 10 — FAQ                                                         -->
 <!-- ════════════════════════════════════════════════════════════════ -->
 <section>
-  <h2>10 — Browser support &amp; FAQ</h2>
+  <h2>10 — FAQ</h2>
 
-  <h3>Browser support</h3>
-  <table>
-    <thead><tr><th>Browser</th><th>Status</th><th>Notes</th></tr></thead>
-    <tbody>
-      <tr><td>Chrome / Edge (desktop)</td><td><span class="status-ok">Tested</span></td><td>Reference platform.</td></tr>
-      <tr><td>Firefox / Safari (desktop)</td><td><span class="status-warn">Should work</span></td><td>Test before mass rollout.</td></tr>
-      <tr><td>iOS Safari (mobile)</td><td><span class="status-warn">Test required</span></td><td>Strict autoplay; prefer SIMID over VPAID.</td></tr>
-      <tr><td>Android Chrome</td><td><span class="status-warn">Test required</span></td><td>In-app webviews restricted.</td></tr>
-      <tr><td>IE11 / earlier</td><td><span class="status-err">Unsupported</span></td><td>Engine uses ES2017+.</td></tr>
-    </tbody>
-  </table>
-
-  <h3>FAQ</h3>
   <div class="faq-item">
     <div class="faq-q">Multiple players per page?</div>
     <div class="faq-a"><p>Not currently. Workaround: iframe per player.</p></div>
   </div>
   <div class="faq-item">
-    <div class="faq-q">Other Prebid bidders?</div>
-    <div class="faq-a"><p>Need a custom Prebid build AND an engine code change. Talk to your account manager.</p></div>
+    <div class="faq-q">Other Prebid bidders / multiple SSPs?</div>
+    <div class="faq-a"><p>Yes &mdash; v2 supports multi-bidder via <code>data-bidders</code>. Ask your account manager which SSPs you need and they will generate a Prebid bundle containing those adapters.</p></div>
   </div>
   <div class="faq-item">
     <div class="faq-q">If Prebid fails to load?</div>
-    <div class="faq-a"><p>Engine catches it and calls GAM directly with <code>hb_pb=0.00&amp;hb_bidder=none</code>.</p></div>
+    <div class="faq-a"><p>Engine catches it and calls GAM directly with <code>hb_pb=0.00&amp;hb_bidder=none</code>. Your house line item fills.</p></div>
   </div>
   <div class="faq-item">
     <div class="faq-q">Latency impact?</div>
-    <div class="faq-a"><p><code>async</code> script &mdash; zero impact on Time to Interactive. Adds the bidder timeout to pre-roll start.</p></div>
+    <div class="faq-a"><p><code>async</code> script &mdash; zero impact on Time to Interactive. Adds the bidder timeout (default 1200 ms) before pre-roll start.</p></div>
   </div>
   <div class="faq-item">
     <div class="faq-q"><code>@v2.0.0</code> vs <code>@main</code>?</div>
     <div class="faq-a"><p>Tags are immutable (1-year CDN cache). <code>@main</code> = latest commit (~12 h cache). Pin tags for prod.</p></div>
   </div>
-</section>
-
-<!-- ════════════════════════════════════════════════════════════════ -->
-<!-- 11 — SUPPORT                                                     -->
-<!-- ════════════════════════════════════════════════════════════════ -->
-<section>
-  <h2>11 — Support</h2>
-  <ul>
-    <li>Repo &amp; issues: <code>github.com/aryanvani-pm/bidding-player</code></li>
-    <li>Online docs: <code>aryanvani-pm.github.io/bidding-player/docs.html</code></li>
-    <li>Tag generator: <code>aryanvani-pm.github.io/bidding-player</code></li>
-    <li>Demo: <code>aryanvani-pm.github.io/bidding-player/demo/publisher-test.html?debug=true</code></li>
-  </ul>
+  <div class="faq-item">
+    <div class="faq-q">Auction analytics?</div>
+    <div class="faq-a"><p>Impression-level reporting via GAM filtered by <code>hb_bidder</code>. Auction-level (bid latency / rate) requires a Prebid build with an analytics adapter &mdash; ask your account manager.</p></div>
+  </div>
 
   <div class="footer-note">
     Bidding Player &bull; v2.0.0 &bull; Built on Prebid.js, video.js, Google IMA SDK<br>

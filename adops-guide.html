@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bidding Player — Ad Ops Dashboard Guide</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #161616;
+    --surface2: #0d0d0d;
+    --surface3: #1f1f1f;
+    --border: #2e2e2e;
+    --border-soft: #1c1c1c;
+    --border-strong: #3a3a3a;
+    --accent: #d97757;
+    --accent-dim: #b8654b;
+    --accent-glow: rgba(217,119,87,0.18);
+    --accent-soft: rgba(217,119,87,0.08);
+    --on-accent: #1a0e08;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --success: #4ade80;
+    --info: #60a5fa;
+    --text: #fafaf7;
+    --text-muted: #a0a0a0;
+    --text-dim: #6b6b6b;
+    --code-bg: #050505;
+    --radius: 6px;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, sans-serif;
+    --mono: 'SF Mono', 'JetBrains Mono', Menlo, Monaco, 'Courier New', monospace;
+  }
+
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15px; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--accent-glow); }
+
+  .layout { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+  .sidebar { background: var(--surface2); border-right: 1px solid var(--border); padding: 24px 20px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .sidebar::-webkit-scrollbar { width: 5px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); margin-bottom: 4px; }
+  .brand .logo { width: 32px; height: 32px; background: linear-gradient(135deg, var(--accent), var(--accent-dim)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .brand .name { font-weight: 600; letter-spacing: -0.2px; }
+  .brand-sub { font-size: 11px; color: var(--text-dim); margin: 2px 0 18px 42px; letter-spacing: .3px; }
+
+  .audience-pill {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    padding: 3px 9px;
+    border-radius: 10px;
+    margin-bottom: 22px;
+    font-weight: 700;
+    letter-spacing: .4px;
+  }
+
+  .toc { display: flex; flex-direction: column; gap: 1px; }
+  .toc-heading { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-dim); margin: 14px 8px 6px; }
+  .toc a { display: block; padding: 6px 10px; color: var(--text-muted); text-decoration: none; font-size: 13px; border-radius: 5px; border-left: 2px solid transparent; }
+  .toc a:hover { color: var(--text); background: var(--surface3); }
+  .toc a.active { color: var(--accent); border-left-color: var(--accent); }
+
+  .back-to-app { display: block; margin-top: 22px; padding: 10px 12px; background: var(--surface3); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-muted); text-decoration: none; font-size: 13px; text-align: center; }
+  .back-to-app:hover { color: var(--accent); border-color: var(--accent); }
+
+  .content { padding: 60px 80px 120px; max-width: 900px; }
+  .content > section { margin-bottom: 56px; scroll-margin-top: 30px; }
+
+  h1 { font-size: 34px; font-weight: 600; letter-spacing: -0.6px; margin-bottom: 8px; }
+  h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.3px; margin-bottom: 18px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 17px; font-weight: 600; margin: 24px 0 10px; color: var(--text); }
+  h4 { font-size: 14px; font-weight: 600; margin: 18px 0 8px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; }
+  p { margin-bottom: 12px; color: var(--text); }
+  ul, ol { margin: 10px 0 14px 22px; color: var(--text); }
+  li { margin-bottom: 6px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .lead { font-size: 16px; color: var(--text-muted); margin-bottom: 20px; }
+  strong { color: var(--text); font-weight: 600; }
+  em { color: var(--text-muted); font-style: italic; }
+
+  code, kbd { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); color: #f4b39a; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border-soft); }
+  pre { background: var(--code-bg); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 16px 18px; overflow-x: auto; margin: 12px 0 20px; line-height: 1.55; font-family: var(--mono); font-size: 13px; color: var(--text); }
+  pre code { background: transparent; border: none; padding: 0; color: inherit; font-size: inherit; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin: 12px 0 20px; font-size: 13.5px; }
+  th { text-align: left; background: var(--surface2); padding: 10px 14px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border-soft); vertical-align: top; color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 12px; }
+
+  .callout { margin: 14px 0 20px; padding: 14px 16px; border-left: 3px solid var(--info); background: rgba(96,165,250,.08); border-radius: 0 var(--radius) var(--radius) 0; }
+  .callout.warn { border-left-color: var(--warning); background: rgba(245,158,11,.08); }
+  .callout.danger { border-left-color: var(--danger); background: rgba(239,68,68,.07); }
+  .callout.tip { border-left-color: var(--success); background: rgba(74,222,128,.08); }
+  .callout .label { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; color: var(--info); }
+  .callout.warn .label { color: var(--warning); }
+  .callout.danger .label { color: var(--danger); }
+  .callout.tip .label { color: var(--success); }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .steps { counter-reset: step; list-style: none; margin-left: 0; }
+  .steps > li { counter-increment: step; padding: 18px 20px 18px 64px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; position: relative; }
+  .steps > li::before { content: counter(step); position: absolute; left: 18px; top: 18px; width: 30px; height: 30px; background: var(--accent); color: var(--on-accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
+  .steps > li > h3:first-child { margin-top: 0; }
+
+  .pill { display: inline-block; background: var(--surface3); border: 1px solid var(--border); padding: 2px 9px; border-radius: 12px; font-size: 11px; font-weight: 500; color: var(--text-muted); }
+  .pill.ok { color: var(--success); border-color: rgba(74,222,128,.4); }
+  .pill.warn { color: var(--warning); border-color: rgba(245,158,11,.4); }
+  .pill.accent { color: var(--accent); border-color: rgba(217,119,87,.4); }
+
+  /* Changelog timeline */
+  .changelog { list-style: none; margin: 0; padding: 0; }
+  .changelog > li { padding: 14px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; display: grid; grid-template-columns: 90px 1fr; gap: 16px; align-items: start; }
+  .changelog .ver { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--accent); padding-top: 1px; }
+  .changelog .desc { font-size: 14px; color: var(--text); }
+  .changelog .desc strong { color: var(--text); }
+
+  /* Flow diagram */
+  .flow { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; margin: 16px 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.85; color: var(--text); white-space: pre-wrap; }
+  .flow .arrow { color: var(--accent); }
+  .flow .actor { color: var(--warning); }
+
+  footer { margin-top: 80px; padding-top: 28px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 13px; line-height: 1.7; }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+    .content { padding: 30px 24px 80px; }
+    h1 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<aside class="sidebar">
+  <a class="brand" href="#">
+    <div class="logo">▶</div>
+    <div class="name">Bidding Player</div>
+  </a>
+  <div class="brand-sub">Ad Ops Console</div>
+  <div class="audience-pill">INTERNAL · AD OPS</div>
+
+  <nav class="toc">
+    <div class="toc-heading">Platform overview</div>
+    <a href="#overview">What this is</a>
+    <a href="#architecture">Architecture &amp; pieces</a>
+
+    <div class="toc-heading">Dashboard usage</div>
+    <a href="#sandbox">Sandbox testing</a>
+    <a href="#tag-generator">Tag generator</a>
+    <a href="#fields">Field reference</a>
+
+    <div class="toc-heading">SSP onboarding</div>
+    <a href="#prebid-bundles">Prebid bundle catalog</a>
+    <a href="#bundle-build">Triggering a new build</a>
+    <a href="#add-bidder-ui">Adding a bidder to the picker</a>
+
+    <div class="toc-heading">Operations</div>
+    <a href="#publisher-onboarding">Publisher onboarding playbook</a>
+    <a href="#release-cycle">Release &amp; deploy cycle</a>
+    <a href="#troubleshooting">Common issues</a>
+
+    <div class="toc-heading">Reference</div>
+    <a href="#changelog">Changelog</a>
+  </nav>
+
+  <a class="back-to-app" href="./">← Tag Generator</a>
+  <a class="back-to-app" href="docs.html" style="margin-top:8px;">Publisher Docs ↗</a>
+</aside>
+
+<main class="content">
+
+<header style="margin-bottom: 36px;">
+  <h1>Ad Ops Dashboard Guide</h1>
+  <p class="lead">Internal playbook for operating the Bidding Player platform — how to use the dashboard, how to onboard new publishers, and how to extend the system with new SSPs.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <span class="pill accent">v2.0.0</span>
+    <span class="pill">Multi-bidder</span>
+    <span class="pill">Internal docs</span>
+  </div>
+</header>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<section id="overview">
+  <h2>What this is</h2>
+  <p>Bidding Player is a one-script video header-bidding solution we ship to publishers. Each publisher pastes our <code>&lt;script&gt;</code> tag into their page; the engine runs a Prebid auction, stitches the winning bid into their GAM master ad tag, and plays the resulting VAST through video.js + IMA.</p>
+  <p>The ad ops team owns three things on this platform:</p>
+  <ol>
+    <li><strong>Tag generation</strong> — using the dashboard to produce a publisher-specific <code>&lt;script&gt;</code> snippet.</li>
+    <li><strong>SSP onboarding</strong> — triggering a new Prebid bundle build when a publisher needs a new bidder.</li>
+    <li><strong>Operations</strong> — testing tags before handoff, debugging publisher-reported issues, and managing version rollouts.</li>
+  </ol>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<section id="architecture">
+  <h2>Architecture &amp; pieces</h2>
+  <p>Three artifacts ship to each publisher. All three are hosted on jsDelivr at versioned, immutable URLs:</p>
+  <table>
+    <thead><tr><th style="width:170px;">Artifact</th><th>What it does</th><th style="width:130px;">Per-publisher?</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>engine/player.js</code></td>
+        <td>The shared player engine. Reads <code>data-*</code> attributes, registers a video ad unit, runs the auction, stitches <code>hb_*</code> targeting into the GAM tag, plays the creative via IMA.</td>
+        <td><span class="pill ok">One file</span></td>
+      </tr>
+      <tr>
+        <td><code>prebid/&lt;bundle&gt;.js</code></td>
+        <td>The Prebid.js library, custom-built with only the bidder adapters a specific publisher needs (smaller payload, faster load).</td>
+        <td><span class="pill warn">Catalog</span></td>
+      </tr>
+      <tr>
+        <td><code>&lt;script&gt;</code> snippet</td>
+        <td>The HTML tag pasted into the publisher's page. Carries the publisher's bidder params, GAM tag URL, content URL, player config.</td>
+        <td><span class="pill accent">Unique</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <span class="label">Key idea</span>
+    <p>One engine + N bundles + M snippets. The engine never changes per publisher. The bundle is shared by all publishers using the same set of SSPs. The snippet is unique per placement.</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<section id="sandbox">
+  <h2>Sandbox testing</h2>
+  <p>The <strong>Sandbox Testing Suite</strong> tab (left tab on the dashboard) is a self-contained auction simulator. It does not call real bidders — it lets you inject a mock CPM and verify the full GAM stitch + IMA playback path end-to-end.</p>
+
+  <h4>When to use it</h4>
+  <ul>
+    <li>Before handing a tag to a publisher — verify the GAM tag responds and IMA plays the creative.</li>
+    <li>When debugging "ad not playing" reports — the structured phase logs (Phases 1–9) show exactly where the chain breaks.</li>
+    <li>To check that a new Prebid bundle initializes and registers without errors.</li>
+  </ul>
+
+  <h4>How to read the log</h4>
+  <p>The log is divided into 9 numbered phases. Skim phase headings first; expand only the phase that errored. Phase 6 ("Appending Prebid response into GAM master ad tag") is where the stitched URL appears — confirm <code>hb_pb</code>, <code>hb_bidder</code>, and <strong><code>hb_uuid</code></strong> all show up in <code>cust_params</code>.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<section id="tag-generator">
+  <h2>Tag generator</h2>
+  <p>The <strong>Production Tag Generator</strong> tab produces the deployable <code>&lt;script&gt;</code> snippet for a publisher. The flow:</p>
+
+  <ol class="steps">
+    <li><h3>Set the release version</h3><p>Type the tag (e.g. <code>v2.0.0</code>) at the top. The engine URL and Prebid URL auto-fill from this value. Always use a pinned tag for production — never <code>main</code>.</p></li>
+    <li><h3>Fill the GAM master ad tag</h3><p>Paste the publisher's GAM master tag URL. It <em>must</em> end with <code>correlator=</code> so the engine can append a unique correlator per impression. If <code>cust_params</code> is missing, the engine adds it.</p></li>
+    <li><h3>Tick the bidders</h3><p>In the <strong>Bidders for this Publisher</strong> card, tick every SSP that should compete in this auction. Limelight is on by default. For each ticked bidder, fill in its required params (e.g. publisher ID, placement ID).</p></li>
+    <li><h3>Verify the Prebid URL matches</h3><p>The Prebid URL field must point at a bundle file that contains every adapter you ticked. If you ticked Limelight + AppNexus, the bundle must include both <code>limelightDigitalBidAdapter</code> and <code>appnexusBidAdapter</code> — see <a href="#prebid-bundles">Prebid bundle catalog</a>.</p></li>
+    <li><h3>Generate &amp; copy</h3><p>Click <strong>Generate Production Tag</strong>. Validation runs first — required fields and bidder params get red borders if invalid. Once green, copy the snippet from the output box and hand it to the publisher.</p></li>
+  </ol>
+
+  <div class="callout warn">
+    <span class="label">Validation gotcha</span>
+    <p>Numeric bidder params (Ad Unit ID, Placement ID, Account ID, etc.) accept text but must parse as numbers. If a publisher gives you a value like "972556929-A", strip the suffix or push back — Prebid will reject the request.</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<section id="fields">
+  <h2>Field reference</h2>
+  <table>
+    <thead><tr><th style="width:200px;">Field</th><th>Purpose</th><th style="width:90px;">Required</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Release Version</strong></td><td>jsDelivr tag (e.g. <code>v2.0.0</code>) that the engine + Prebid URLs are derived from. Pin for prod.</td><td><span class="pill warn">Yes</span></td></tr>
+      <tr><td><strong>Engine Script URL</strong></td><td>Auto-derived. Override only when testing against a feature branch.</td><td><span class="pill warn">Yes</span></td></tr>
+      <tr><td><strong>Video Content URL</strong></td><td>The video the publisher wants in the player. Pre-roll plays before it.</td><td><span class="pill">No</span></td></tr>
+      <tr><td><strong>GAM Master Ad Tag URL</strong></td><td>Publisher's GAM tag, must end with <code>correlator=</code>.</td><td><span class="pill warn">Yes</span></td></tr>
+      <tr><td><strong>Bidder Timeout</strong></td><td>How long Prebid waits for bid responses before calling the auction. Default 1200 ms.</td><td><span class="pill">No</span></td></tr>
+      <tr><td><strong>Strategic Bias</strong></td><td>Constant added to the winning bid's <code>hb_pb</code> before stitching. Used to tip ties to header bidding over GAM direct.</td><td><span class="pill">No</span></td></tr>
+      <tr><td><strong>Prebid.js URL</strong></td><td>The bundle file in <code>prebid/</code> that contains the adapters you ticked.</td><td><span class="pill warn">Yes</span></td></tr>
+      <tr><td><strong>Bidder picker</strong></td><td>One card per SSP. Tick to include; fill params. Generates the <code>data-bidders</code> JSON.</td><td><span class="pill warn">≥1</span></td></tr>
+      <tr><td><strong>Loop Content</strong></td><td>Replays the content video after it ends. <strong>On by default</strong> — keeps inventory available for refresh.</td><td><span class="pill">No</span></td></tr>
+      <tr><td><strong>VPAID Access Mode</strong></td><td><code>insecure</code> = highest yield (allows insecure VPAIDs). Switch to <code>enabled</code> only if the publisher requests it.</td><td><span class="pill">No</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<section id="prebid-bundles">
+  <h2>Prebid bundle catalog</h2>
+  <p>Prebid.js is modular — every bidder is an adapter you opt into at build time. Shipping every adapter would bloat the file (3 MB+ for the full Prebid catalog). Instead, we maintain a catalog of pre-built bundles, each containing just the adapters a particular set of publishers needs.</p>
+
+  <h4>Catalog layout</h4>
+  <p>Bundles live under <code>prebid/</code> in the repo. Naming convention: <code>prebid-&lt;bidder1&gt;-&lt;bidder2&gt;.js</code>. The current catalog:</p>
+  <table>
+    <thead><tr><th>File</th><th>Adapters</th><th>Used by</th></tr></thead>
+    <tbody>
+      <tr><td><code>prebid/prebid.js</code></td><td>limelightDigital</td><td>Default / single-bidder publishers</td></tr>
+      <tr><td><em>(future)</em> <code>prebid-limelight-appnexus.js</code></td><td>limelightDigital, appnexus</td><td>Publishers competing both</td></tr>
+      <tr><td><em>(future)</em> <code>prebid-magnite-pubmatic.js</code></td><td>rubicon, pubmatic</td><td>Different demand stack</td></tr>
+    </tbody>
+  </table>
+  <p>Every bundle automatically includes the consent modules (<code>consentManagementTcf</code>, <code>consentManagementUsp</code>, <code>consentManagementGpp</code>, <code>tcfControl</code>) — the engine's default Prebid config depends on them.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<section id="bundle-build">
+  <h2>Triggering a new bundle build</h2>
+  <p>When a publisher needs an SSP we don't have a bundle for yet, build a new one. This is a GitHub Actions workflow — no local tooling needed.</p>
+
+  <ol class="steps">
+    <li><h3>Open the Actions tab</h3><p>Go to <a href="https://github.com/aryanvani-pm/bidding-player/actions" target="_blank" rel="noopener">github.com/aryanvani-pm/bidding-player/actions</a>. Select <strong>Build Prebid bundle</strong> from the workflow list on the left.</p></li>
+    <li><h3>Click "Run workflow"</h3><p>Top-right of the runs list. A form drops down with three inputs.</p></li>
+    <li><h3>Fill the inputs</h3>
+      <p><strong>modules</strong> — comma-separated Prebid adapter names. Find names at <a href="https://docs.prebid.org/dev-docs/bidders.html" target="_blank" rel="noopener">docs.prebid.org/dev-docs/bidders.html</a>. Example: <code>limelightDigitalBidAdapter,appnexusBidAdapter</code>.</p>
+      <p><strong>bundle_name</strong> — output filename without <code>.js</code>. Follow the convention: <code>prebid-limelight-appnexus</code>.</p>
+      <p><strong>prebid_version</strong> — Prebid.js release tag, e.g. <code>v11.11.0</code>. Stick to the same version we've been building against unless there's a reason to upgrade.</p>
+    </li>
+    <li><h3>Run &amp; wait</h3><p>~3 minutes. The workflow clones Prebid.js, runs <code>gulp build --modules=…</code>, commits the result to <code>prebid/&lt;bundle_name&gt;.js</code> on main.</p></li>
+    <li><h3>Tag a release</h3><p>Once the commit lands, tag the repo: <code>git tag v2.1.0 &amp;&amp; git push --tags</code>. jsDelivr will serve the new bundle at <code>@v2.1.0</code> within a few minutes.</p></li>
+    <li><h3>Use it in the tag generator</h3><p>In the dashboard, set the Release Version to <code>v2.1.0</code>, change the Prebid URL filename to your new bundle, tick the new bidder, fill its params, generate the tag.</p></li>
+  </ol>
+
+  <div class="callout tip">
+    <span class="label">If a build fails</span>
+    <p>Open the failed run, expand "Build bundle" step. The most common error is a typo in the module name — Prebid will list the unknown module. Fix and re-run.</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<section id="add-bidder-ui">
+  <h2>Adding a bidder to the picker UI</h2>
+  <p>The bidder picker in the dashboard reads from a single JS array in <code>index.html</code>: <code>BIDDER_CATALOG</code>. To make a new SSP selectable in the UI, add an entry there.</p>
+
+<pre><code><span class="tok-com">// index.html, inside adopsModule()</span>
+<span class="tok-key">const</span> BIDDER_CATALOG = [
+  { id: <span class="tok-str">'limelightDigital'</span>, label: <span class="tok-str">'Limelight Digital'</span>, module: <span class="tok-str">'limelightDigitalBidAdapter'</span>, defaultOn: <span class="tok-key">true</span>, params: [...] },
+  { id: <span class="tok-str">'appnexus'</span>,        label: <span class="tok-str">'AppNexus / Xandr'</span>,   module: <span class="tok-str">'appnexusBidAdapter'</span>,        params: [
+    { key: <span class="tok-str">'placementId'</span>, label: <span class="tok-str">'Placement ID'</span>, required: <span class="tok-key">true</span>, type: <span class="tok-str">'number'</span> }
+  ]},
+  <span class="tok-com">// ← add a new bidder here</span>
+];</code></pre>
+
+  <p>Fields per entry:</p>
+  <ul>
+    <li><code>id</code> — the Prebid bidder code (used as the <code>"bidder"</code> key in the request).</li>
+    <li><code>label</code> — what shows in the UI.</li>
+    <li><code>module</code> — the adapter name (only used as a hint label in the UI; the actual module is included via the Prebid bundle).</li>
+    <li><code>defaultOn</code> — if <code>true</code>, the checkbox is ticked on first render.</li>
+    <li><code>params</code> — array of param schemas: <code>key</code>, <code>label</code>, <code>required</code>, <code>type</code> (<code>'number'</code> or omit for string), <code>default</code>, <code>hidden</code> (auto-injected without a UI input).</li>
+  </ul>
+  <p>Adding here does <em>not</em> automatically include the adapter in any bundle — the bundle build must include the matching module name. Order is: build bundle → add to catalog → use in tag.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<section id="publisher-onboarding">
+  <h2>Publisher onboarding playbook</h2>
+
+  <h4>What to ask the publisher</h4>
+  <ol>
+    <li>Their GAM master ad tag URL (must end with <code>correlator=</code>).</li>
+    <li>Which SSPs they want competing (and the bidder-specific IDs — publisher ID, placement ID, etc.).</li>
+    <li>The video content URL.</li>
+    <li>Their domain — required to allowlist with the SSPs.</li>
+  </ol>
+
+  <h4>Pre-launch checklist</h4>
+  <ul>
+    <li>Domain is allowlisted at every SSP they're using. <strong>#1 cause of zero fill.</strong></li>
+    <li>GAM line items targeting <code>hb_pb</code> are set up at $0.10 increments.</li>
+    <li>VAST wrapper creative uses <code>%%PATTERN:hb_uuid%%</code> → <code>prebid.adnxs.com/pbc/v1/cache</code>.</li>
+    <li>Tag tested locally with <code>?debug=true</code> — auction runs, GAM responds, IMA plays creative.</li>
+  </ul>
+
+  <h4>Handoff</h4>
+  <p>Send the publisher: the generated <code>&lt;script&gt;</code> snippet, a link to the <a href="docs.html">publisher integration guide</a>, and the <a href="publisher-guide.pdf">PDF version</a> for offline reference. Their docs do <em>not</em> reference this ad ops console — keep internal flow internal.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<section id="release-cycle">
+  <h2>Release &amp; deploy cycle</h2>
+  <ol>
+    <li>Land changes on <code>main</code>. Bump <code>VERSION</code> file (the CI version-drift check enforces consistency between <code>VERSION</code> and embedded jsDelivr URLs).</li>
+    <li>Tag the release: <code>git tag v2.X.Y &amp;&amp; git push --tags</code>.</li>
+    <li>Update the dashboard's default version field if appropriate (in <code>index.html</code>, the <code>adopsVersion</code> input).</li>
+    <li>Existing publishers on older tags are unaffected — jsDelivr serves immutable bytes per tag. Coordinate version bumps with each publisher individually.</li>
+  </ol>
+
+  <div class="callout">
+    <span class="label">PDF auto-regen</span>
+    <p>When <code>publisher-guide.html</code> changes on main, the <code>pdf-regen.yml</code> workflow regenerates <code>publisher-guide.pdf</code> via Chrome headless. No manual step needed.</p>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<section id="troubleshooting">
+  <h2>Common issues</h2>
+
+  <h4>Publisher reports "no ads playing"</h4>
+  <ol>
+    <li>Open their page with <code>?debug=true</code>. Check the engine log.</li>
+    <li>Phase 3 (auction) — did Prebid issue a bid request? If not, the bundle is missing the adapter.</li>
+    <li>Phase 4 (response) — empty <code>seatbid</code>? Domain allowlisting issue at the SSP.</li>
+    <li>Phase 6 (stitch) — is <code>hb_uuid</code> in the GAM URL? If missing, engine version is &lt; v1.2.0; ask publisher to update.</li>
+    <li>Phase 8 (IMA) — VAST loads but doesn't play? Usually VPAID mode mismatch or mixed content.</li>
+  </ol>
+
+  <h4>"Auction canceled" in the log</h4>
+  <p>Consent module canceled it. Check the consent config — we ship with static TCF (<code>gdprApplies: false</code>) and dropped GPP defaults in v1.2.1/1.2.2 specifically to prevent this. If the publisher has a real CMP, switch the engine config from static to <code>iab</code>.</p>
+
+  <h4>Bidder silently dropped</h4>
+  <p>Prebid logs a warning like "video ad unit containing bidders that don't support video: X". The bundle they're loading doesn't include the adapter. Either rebuild the bundle including the missing adapter, or remove that bidder from the snippet.</p>
+
+  <h4>Tag generator validation never passes</h4>
+  <p>Open browser DevTools → Console. Look for red errors. The most common cause is a paste of a GAM URL with smart quotes from a Google Doc — re-paste from a plain-text source.</p>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<section id="changelog">
+  <h2>Changelog</h2>
+  <ul class="changelog">
+    <li>
+      <div class="ver">v2.0.0</div>
+      <div class="desc"><strong>Multi-bidder support.</strong> New <code>data-bidders</code> JSON attribute lets a single tag run an auction across multiple SSPs. Per-publisher Prebid bundle catalog under <code>prebid/</code>. <code>workflow_dispatch</code> CI for on-demand bundle builds. Dashboard now has a checkbox-based bidder picker (replaces v1's JSON textarea). Legacy <code>data-pub-id</code> / <code>data-adunit-id</code> / <code>data-host</code> attrs continue to work for v1 tags in the wild.</div>
+    </li>
+    <li>
+      <div class="ver">v1.2.2</div>
+      <div class="desc"><strong>TCF static config.</strong> Switched to <code>cmpApi: 'static'</code> with <code>gdprApplies: false</code> so <code>tcfControl</code> stops canceling auctions when no CMP is present on the publisher page.</div>
+    </li>
+    <li>
+      <div class="ver">v1.2.1</div>
+      <div class="desc"><strong>Dropped GPP from defaults.</strong> The GPP consent module was canceling auctions on every publisher without a GPP-aware CMP. Pulled it from the default config.</div>
+    </li>
+    <li>
+      <div class="ver">v1.2.0</div>
+      <div class="desc"><strong>Full <code>hb_*</code> targeting.</strong> Engine now stitches the complete targeting set (<code>hb_uuid</code>, <code>hb_size</code>, <code>hb_format</code>, <code>hb_adid</code>) into GAM's <code>cust_params</code>, not just <code>hb_pb</code>/<code>hb_bidder</code>. Without <code>hb_uuid</code>, GAM couldn't resolve cached VAST creatives. Also: dynamic player size (reads <code>getBoundingClientRect</code> at auction time); consent management modules wired in.</div>
+    </li>
+    <li>
+      <div class="ver">v1.1.0</div>
+      <div class="desc"><strong>Custom Limelight Prebid build.</strong> The stock Prebid bundle was silently dropping the Limelight adapter ("video ad unit containing bidders that don't support video: limelightDigital"). Swapped in a build with the supplier-provided adapter.</div>
+    </li>
+    <li>
+      <div class="ver">v1.0.x</div>
+      <div class="desc"><strong>Initial release.</strong> Versioned jsDelivr hosting, CI version-drift guard, sandbox testing tab, production tag generator, structured phased logging, Claude high-contrast dark theme, publisher PDF guide with auto-regen workflow.</div>
+    </li>
+  </ul>
+</section>
+
+<footer>
+  Bidding Player Ad Ops Console &bull; v2.0.0 &bull; Internal documentation<br>
+  Repo: <code>github.com/aryanvani-pm/bidding-player</code> &bull;
+  Engine: <code>cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v2.0.0/engine/player.js</code>
+</footer>
+
+</main>
+</div>
+
+<script>
+  (function() {
+    var sections = Array.from(document.querySelectorAll('.content > section[id]'));
+    var tocLinks = Array.from(document.querySelectorAll('.toc a'));
+    var linkByHash = {};
+    tocLinks.forEach(function(a) { linkByHash[a.getAttribute('href').slice(1)] = a; });
+    function update() {
+      var top = window.scrollY + 100;
+      var active = null;
+      for (var i = 0; i < sections.length; i++) {
+        if (sections[i].offsetTop <= top) active = sections[i].id;
+        else break;
+      }
+      tocLinks.forEach(function(a) { a.classList.remove('active'); });
+      if (active && linkByHash[active]) linkByHash[active].classList.add('active');
+    }
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+  })();
+</script>
+</body>
+</html>

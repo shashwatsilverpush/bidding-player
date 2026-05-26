@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Bidding Player — Publisher Integration Guide</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -426,12 +427,7 @@
     <div class="toc-heading">Operate</div>
     <a href="#testing">Testing &amp; verification</a>
     <a href="#troubleshooting">Troubleshooting</a>
-    <a href="#browsers">Browser support</a>
     <a href="#faq">FAQ</a>
-
-    <div class="toc-heading">Reference</div>
-    <a href="#changelog">Changelog</a>
-    <a href="#support">Support</a>
   </nav>
 
   <a class="back-to-app" href="./">← Tag Generator</a>
@@ -718,55 +714,16 @@ pbjs.que.push(<span class="tok-key">function</span>() {
   </div></details>
 </section>
 
-<!-- ─── Browser support ─────────────────────────────────────────── -->
-<section id="browsers">
-  <h2>Browser support</h2>
-  <table>
-    <thead><tr><th>Browser</th><th>Status</th><th>Notes</th></tr></thead>
-    <tbody>
-      <tr><td>Chrome / Edge (desktop)</td><td><span class="status-ok">Tested</span></td><td>Reference platform.</td></tr>
-      <tr><td>Firefox / Safari (desktop)</td><td><span class="status-warn">Should work</span></td><td>Test before mass rollout. Safari: watch for ITP.</td></tr>
-      <tr><td>iOS Safari</td><td><span class="status-warn">Test required</span></td><td>Strict autoplay; <code>playsinline</code> set by engine. Prefer SIMID over VPAID.</td></tr>
-      <tr><td>Android Chrome</td><td><span class="status-warn">Test required</span></td><td>In-app webviews restricted.</td></tr>
-      <tr><td>IE11 / earlier</td><td><span class="status-err">Unsupported</span></td><td>Engine uses ES2017+.</td></tr>
-    </tbody>
-  </table>
-  <p>Requires: ES2017+, HTMLMediaElement, <code>fetch</code>, HTTPS context.</p>
-</section>
-
 <!-- ─── FAQ ─────────────────────────────────────────────────────── -->
 <section id="faq">
   <h2>FAQ</h2>
   <details><summary>Multiple players on the same page?</summary><div><p>Not currently. Workaround: iframe per player.</p></div></details>
-  <details><summary>Other Prebid bidders?</summary><div><p>Need a custom Prebid build with those adapters AND an engine code change to register them. Talk to your account manager.</p></div></details>
+  <details><summary>Other Prebid bidders / multiple SSPs?</summary><div><p>Yes — v2 supports multi-bidder via <code>data-bidders</code>. Ask your account manager which SSPs you need; they will generate a Prebid bundle containing those adapters.</p></div></details>
   <details><summary>If Prebid fails to load?</summary><div><p>Engine catches it and calls GAM with <code>hb_pb=0.00&amp;hb_bidder=none</code>. House line item fills.</p></div></details>
-  <details><summary>Auction analytics?</summary><div><p>Impression-level: GAM Reports filtered by <code>hb_bidder</code>. Auction-level (bid latency/rate): request a Prebid build with an analytics adapter.</p></div></details>
-  <details><summary>Latency impact?</summary><div><p><code>async</code> script — zero impact on Time to Interactive. Adds ~timeout ms before pre-roll start.</p></div></details>
+  <details><summary>Auction analytics?</summary><div><p>Impression-level: GAM Reports filtered by <code>hb_bidder</code>. Auction-level (bid latency / rate): request a Prebid build with an analytics adapter.</p></div></details>
+  <details><summary>Latency impact?</summary><div><p><code>async</code> script — zero impact on Time to Interactive. Adds the bidder timeout (default 1200 ms) before pre-roll start.</p></div></details>
   <details><summary>Auction refresh / mid-rolls?</summary><div><p>Not currently supported. Once per page load.</p></div></details>
-  <details><summary><code>@v2.0.0</code> vs <code>@main</code>?</summary><div><p>Tags are immutable (1-year CDN cache). <code>@main</code> = latest commit (~12h cache). Pin tags for prod.</p></div></details>
-</section>
-
-<!-- ─── Changelog ───────────────────────────────────────────────── -->
-<section id="changelog">
-  <h2>Changelog</h2>
-  <ul>
-    <li><strong>v2.0.0</strong> — Multi-bidder support via new <code>data-bidders</code> JSON attribute. Per-publisher Prebid bundle catalog under <code>prebid/</code>. New <code>workflow_dispatch</code> CI for on-demand bundle builds. v1 attrs (<code>data-pub-id</code>, <code>data-adunit-id</code>, <code>data-host</code>) remain as legacy single-bidder shortcut — every v1 tag in the wild keeps working.</li>
-    <li><strong>v1.2.2</strong> — Static TCF config so tcfControl doesn't cancel auctions without a CMP.</li>
-    <li><strong>v1.2.1</strong> — Dropped GPP from defaults (was canceling auctions).</li>
-    <li><strong>v1.2.0</strong> — Full <code>hb_*</code> targeting (incl. <code>hb_uuid</code>); dynamic player size; consent management.</li>
-    <li><strong>v1.1.0</strong> — Custom Prebid build with <code>limelightDigital</code> adapter (the previous stock build silently dropped the bidder).</li>
-    <li><strong>v1.0.x</strong> — Initial release; versioned jsDelivr, CI version-drift guard, tag generator.</li>
-  </ul>
-</section>
-
-<!-- ─── Support ─────────────────────────────────────────────────── -->
-<section id="support">
-  <h2>Support</h2>
-  <ul>
-    <li>Repo &amp; issues: <a href="https://github.com/aryanvani-pm/bidding-player" target="_blank" rel="noopener">github.com/aryanvani-pm/bidding-player</a></li>
-    <li>Tag generator: <a href="./">aryanvani-pm.github.io/bidding-player</a></li>
-    <li>Demo: <a href="./demo/publisher-test.html?debug=true">/demo/publisher-test.html?debug=true</a></li>
-  </ul>
+  <details><summary><code>@v2.0.0</code> vs <code>@main</code>?</summary><div><p>Tags are immutable (1-year CDN cache). <code>@main</code> = latest commit (~12 h cache). Pin tags for prod.</p></div></details>
 </section>
 
 <footer>
