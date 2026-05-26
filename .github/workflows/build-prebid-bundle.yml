@@ -1,0 +1,98 @@
+name: Build Prebid bundle
+
+# On-demand builder for the prebid/ catalog. Trigger from the Actions UI when
+# a publisher needs a Prebid.js bundle with a different set of adapters. The
+# workflow clones Prebid.js source, runs `gulp build --modules=<list>`, and
+# commits the resulting bytes to prebid/<bundle_name>.js on main.
+#
+# Consent modules (consentManagementTcf, consentManagementUsp,
+# consentManagementGpp, tcfControl) are appended automatically because the
+# engine's default config relies on them — see prebid/README.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      modules:
+        description: 'Comma-separated bidder/module list (consent modules added automatically)'
+        required: true
+        default: 'limelightDigitalBidAdapter'
+      bundle_name:
+        description: 'Output filename without .js extension (e.g. prebid-limelight-appnexus)'
+        required: true
+        default: 'prebid-custom'
+      prebid_version:
+        description: 'Prebid.js git tag to build from (e.g. v11.11.0)'
+        required: true
+        default: 'v11.11.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Clone Prebid.js source @ ${{ inputs.prebid_version }}
+        run: |
+          git clone --branch ${{ inputs.prebid_version }} --depth 1 \
+            https://github.com/prebid/Prebid.js.git /tmp/prebid
+
+      - name: Install Prebid build dependencies
+        working-directory: /tmp/prebid
+        run: npm ci
+
+      - name: Compose module list (user input + required consent modules)
+        id: modules
+        run: |
+          # Always include consent modules — the engine's setConfig depends on them
+          REQUIRED=consentManagementTcf,consentManagementUsp,consentManagementGpp,tcfControl
+          USER_MODULES="${{ inputs.modules }}"
+          # De-dupe in case the user listed a consent module too
+          COMBINED=$(echo "${USER_MODULES},${REQUIRED}" | tr ',' '\n' | awk 'NF && !seen[$0]++' | paste -sd, -)
+          echo "Final module list: ${COMBINED}"
+          echo "list=${COMBINED}" >> $GITHUB_OUTPUT
+
+      - name: Build bundle
+        working-directory: /tmp/prebid
+        run: |
+          npx gulp build --modules=${{ steps.modules.outputs.list }}
+          ls -lh build/dist/prebid.js
+
+      - name: Stage bundle in this repo
+        run: |
+          BUNDLE_FILE="prebid/${{ inputs.bundle_name }}.js"
+          cp /tmp/prebid/build/dist/prebid.js "$BUNDLE_FILE"
+          ls -lh "$BUNDLE_FILE"
+
+      - name: Commit & push if changed
+        run: |
+          if git diff --quiet "prebid/${{ inputs.bundle_name }}.js"; then
+            echo "Bundle byte-identical to existing — nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "prebid/${{ inputs.bundle_name }}.js"
+          git commit -m "feat(bundles): build ${{ inputs.bundle_name }} from Prebid ${{ inputs.prebid_version }}
+
+Modules: ${{ steps.modules.outputs.list }}
+
+Triggered by workflow_dispatch."
+          git push
+
+      - name: Print bundle URL for sharing with publisher
+        run: |
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          echo "::notice::Bundle live at: https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@main/prebid/${{ inputs.bundle_name }}.js"
+          echo "::notice::Once tagged v${VERSION}: https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v${VERSION}/prebid/${{ inputs.bundle_name }}.js"

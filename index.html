@@ -651,12 +651,12 @@
     <div class="adops-grid">
       <div class="adops-field full" data-required="true">
         <label>🏷️ Release Version / Branch<span class="req-star">*</span></label>
-        <input type="text" id="adopsVersion" value="v1.2.2" />
+        <input type="text" id="adopsVersion" value="v2.0.0" />
         <span class="field-info">Use a tag like <code>v1.0.0</code> for production (immutable, recommended) or a branch name like <code>feat/foo</code> for testing. Both URLs below auto-update from this value.</span>
       </div>
       <div class="adops-field full" data-required="true">
         <label>🌐 Universal Hosted Engine Script URL<span class="req-star">*</span></label>
-        <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v1.2.2/engine/player.js" />
+        <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v2.0.0/engine/player.js" />
         <span class="field-info">Auto-derived from the version above. Override only if you know what you are doing.</span>
       </div>
       <div class="adops-field full">
@@ -685,8 +685,24 @@
       </div>
       <div class="adops-field full" data-required="true">
         <label>Prebid.js Hosted Library URL<span class="req-star">*</span></label>
-        <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v1.2.2/prebid/prebid.js" />
-        <span class="field-info">Auto-derived from the version above. Stays in lockstep with the engine URL so they never drift.</span>
+        <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v2.0.0/prebid/prebid.js" />
+        <span class="field-info">Pick a bundle from <code>prebid/</code> that includes every bidder you list below.</span>
+      </div>
+
+      <div class="adops-field full">
+        <label>🎯 Bidder Configuration (JSON) <span style="background:var(--accent);color:var(--on-accent);padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;margin-left:6px;">v2 multi-bidder</span></label>
+        <textarea id="adopsBiddersJson" style="min-height:120px;font-family:monospace;font-size:12px;line-height:1.55;">[
+  {
+    "bidder": "limelightDigital",
+    "params": {
+      "host": "ads-jbi003.rtba.bidsxchange.com",
+      "publisherId": "649658371",
+      "adUnitId": 972556929,
+      "adUnitType": "video"
+    }
+  }
+]</textarea>
+        <span class="field-info">JSON array of <a href="https://docs.prebid.org/dev-docs/bidders.html" target="_blank" rel="noopener">Prebid bid objects</a>. List every SSP that should compete in this auction — the highest CPM wins. Leave empty to use the legacy single-bidder shortcut built from Publisher / Ad Unit / Host fields above.</span>
       </div>
     </div>
 
@@ -1155,6 +1171,23 @@ $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard')
   function escJs(str) { return String(str || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/<\//g, '<\\/'); }
 
   function getSettings() {
+    // Bidder JSON — validate + minify. Empty string is legal (engine falls back
+    // to legacy data-host / data-pub-id / data-adunit-id shortcut).
+    const biddersRaw = get('adopsBiddersJson');
+    let biddersMinified = '';
+    let biddersError = '';
+    if (biddersRaw) {
+      try {
+        const parsed = JSON.parse(biddersRaw);
+        if (!Array.isArray(parsed) || !parsed.length) {
+          biddersError = 'Bidder configuration must be a non-empty JSON array.';
+        } else {
+          biddersMinified = JSON.stringify(parsed);
+        }
+      } catch (e) {
+        biddersError = 'Bidder configuration JSON parse error: ' + e.message;
+      }
+    }
     return {
       engineUrl:   get('adopsEngineCdnUrl'),
       videoUrl:    get('adopsVideoUrl'),
@@ -1174,16 +1207,35 @@ $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard')
       sizing:      document.getElementById('optSizing').value,
       preload:     document.getElementById('optPreload').value,
       vpaid:       document.getElementById('optVpaid').value,
+      biddersJson: biddersMinified,
+      biddersError: biddersError,
     };
   }
 
   function buildEngineFile(v) {
-    return [
+    // Build the attribute list. If a multi-bidder JSON is present, emit
+    // `data-bidders` (v2 shape, engine prefers this). Otherwise emit the
+    // legacy three-attr shortcut (data-pub-id / data-adunit-id / data-host)
+    // for backwards compatibility with v1 tags.
+    const lines = [
       '',
       '<script src="' + escJs(v.engineUrl) + '"',
       '        id="adtech-player-core"',
-      '        data-pub-id="' + escJs(v.publisherId) + '"',
-      '        data-adunit-id="' + escJs(v.adUnitId) + '"',
+    ];
+
+    if (v.biddersJson) {
+      // HTML attribute values use single-quote wrapper so the JSON's double-
+      // quoted keys/strings don't need escaping. We also HTML-escape any "<"
+      // to avoid breaking out of the tag.
+      const safeJson = v.biddersJson.replace(/</g, '\\u003c').replace(/'/g, '&#39;');
+      lines.push("        data-bidders='" + safeJson + "'");
+    } else {
+      lines.push('        data-pub-id="' + escJs(v.publisherId) + '"');
+      lines.push('        data-adunit-id="' + escJs(v.adUnitId) + '"');
+      lines.push('        data-host="' + escJs(v.host) + '"');
+    }
+
+    lines.push(
       '        data-tag="' + escJs(v.adTagUrl) + '"',
       '        data-timeout="' + v.timeout + '"',
       '        data-bias="' + v.floorBias.toFixed(2) + '"',
@@ -1195,11 +1247,11 @@ $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard')
       '        data-preload="' + v.preload + '"',
       '        data-vpaid="' + v.vpaid + '"',
       '        data-div-id="' + escJs(v.divId) + '"',
-      '        data-host="' + escJs(v.host) + '"',
       '        data-cache="' + escJs(v.cacheUrl) + '"',
       '        data-prebid-url="' + escJs(v.prebidUrl) + '"',
       '        async><\/script>'
-    ].join('\n');
+    );
+    return lines.join('\n');
   }
 
   const REPO_PATH = 'aryanvani-pm/bidding-player';
@@ -1221,15 +1273,24 @@ $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard')
     if (empty.length > 0) {
       empty.forEach(id => document.getElementById(id).closest('.adops-field').classList.add('invalid'));
       document.getElementById('adopsValidationAlert').classList.add('show');
+      document.getElementById('adopsValidationAlert').textContent = '⚠️ Generation Blocked: Please fill in all required fields marked with (*).';
       return;
     }
     document.querySelectorAll('.adops-field.invalid').forEach(f => f.classList.remove('invalid'));
     document.getElementById('adopsValidationAlert').classList.remove('show');
 
     const v = getSettings();
+    if (v.biddersError) {
+      document.getElementById('adopsBiddersJson').closest('.adops-field').classList.add('invalid');
+      const alert = document.getElementById('adopsValidationAlert');
+      alert.classList.add('show');
+      alert.textContent = '⚠️ ' + v.biddersError;
+      return;
+    }
     const tagContent = buildEngineFile(v);
+    const biddersNote = v.biddersJson ? `  •  multi-bidder via data-bidders` : `  •  legacy single-bidder shortcut`;
     document.getElementById('adopsOutputEngine').value = tagContent;
-    document.getElementById('adopsEngineMeta').textContent = `${tagContent.split('\n').length} lines • Deployment Integration Tag`;
+    document.getElementById('adopsEngineMeta').textContent = `${tagContent.split('\n').length} lines${biddersNote}`;
     
     document.getElementById('adopsReadme').value = [
       '📋 DEPLOYMENT SUMMARY',

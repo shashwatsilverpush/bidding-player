@@ -8,8 +8,22 @@
   }
 
   var cfg = {
-    publisherId: currentScript.getAttribute("data-pub-id") || "",
+    // ─── Bidder configuration ─────────────────────────────────────
+    // v2 (preferred): `data-bidders` is a JSON array of full Prebid bid
+    // objects, e.g.
+    //   data-bidders='[
+    //     {"bidder":"limelightDigital","params":{"host":"...","publisherId":"...","adUnitId":972556929}},
+    //     {"bidder":"appnexus","params":{"placementId":12345}}
+    //   ]'
+    // v1 legacy: `data-host` + `data-pub-id` + `data-adunit-id` are read as
+    // shortcuts for a single-bidder limelightDigital config. Used as the
+    // fallback when `data-bidders` is missing/empty/invalid so every existing
+    // v1 tag in the wild keeps working unchanged.
+    biddersJson: currentScript.getAttribute("data-bidders") || "",
+    publisherId: currentScript.getAttribute("data-pub-id")  || "",
     adUnitId:    currentScript.getAttribute("data-adunit-id") || "",
+    bidderHost:  currentScript.getAttribute("data-host")    || "ads-jbi003.rtba.bidsxchange.com",
+
     adTagUrl:    currentScript.getAttribute("data-tag") || "",
     timeout:     parseInt(currentScript.getAttribute("data-timeout"), 10) || 1200,
     floorBias:   parseFloat(currentScript.getAttribute("data-bias")) || 0.10,
@@ -21,10 +35,35 @@
     preload:     currentScript.getAttribute("data-preload") || "metadata",
     vpaidMode:   currentScript.getAttribute("data-vpaid") || "insecure",
     divId:       currentScript.getAttribute("data-div-id") || "comparos-video-placement",
-    bidderHost:  currentScript.getAttribute("data-host") || "ads-jbi003.rtba.bidsxchange.com",
     cacheUrl:    currentScript.getAttribute("data-cache") || "https://prebid.adnxs.com/pbc/v1/cache",
     prebidUrl:   currentScript.getAttribute("data-prebid-url") || "https://cdnjs.cloudflare.com/ajax/libs/prebid.js/6.7.0/prebid.js"
   };
+
+  // Resolve the bidder list for this auction. New tags use `data-bidders`
+  // JSON; older tags fall through to the legacy single-bidder Limelight
+  // shape built from data-host / data-pub-id / data-adunit-id. Either way,
+  // the engine downstream just iterates `cfg.bidders`.
+  function resolveBidders() {
+    if (cfg.biddersJson) {
+      try {
+        var parsed = JSON.parse(cfg.biddersJson);
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+        warn("data-bidders must be a non-empty JSON array; falling back to legacy single-bidder.");
+      } catch (e) {
+        warn("data-bidders JSON parse error (" + e.message + "); falling back to legacy single-bidder.");
+      }
+    }
+    return [{
+      bidder: "limelightDigital",
+      params: {
+        host: cfg.bidderHost,
+        publisherId: cfg.publisherId,
+        adUnitId: parseInt(cfg.adUnitId, 10),
+        adUnitType: "video"
+      }
+    }];
+  }
+  cfg.bidders = resolveBidders();
 
   var DEBUG = /[?&]debug=true/i.test((window.location && window.location.search) || "");
   
@@ -207,7 +246,8 @@
   }
 
   function runAuction() {
-    step(1, "Auction Initialized via CDN. Target: limelightDigital | Timeout: " + cfg.timeout + "ms");
+    var bidderNames = cfg.bidders.map(function (b) { return b.bidder; }).join(", ");
+    step(1, "Auction Initialized via CDN. Bidders: " + bidderNames + " | Timeout: " + cfg.timeout + "ms");
     if (typeof pbjs === "undefined") {
       warn("Prebid failed network retrieval — Fallback active.");
       setupPlayer(stitchTag(cfg.adTagUrl, noBidTargeting()));
@@ -252,10 +292,16 @@
 
       var code = "atp-" + Date.now();
       try {
-        pbjs.addAdUnits([{ code: code, mediaTypes: { video: { context: "instream", playerSize: [pw, ph], mimes: ["video/mp4", "application/x-mpegURL"], protocols: [1,2,3,4,5,6], playbackmethod: [2], skip: 0 } }, bids: [{ bidder: "limelightDigital", params: { host: cfg.bidderHost, publisherId: cfg.publisherId, adUnitId: parseInt(cfg.adUnitId, 10), adUnitType: "video" } }] }]);
+        pbjs.addAdUnits([{
+          code: code,
+          mediaTypes: {
+            video: { context: "instream", playerSize: [pw, ph], mimes: ["video/mp4", "application/x-mpegURL"], protocols: [1,2,3,4,5,6], playbackmethod: [2], skip: 0 }
+          },
+          bids: cfg.bidders
+        }]);
       } catch (e) { warn("addAdUnits: " + e.message); }
 
-      step(1.5, "Requesting video ad payload from Limelight routing networks. Player size: " + pw + "x" + ph);
+      step(1.5, "Requesting video ad payload. Bidders: " + bidderNames + ". Player size: " + pw + "x" + ph);
       try {
         pbjs.requestBids({
           timeout: cfg.timeout,

@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Bidding Player — Publisher Integration Guide (v1.2.2)</title>
+<title>Bidding Player — Publisher Integration Guide (v2.0.0)</title>
 <style>
   @page {
     size: A4;
     margin: 18mm 16mm 20mm;
     @bottom-center {
-      content: "Bidding Player — Publisher Integration Guide  •  v1.2.2  •  Page " counter(page) " of " counter(pages);
+      content: "Bidding Player — Publisher Integration Guide  •  v2.0.0  •  Page " counter(page) " of " counter(pages);
       font-family: 'Inter', -apple-system, sans-serif;
       font-size: 9pt;
       color: #888;
@@ -404,10 +404,10 @@
   </div>
 
   <dl class="cover-meta">
-    <div><dt>Version</dt><dd>v1.2.2</dd></div>
+    <div><dt>Version</dt><dd>v2.0.0</dd></div>
     <div><dt>License</dt><dd>MIT</dd></div>
     <div><dt>Repository</dt><dd>github.com/aryanvani-pm/bidding-player</dd></div>
-    <div><dt>Engine</dt><dd>cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v1.2.2/engine/player.js</dd></div>
+    <div><dt>Engine</dt><dd>cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v2.0.0/engine/player.js</dd></div>
     <div><dt>Documentation</dt><dd>aryanvani-pm.github.io/bidding-player/docs.html</dd></div>
     <div><dt>Tag generator</dt><dd>aryanvani-pm.github.io/bidding-player</dd></div>
   </dl>
@@ -496,14 +496,17 @@
 <!-- 04 — EMBED CODE REFERENCE                                        -->
 <!-- ════════════════════════════════════════════════════════════════ -->
 <section>
-  <h2>04 — Embed code reference</h2>
-  <pre><span class="tok-pun">&lt;</span><span class="tok-tag">script</span> <span class="tok-attr">src</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v1.2.2/engine/player.js"</span>
+  <h2>04 &mdash; Embed code reference</h2>
+  <p>The <strong>v2</strong> tag uses <code>data-bidders</code> &mdash; a JSON array of every SSP that should bid in this auction. The Prebid bundle at <code>data-prebid-url</code> must include adapters for every bidder listed.</p>
+  <pre><span class="tok-pun">&lt;</span><span class="tok-tag">script</span> <span class="tok-attr">src</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v2.0.0/engine/player.js"</span>
         <span class="tok-attr">id</span>=<span class="tok-str">"adtech-player-core"</span>
-        <span class="tok-attr">data-pub-id</span>=<span class="tok-str">"649658371"</span>
-        <span class="tok-attr">data-adunit-id</span>=<span class="tok-str">"972556929"</span>
+        <span class="tok-attr">data-bidders</span>=<span class="tok-str">'[
+          {"bidder":"limelightDigital","params":{"host":"ads-jbi003...","publisherId":"649658371","adUnitId":972556929,"adUnitType":"video"}},
+          {"bidder":"appnexus","params":{"placementId":12345678}}
+        ]'</span>
         <span class="tok-attr">data-tag</span>=<span class="tok-str">"https://pubads.g.doubleclick.net/gampad/ads?iu=/...&amp;output=vast&amp;correlator="</span>
         <span class="tok-attr">data-video</span>=<span class="tok-str">"https://your-cdn.example.com/content.mp4"</span>
-        <span class="tok-attr">data-prebid-url</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v1.2.2/prebid/prebid.js"</span>
+        <span class="tok-attr">data-prebid-url</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v2.0.0/prebid/prebid-limelight-appnexus.js"</span>
         <span class="tok-attr">data-timeout</span>=<span class="tok-str">"1200"</span>  <span class="tok-attr">data-bias</span>=<span class="tok-str">"0.10"</span>
         <span class="tok-attr">data-autoplay</span>=<span class="tok-str">"true"</span>  <span class="tok-attr">data-muted</span>=<span class="tok-str">"true"</span>  <span class="tok-attr">data-fluid</span>=<span class="tok-str">"true"</span>
         <span class="tok-attr">async</span><span class="tok-pun">&gt;&lt;/</span><span class="tok-tag">script</span><span class="tok-pun">&gt;</span></pre>
@@ -514,12 +517,11 @@
       <tr><td><code>src</code></td><td class="req-yes center">Yes</td><td>&mdash;</td><td>Versioned jsDelivr URL. Pin to a tag, never <code>@main</code>.</td></tr>
       <tr><td><code>id</code></td><td class="req-yes center">Yes</td><td><code>adtech-player-core</code></td><td>Must be exactly this value.</td></tr>
       <tr><td><code>async</code></td><td class="req-yes center">Yes</td><td>&mdash;</td><td>Required HTML attribute.</td></tr>
-      <tr><td><code>data-pub-id</code></td><td class="req-yes center">Yes</td><td>&mdash;</td><td>Limelight publisher ID.</td></tr>
-      <tr><td><code>data-adunit-id</code></td><td class="req-yes center">Yes</td><td>&mdash;</td><td>Limelight ad unit ID (numeric).</td></tr>
+      <tr><td><strong><code>data-bidders</code></strong></td><td class="req-yes center">Yes*</td><td>&mdash;</td><td><strong>v2 multi-bidder.</strong> JSON array of Prebid bid objects (<code>{bidder, params}</code>); each entry's <code>params</code> shape is per-SSP. *Optional if using the legacy 3-attr shortcut below.</td></tr>
+      <tr><td><code>data-pub-id</code> / <code>-adunit-id</code> / <code>-host</code></td><td class="req-no center">Legacy</td><td>&mdash;</td><td><strong>v1 legacy shortcut.</strong> Engine builds a 1-element <code>limelightDigital</code> array from these. Ignored when <code>data-bidders</code> is set.</td></tr>
       <tr><td><code>data-tag</code></td><td class="req-yes center">Yes</td><td>&mdash;</td><td>GAM master ad tag URL; must end with <code>correlator=</code>.</td></tr>
-      <tr><td><code>data-prebid-url</code></td><td class="req-yes center">Yes</td><td>&mdash;</td><td>Must include <code>limelightDigitalBidAdapter</code>.</td></tr>
+      <tr><td><code>data-prebid-url</code></td><td class="req-yes center">Yes</td><td>&mdash;</td><td>Must include adapters for every bidder in <code>data-bidders</code>.</td></tr>
       <tr><td><code>data-video</code></td><td class="req-no center">No</td><td>&mdash;</td><td>Content video (.mp4 / .m3u8).</td></tr>
-      <tr><td><code>data-host</code></td><td class="req-no center">No</td><td>(Limelight default)</td><td>Bidder endpoint host.</td></tr>
       <tr><td><code>data-timeout</code></td><td class="req-no center">No</td><td><code>1200</code></td><td>Bidder timeout (ms). Industry default 1500&ndash;2000.</td></tr>
       <tr><td><code>data-bias</code></td><td class="req-no center">No</td><td><code>0.10</code></td><td>USD added to winning CPM before bucketing.</td></tr>
       <tr><td><code>data-autoplay</code> / <code>-muted</code></td><td class="req-no center">No</td><td><code>true</code> / <code>true</code></td><td>Autoplay requires muted.</td></tr>
@@ -530,9 +532,12 @@
     </tbody>
   </table>
 
+  <h3>Onboarding a new SSP / Prebid bundle</h3>
+  <p>The <code>prebid/</code> directory holds pre-built Prebid.js bundles. Each <code>data-prebid-url</code> picks one. To add a bundle with different adapters, trigger the <strong>"Build Prebid bundle"</strong> workflow in the Actions tab: supply the comma-separated module list and a filename, the workflow runs <code>gulp build</code> and commits the result on <code>main</code>. Full instructions in <code>prebid/README.md</code>.</p>
+
   <div class="callout warn">
-    <span class="label">Keep <code>src</code> and <code>data-prebid-url</code> on the same version</span>
-    <p>The Tag Generator enforces this. If hand-editing, keep them in sync.</p>
+    <span class="label">Three things must stay in sync</span>
+    <p>1) <code>src</code> + <code>data-prebid-url</code> on the same version tag. 2) Every bidder in <code>data-bidders</code> must have its adapter in the Prebid bundle. 3) Bundle must be from the <em>same</em> <code>@vX.Y.Z</code> as the engine. The Tag Generator enforces all three.</p>
   </div>
 </section>
 
@@ -769,7 +774,7 @@ pbjs.que.push(<span class="tok-key">function</span>() {
     <div class="faq-a"><p><code>async</code> script &mdash; zero impact on Time to Interactive. Adds the bidder timeout to pre-roll start.</p></div>
   </div>
   <div class="faq-item">
-    <div class="faq-q"><code>@v1.2.2</code> vs <code>@main</code>?</div>
+    <div class="faq-q"><code>@v2.0.0</code> vs <code>@main</code>?</div>
     <div class="faq-a"><p>Tags are immutable (1-year CDN cache). <code>@main</code> = latest commit (~12 h cache). Pin tags for prod.</p></div>
   </div>
 </section>
@@ -787,8 +792,8 @@ pbjs.que.push(<span class="tok-key">function</span>() {
   </ul>
 
   <div class="footer-note">
-    Bidding Player &bull; v1.2.2 &bull; Built on Prebid.js, video.js, Google IMA SDK<br>
-    Engine: <code>cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v1.2.2/engine/player.js</code>
+    Bidding Player &bull; v2.0.0 &bull; Built on Prebid.js, video.js, Google IMA SDK<br>
+    Engine: <code>cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v2.0.0/engine/player.js</code>
   </div>
 </section>
 
