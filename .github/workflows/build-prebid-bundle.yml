@@ -21,9 +21,9 @@ on:
         required: true
         default: 'prebid-custom'
       prebid_version:
-        description: 'Prebid.js git tag to build from (e.g. v11.11.0)'
+        description: 'Prebid.js git tag to build from (no v prefix, e.g. 11.13.0)'
         required: true
-        default: 'v11.11.0'
+        default: '11.13.0'
 
 permissions:
   contents: write

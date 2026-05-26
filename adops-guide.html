@@ -183,7 +183,7 @@
   <h1>Ad Ops Dashboard Guide</h1>
   <p class="lead">Internal playbook for operating the Bidding Player platform — how to use the dashboard, how to onboard new publishers, and how to extend the system with new SSPs.</p>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <span class="pill accent">v2.0.0</span>
+    <span class="pill accent">v2.1.0</span>
     <span class="pill">Multi-bidder</span>
     <span class="pill">Internal docs</span>
   </div>
@@ -254,7 +254,7 @@
   <p>The <strong>Production Tag Generator</strong> tab produces the deployable <code>&lt;script&gt;</code> snippet for a publisher. The flow:</p>
 
   <ol class="steps">
-    <li><h3>Set the release version</h3><p>Type the tag (e.g. <code>v2.0.0</code>) at the top. The engine URL and Prebid URL auto-fill from this value. Always use a pinned tag for production — never <code>main</code>.</p></li>
+    <li><h3>Set the release version</h3><p>Type the tag (e.g. <code>v2.1.0</code>) at the top. The engine URL and Prebid URL auto-fill from this value. Always use a pinned tag for production — never <code>main</code>.</p></li>
     <li><h3>Fill the GAM master ad tag</h3><p>Paste the publisher's GAM master tag URL. It <em>must</em> end with <code>correlator=</code> so the engine can append a unique correlator per impression. If <code>cust_params</code> is missing, the engine adds it.</p></li>
     <li><h3>Tick the bidders</h3><p>In the <strong>Bidders for this Publisher</strong> card, tick every SSP that should compete in this auction. Limelight is on by default. For each ticked bidder, fill in its required params (e.g. publisher ID, placement ID).</p></li>
     <li><h3>Verify the Prebid URL matches</h3><p>The Prebid URL field must point at a bundle file that contains every adapter you ticked. If you ticked Limelight + AppNexus, the bundle must include both <code>limelightDigitalBidAdapter</code> and <code>appnexusBidAdapter</code> — see <a href="#prebid-bundles">Prebid bundle catalog</a>.</p></li>
@@ -273,7 +273,7 @@
   <table>
     <thead><tr><th style="width:200px;">Field</th><th>Purpose</th><th style="width:90px;">Required</th></tr></thead>
     <tbody>
-      <tr><td><strong>Release Version</strong></td><td>jsDelivr tag (e.g. <code>v2.0.0</code>) that the engine + Prebid URLs are derived from. Pin for prod.</td><td><span class="pill warn">Yes</span></td></tr>
+      <tr><td><strong>Release Version</strong></td><td>jsDelivr tag (e.g. <code>v2.1.0</code>) that the engine + Prebid URLs are derived from. Pin for prod.</td><td><span class="pill warn">Yes</span></td></tr>
       <tr><td><strong>Engine Script URL</strong></td><td>Auto-derived. Override only when testing against a feature branch.</td><td><span class="pill warn">Yes</span></td></tr>
       <tr><td><strong>Video Content URL</strong></td><td>The video the publisher wants in the player. Pre-roll plays before it.</td><td><span class="pill">No</span></td></tr>
       <tr><td><strong>GAM Master Ad Tag URL</strong></td><td>Publisher's GAM tag, must end with <code>correlator=</code>.</td><td><span class="pill warn">Yes</span></td></tr>
@@ -293,16 +293,23 @@
   <p>Prebid.js is modular — every bidder is an adapter you opt into at build time. Shipping every adapter would bloat the file (3 MB+ for the full Prebid catalog). Instead, we maintain a catalog of pre-built bundles, each containing just the adapters a particular set of publishers needs.</p>
 
   <h4>Catalog layout</h4>
-  <p>Bundles live under <code>prebid/</code> in the repo. Naming convention: <code>prebid-&lt;bidder1&gt;-&lt;bidder2&gt;.js</code>. The current catalog:</p>
+  <p>Bundles live under <code>prebid/</code> in the repo. Naming convention for custom bundles: <code>prebid-&lt;bidder1&gt;-&lt;bidder2&gt;.js</code>. The current catalog:</p>
   <table>
-    <thead><tr><th>File</th><th>Adapters</th><th>Used by</th></tr></thead>
+    <thead><tr><th>File</th><th>Adapters</th><th>Size</th><th>Used by</th></tr></thead>
     <tbody>
-      <tr><td><code>prebid/prebid.js</code></td><td>limelightDigital</td><td>Default / single-bidder publishers</td></tr>
-      <tr><td><em>(future)</em> <code>prebid-limelight-appnexus.js</code></td><td>limelightDigital, appnexus</td><td>Publishers competing both</td></tr>
-      <tr><td><em>(future)</em> <code>prebid-magnite-pubmatic.js</code></td><td>rubicon, pubmatic</td><td>Different demand stack</td></tr>
+      <tr>
+        <td><code>prebid/prebid.js</code><br><span class="pill ok">Default</span></td>
+        <td>limelightDigital, appnexus, rubicon (Magnite), pubmatic, openx</td>
+        <td>286 KB</td>
+        <td>Every publisher — covers the 5 most common SSPs out of the box</td>
+      </tr>
     </tbody>
   </table>
   <p>Every bundle automatically includes the consent modules (<code>consentManagementTcf</code>, <code>consentManagementUsp</code>, <code>consentManagementGpp</code>, <code>tcfControl</code>) — the engine's default Prebid config depends on them.</p>
+  <div class="callout tip">
+    <span class="label">v2.1.0 change</span>
+    <p>The default <code>prebid.js</code> now ships with all 5 SSPs (Limelight + AppNexus + Magnite + PubMatic + OpenX). No more "build a new bundle for each publisher" workflow for the common case. Only build a custom bundle when a publisher needs an SSP outside this set.</p>
+  </div>
 </section>
 
 <!-- ════════════════════════════════════════════════════════════════ -->
@@ -422,6 +429,10 @@
   <h2>Changelog</h2>
   <ul class="changelog">
     <li>
+      <div class="ver">v2.1.0</div>
+      <div class="desc"><strong>Default bundle expansion + Pages deploy fix.</strong> The default <code>prebid/prebid.js</code> now contains all 5 common SSPs (Limelight + AppNexus + Magnite + PubMatic + OpenX) built from Prebid.js 11.13.0 — eliminates the "build a new bundle per publisher" step for the common case (286 KB total, +37 KB over the v2.0.0 Limelight-only build). Migrated GitHub Pages deploy from legacy Jekyll builder to <code>actions/deploy-pages</code> workflow after the legacy builder hung twice on large content commits. Fixed a latent bug in <code>build-prebid-bundle.yml</code> — Prebid.js tags lack the <code>v</code> prefix (e.g. <code>11.13.0</code>, not <code>v11.13.0</code>). Added <code>.nojekyll</code>.</div>
+    </li>
+    <li>
       <div class="ver">v2.0.0</div>
       <div class="desc"><strong>Multi-bidder support.</strong> New <code>data-bidders</code> JSON attribute lets a single tag run an auction across multiple SSPs. Per-publisher Prebid bundle catalog under <code>prebid/</code>. <code>workflow_dispatch</code> CI for on-demand bundle builds. Dashboard now has a checkbox-based bidder picker (replaces v1's JSON textarea). Legacy <code>data-pub-id</code> / <code>data-adunit-id</code> / <code>data-host</code> attrs continue to work for v1 tags in the wild.</div>
     </li>
@@ -449,9 +460,9 @@
 </section>
 
 <footer>
-  Bidding Player Ad Ops Console &bull; v2.0.0 &bull; Internal documentation<br>
+  Bidding Player Ad Ops Console &bull; v2.1.0 &bull; Internal documentation<br>
   Repo: <code>github.com/aryanvani-pm/bidding-player</code> &bull;
-  Engine: <code>cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v2.0.0/engine/player.js</code>
+  Engine: <code>cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v2.1.0/engine/player.js</code>
 </footer>
 
 </main>

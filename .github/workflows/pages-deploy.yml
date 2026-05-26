@@ -1,0 +1,51 @@
+name: Deploy to GitHub Pages
+
+# Migrated off the legacy Jekyll-based Pages builder (build_type=legacy).
+# That pipeline was prone to silent "Page build failed." errors on this
+# repo and to multi-minute hangs when GitHub's Pages backend was degraded
+# — both observed before this workflow was added. This workflow uses
+# actions/upload-pages-artifact + actions/deploy-pages, which run on the
+# regular Actions infrastructure and surface real build logs.
+#
+# The site is pure static HTML/JS/CSS/SVG/PDF — no build step needed.
+# We just package the repo root and hand it to the deploy action.
+
+on:
+  push:
+    branches: [main]
+  # Allow manual redeploys from the Actions tab when needed.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One in-flight deploy at a time; if a new push arrives mid-deploy, queue
+# it and cancel the older queued one so we don't ship stale content.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Package site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Repo root is the site root.
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
