@@ -443,770 +443,320 @@
 <!-- ════════════════════════════════════════════════════════════════ -->
 <main class="content">
 
-<header style="margin-bottom: 40px;">
+<header style="margin-bottom: 36px;">
   <h1>Publisher Integration Guide</h1>
-  <p class="lead">A drop-in JavaScript tag that runs a Prebid header-bidding auction against limelightDigital, stitches the winning bid into your GAM ad call, and plays the resulting VAST creative through video.js + Google IMA.</p>
+  <p class="lead">A one-tag drop-in: runs a Prebid auction against <code>limelightDigital</code>, stitches the winning bid into your GAM ad call, plays the result through video.js + IMA.</p>
 </header>
 
-<!-- ─── 1. Overview ─────────────────────────────────────────────── -->
+<!-- ─── Overview ─────────────────────────────────────────────────── -->
 <section id="overview">
   <h2>Overview</h2>
-  <p><strong>Bidding Player</strong> lets a publisher monetize their video inventory with real-time header bidding without writing any Prebid integration code. A single <code>&lt;script&gt;</code> tag, configured with <code>data-*</code> attributes, handles everything:</p>
-  <ul>
-    <li>Lazy-loads video.js, Google IMA SDK, and a custom Prebid build (≈ 250 KB total, parallelized).</li>
-    <li>Registers an instream video ad unit with the <code>limelightDigital</code> bidder.</li>
-    <li>Runs the auction against your configured timeout (default 1200 ms).</li>
-    <li>Stitches the full Prebid targeting key-value set (<code>hb_pb</code>, <code>hb_bidder</code>, <strong><code>hb_uuid</code></strong>, <code>hb_size</code>, <code>hb_format</code>, <code>hb_adid</code>, plus bidder-suffixed variants) into your GAM master ad tag's <code>cust_params</code>.</li>
-    <li>Hands the final VAST URL to IMA, which serves either the winning bid's cached creative (resolved via <code>hb_uuid</code> against Prebid Cache) or your house ad if no bid wins.</li>
-  </ul>
-
-  <p>The engine is hosted at versioned, immutable jsDelivr URLs. A tag pinned to <code>@v1.2.2</code> serves the exact bytes that were tested at release time and cannot silently change.</p>
-
-  <div class="grid-2">
-    <div class="card">
-      <h4>What's bundled</h4>
-      <ul style="margin-bottom: 0;">
-        <li>video.js v8 (player UI)</li>
-        <li>Google IMA SDK v3 (ad rendering)</li>
-        <li>Prebid.js v11.11.0 with the <code>limelightDigital</code> adapter, TCF v2 / USP consent modules</li>
-      </ul>
-    </div>
-    <div class="card">
-      <h4>What you provide</h4>
-      <ul style="margin-bottom: 0;">
-        <li>A Limelight publisher ID + ad unit ID</li>
-        <li>Your GAM master video ad tag</li>
-        <li>GAM line items targeting <code>hb_*</code> keys</li>
-        <li>The content video URL</li>
-      </ul>
-    </div>
-  </div>
+  <p>One <code>&lt;script&gt;</code> tag with <code>data-*</code> attributes handles: lazy-loading video.js + IMA + Prebid (≈ 250 KB), running the auction, stitching <code>hb_pb</code> / <code>hb_bidder</code> / <strong><code>hb_uuid</code></strong> / <code>hb_size</code> / <code>hb_format</code> / <code>hb_adid</code> into GAM's <code>cust_params</code>, and rendering the cached creative via IMA.</p>
+  <p>Engine hosted at versioned, immutable jsDelivr URLs. Pin to a tag (e.g. <code>@v1.2.2</code>) — the bytes cannot silently change.</p>
 </section>
 
-<!-- ─── 2. How it works ─────────────────────────────────────────── -->
+<!-- ─── How it works ─────────────────────────────────────────────── -->
 <section id="how-it-works">
   <h2>How it works</h2>
-  <p>The end-to-end auction-to-impression sequence:</p>
-
   <div class="sequence">
-    <div class="step"><div><span class="actor">Browser</span> loads the publisher page; the engine's async <code>&lt;script&gt;</code> executes.</div></div>
-    <div class="step"><div><span class="actor">Engine</span> reads its own <code>data-*</code> attributes for runtime configuration.</div></div>
-    <div class="step"><div><span class="actor">Engine</span> parallel-loads video.js, IMA SDK, and Prebid.js from CDN.</div></div>
-    <div class="step"><div><span class="actor">Engine</span> measures the mount-div's rendered size; registers an instream video ad unit with <code>limelightDigital</code>.</div></div>
-    <div class="step"><div><span class="actor">Prebid</span> <span class="arrow">→</span> <span class="actor">Limelight</span>: POST OpenRTB bid request to <code>{host}/ortbhb</code>.</div></div>
-    <div class="step"><div><span class="actor">Limelight</span> <span class="arrow">→</span> <span class="actor">Prebid</span>: bid response (or no-bid).</div></div>
-    <div class="step"><div><span class="actor">Prebid</span> caches the winning VAST at <code>prebid.adnxs.com/pbc/v1/cache</code>; receives a UUID.</div></div>
-    <div class="step"><div><span class="actor">Engine</span> calls <code>pbjs.getAdserverTargetingForAdUnitCode</code> to obtain the full <code>hb_*</code> key set.</div></div>
-    <div class="step"><div><span class="actor">Engine</span> applies its floor bias to <code>hb_pb</code>; stitches all keys into GAM's <code>cust_params</code>.</div></div>
-    <div class="step"><div><span class="actor">Engine</span> <span class="arrow">→</span> <span class="actor">IMA</span>: <code>AdsRequest.adTagUrl = &lt;stitched GAM URL&gt;</code>.</div></div>
-    <div class="step"><div><span class="actor">IMA</span> <span class="arrow">→</span> <span class="actor">GAM</span>: fetches VAST; matches your line item targeting <code>hb_pb</code>.</div></div>
-    <div class="step"><div><span class="actor">GAM</span> returns a VAST wrapper whose URL contains <code>{hb_uuid}</code> — GAM substitutes the macro with the cached bid's UUID.</div></div>
-    <div class="step"><div><span class="actor">IMA</span> <span class="arrow">→</span> <span class="actor">Prebid Cache</span>: resolves the wrapper, retrieves the actual bidder VAST.</div></div>
-    <div class="step"><div><span class="actor">IMA</span> plays the ad. <span class="actor">Engine</span> pauses content (z-index swap on ad container).</div></div>
-    <div class="step"><div>Ad completes; <span class="actor">Engine</span> swaps z-index back; content resumes.</div></div>
+    <div class="step"><div><span class="actor">Engine</span> parallel-loads video.js, IMA, Prebid; reads <code>data-*</code>; registers a video ad unit.</div></div>
+    <div class="step"><div><span class="actor">Prebid</span> <span class="arrow">→</span> <span class="actor">Limelight</span>: <code>POST {host}/ortbhb</code></div></div>
+    <div class="step"><div><span class="actor">Limelight</span> responds with a bid (or no-bid). Winning VAST is cached at Prebid Cache; engine gets a UUID.</div></div>
+    <div class="step"><div><span class="actor">Engine</span> stitches the full <code>hb_*</code> set into the GAM tag's <code>cust_params</code>, applies floor bias to <code>hb_pb</code>, refreshes <code>correlator</code>.</div></div>
+    <div class="step"><div><span class="actor">IMA</span> <span class="arrow">→</span> <span class="actor">GAM</span>: fetches VAST; line item targeting <code>hb_pb</code> wins.</div></div>
+    <div class="step"><div><span class="actor">GAM</span> returns a VAST wrapper with <code>%%PATTERN:hb_uuid%%</code> resolved.</div></div>
+    <div class="step"><div><span class="actor">IMA</span> <span class="arrow">→</span> <span class="actor">Prebid Cache</span>: resolves the wrapper; plays the bidder creative; content resumes after.</div></div>
   </div>
-
   <div class="callout tip">
-    <span class="label">Fallback path</span>
-    <p>If Prebid fails to load, the bidder times out, or no bid comes back, the engine still calls GAM with <code>hb_pb=0.00&amp;hb_bidder=none</code> in <code>cust_params</code>. GAM's house ad / passback line item fills the impression. The publisher never loses an ad opportunity to a network failure.</p>
+    <span class="label">Fallback</span>
+    <p>Prebid load failure, bidder timeout, or no-bid → engine still calls GAM with <code>hb_pb=0.00&amp;hb_bidder=none</code>. Your house line item fills the slot.</p>
   </div>
 </section>
 
-<!-- ─── 3. Prerequisites ────────────────────────────────────────── -->
+<!-- ─── Prerequisites ───────────────────────────────────────────── -->
 <section id="prerequisites">
   <h2>Prerequisites</h2>
-  <p>Before integrating, confirm you have all of the following:</p>
-
-  <table>
-    <thead>
-      <tr><th>Requirement</th><th>Where to get it</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><strong>Google Ad Manager account</strong> with video inventory enabled</td>
-        <td><a href="https://admanager.google.com/" target="_blank" rel="noopener">admanager.google.com</a></td>
-      </tr>
-      <tr>
-        <td><strong>GAM Master Ad Tag URL</strong> for the video slot (e.g. <code>https://pubads.g.doubleclick.net/gampad/ads?iu=/…&amp;sz=640x480&amp;…&amp;correlator=</code>)</td>
-        <td>GAM → Inventory → Ad units → your video unit → "Generate tags"</td>
-      </tr>
-      <tr>
-        <td><strong>Limelight Digital publisher account</strong> (publisher ID + ad unit ID)</td>
-        <td>Limelight account management</td>
-      </tr>
-      <tr>
-        <td><strong>Limelight allowlist approval</strong> for your domain(s)</td>
-        <td>Submit domain(s) via your Limelight account manager. 1–3 business days typical.</td>
-      </tr>
-      <tr>
-        <td><strong>HTTPS publisher pages</strong> (mixed content blocks IMA + bidder calls)</td>
-        <td>Your hosting</td>
-      </tr>
-      <tr>
-        <td><strong>Content video URL</strong> (.mp4 or .m3u8)</td>
-        <td>Your CDN</td>
-      </tr>
-    </tbody>
-  </table>
-
+  <ul>
+    <li><strong>Google Ad Manager</strong> account with video inventory; a <strong>GAM Master Ad Tag URL</strong> ending in <code>correlator=</code>.</li>
+    <li><strong>Limelight Digital</strong> publisher ID + ad unit ID.</li>
+    <li><strong>Domain allowlisted</strong> by Limelight (1–3 business days). Without this, every auction returns no-bid.</li>
+    <li><strong>HTTPS</strong> publisher pages; content video URL (.mp4 / .m3u8) on your CDN.</li>
+  </ul>
   <div class="callout warn">
-    <span class="label">Allowlist check</span>
-    <p>The most common cause of <span class="status-err">no bid response</span> in production is the publisher's domain not being on Limelight's allowlist. Confirm allowlist status with Limelight <em>before</em> launching, otherwise every auction will return no-bid and you'll think the integration is broken.</p>
+    <span class="label">#1 cause of zero fill</span>
+    <p>The publisher domain not being on Limelight's allowlist. Verify before launch.</p>
   </div>
 </section>
 
-<!-- ─── 4. Quick start ──────────────────────────────────────────── -->
+<!-- ─── Quick start ─────────────────────────────────────────────── -->
 <section id="quick-start">
   <h2>Quick start</h2>
-  <p>Five steps from zero to a live monetizing player.</p>
-
   <ol class="steps">
-    <li>
-      <h3>Generate your tag</h3>
-      <p>Open <a href="./">the Tag Generator</a> and fill in:</p>
-      <ul>
-        <li>Release version (use the latest tag, e.g. <code>v1.2.2</code>)</li>
-        <li>Your <strong>GAM Master Ad Tag URL</strong></li>
-        <li>Your <strong>Limelight Publisher ID</strong> and <strong>Ad Unit ID</strong></li>
-        <li>Your content video URL</li>
-      </ul>
-      <p>Click <strong>⚡ Generate Production Tag</strong> and copy the resulting <code>&lt;script&gt;</code> snippet.</p>
-    </li>
-    <li>
-      <h3>Set up GAM line items + creative</h3>
-      <p>Create one VAST wrapper creative whose URL is your Prebid Cache + <code>{hb_uuid}</code> macro, and one price-bucket line item per <code>$0.10</code> CPM step. See the <a href="#gam-setup">GAM setup</a> section for the exact configuration. (You only need to do this once per ad unit.)</p>
-    </li>
-    <li>
-      <h3>Embed the snippet</h3>
-      <p>Paste the generated <code>&lt;script&gt;</code> tag into your page at the position where the video player should render. The engine auto-creates the mount <code>&lt;div&gt;</code> next to the script.</p>
-    </li>
-    <li>
-      <h3>Smoke-test in your browser</h3>
-      <p>Open the page with <code>?debug=true</code> appended to the URL. In DevTools → Console you'll see <code>STEP 1</code>, <code>STEP 1.5</code>, then either <code>🏆 WINNER</code> or <code>⚠️ NO MARKET DEMAND</code>, then <code>STEP 6</code>. In the Network tab, filter for <code>ortbhb</code> to see the OpenRTB bid request. See <a href="#testing">Testing &amp; verification</a> for the full checklist.</p>
-    </li>
-    <li>
-      <h3>Monitor</h3>
-      <p>Once live, monitor in GAM Reports for <code>hb_bidder=limelightDigital</code> impressions, eCPM, and fill rate. If you don't see Limelight impressions after 24 hours, see <a href="#troubleshooting">Troubleshooting</a>.</p>
-    </li>
+    <li><h3>Generate the tag</h3><p>Open the <a href="./">Tag Generator</a>, fill in version, GAM tag, Limelight pub/ad-unit IDs, content URL → copy the <code>&lt;script&gt;</code>.</p></li>
+    <li><h3>Set up GAM</h3><p>Create the key-values, the VAST wrapper creative, and one line item per <code>$0.10</code> bucket (one-time setup — see <a href="#gam-setup">GAM setup</a>).</p></li>
+    <li><h3>Embed</h3><p>Paste the snippet where the player should render. The engine auto-creates a mount <code>&lt;div&gt;</code>.</p></li>
+    <li><h3>Verify</h3><p>Open with <code>?debug=true</code> — see <a href="#testing">testing checklist</a>.</p></li>
+    <li><h3>Monitor</h3><p>GAM Reports → filter by <code>hb_bidder=limelightDigital</code> for impressions / eCPM / fill.</p></li>
   </ol>
 </section>
 
-<!-- ─── 5. Embed code reference ─────────────────────────────────── -->
+<!-- ─── Embed code reference ────────────────────────────────────── -->
 <section id="embed">
   <h2>Embed code reference</h2>
-  <p>The canonical embed snippet. Every configurable knob is a <code>data-*</code> attribute on the <code>&lt;script&gt;</code> tag.</p>
-
   <pre><code><span class="tok-pun">&lt;</span><span class="tok-tag">script</span> <span class="tok-attr">src</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v1.2.2/engine/player.js"</span>
         <span class="tok-attr">id</span>=<span class="tok-str">"adtech-player-core"</span>
         <span class="tok-attr">data-pub-id</span>=<span class="tok-str">"649658371"</span>
         <span class="tok-attr">data-adunit-id</span>=<span class="tok-str">"972556929"</span>
         <span class="tok-attr">data-tag</span>=<span class="tok-str">"https://pubads.g.doubleclick.net/gampad/ads?iu=/…&amp;sz=640x480&amp;output=vast&amp;correlator="</span>
-        <span class="tok-attr">data-timeout</span>=<span class="tok-str">"1200"</span>
-        <span class="tok-attr">data-bias</span>=<span class="tok-str">"0.10"</span>
         <span class="tok-attr">data-video</span>=<span class="tok-str">"https://your-cdn.example.com/content.mp4"</span>
-        <span class="tok-attr">data-autoplay</span>=<span class="tok-str">"true"</span>
-        <span class="tok-attr">data-muted</span>=<span class="tok-str">"true"</span>
-        <span class="tok-attr">data-fluid</span>=<span class="tok-str">"true"</span>
-        <span class="tok-attr">data-loop</span>=<span class="tok-str">"false"</span>
-        <span class="tok-attr">data-preload</span>=<span class="tok-str">"metadata"</span>
-        <span class="tok-attr">data-vpaid</span>=<span class="tok-str">"insecure"</span>
-        <span class="tok-attr">data-div-id</span>=<span class="tok-str">"comparos-video-placement"</span>
-        <span class="tok-attr">data-host</span>=<span class="tok-str">"ads-jbi003.rtba.bidsxchange.com"</span>
-        <span class="tok-attr">data-cache</span>=<span class="tok-str">"https://prebid.adnxs.com/pbc/v1/cache"</span>
         <span class="tok-attr">data-prebid-url</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/aryanvani-pm/bidding-player@v1.2.2/prebid/prebid.js"</span>
+        <span class="tok-attr">data-timeout</span>=<span class="tok-str">"1200"</span>  <span class="tok-attr">data-bias</span>=<span class="tok-str">"0.10"</span>
+        <span class="tok-attr">data-autoplay</span>=<span class="tok-str">"true"</span>  <span class="tok-attr">data-muted</span>=<span class="tok-str">"true"</span>  <span class="tok-attr">data-fluid</span>=<span class="tok-str">"true"</span>
         <span class="tok-attr">async</span><span class="tok-pun">&gt;&lt;/</span><span class="tok-tag">script</span><span class="tok-pun">&gt;</span></code></pre>
 
-  <h3>Attribute reference</h3>
-
   <table>
-    <thead>
-      <tr>
-        <th class="col-attr">Attribute</th>
-        <th class="col-req">Required</th>
-        <th class="col-default">Default</th>
-        <th>Description</th>
-      </tr>
-    </thead>
+    <thead><tr><th class="col-attr">Attribute</th><th class="col-req">Req</th><th class="col-default">Default</th><th>Notes</th></tr></thead>
     <tbody>
-      <tr>
-        <td><code>src</code></td>
-        <td class="req-yes center">Yes</td>
-        <td>—</td>
-        <td>Versioned jsDelivr URL of the engine. Always pin to a tag (<code>@v1.2.2</code>), never <code>@main</code>.</td>
-      </tr>
-      <tr>
-        <td><code>id</code></td>
-        <td class="req-yes center">Yes</td>
-        <td><code>adtech-player-core</code></td>
-        <td>Must equal <code>adtech-player-core</code>. The engine uses <code>document.currentScript</code> primarily, with this ID as a fallback for legacy browsers.</td>
-      </tr>
-      <tr>
-        <td><code>async</code></td>
-        <td class="req-yes center">Yes</td>
-        <td>—</td>
-        <td>Required HTML attribute. The engine boots after the DOM is ready and won't block page rendering.</td>
-      </tr>
-      <tr>
-        <td><code>data-pub-id</code></td>
-        <td class="req-yes center">Yes</td>
-        <td>—</td>
-        <td>Your Limelight publisher ID. Provided by Limelight.</td>
-      </tr>
-      <tr>
-        <td><code>data-adunit-id</code></td>
-        <td class="req-yes center">Yes</td>
-        <td>—</td>
-        <td>Your Limelight ad unit ID (numeric). Provided by Limelight.</td>
-      </tr>
-      <tr>
-        <td><code>data-tag</code></td>
-        <td class="req-yes center">Yes</td>
-        <td>—</td>
-        <td>Your full GAM Master Ad Tag URL. Must end with <code>correlator=</code> (no value) so the engine can refresh it per request.</td>
-      </tr>
-      <tr>
-        <td><code>data-prebid-url</code></td>
-        <td class="req-yes center">Yes</td>
-        <td>—</td>
-        <td>URL of the Prebid.js build. Must include <code>limelightDigitalBidAdapter</code>. The version released here at <code>@v1.2.2/prebid/prebid.js</code> is correct.</td>
-      </tr>
-      <tr>
-        <td><code>data-host</code></td>
-        <td class="req-no center">No</td>
-        <td><code>ads-jbi003.rtba.bidsxchange.com</code></td>
-        <td>Limelight bidder endpoint host. Only change if Limelight directs you to.</td>
-      </tr>
-      <tr>
-        <td><code>data-video</code></td>
-        <td class="req-no center">No</td>
-        <td>—</td>
-        <td>Content video URL (.mp4 / .m3u8). If omitted, only the pre-roll plays and the player shows a black screen after.</td>
-      </tr>
-      <tr>
-        <td><code>data-timeout</code></td>
-        <td class="req-no center">No</td>
-        <td><code>1200</code></td>
-        <td>Prebid bidder timeout in milliseconds. Lower = lower latency, higher rate of timed-out bids. Industry default is 1500–2000.</td>
-      </tr>
-      <tr>
-        <td><code>data-bias</code></td>
-        <td class="req-no center">No</td>
-        <td><code>0.10</code></td>
-        <td>Floor bias in USD added to the winning CPM before bucketing. Used to align bid prices with your GAM line item structure.</td>
-      </tr>
-      <tr>
-        <td><code>data-autoplay</code></td>
-        <td class="req-no center">No</td>
-        <td><code>true</code></td>
-        <td>Whether the player attempts to autoplay on load. Browser autoplay policy requires <code>muted=true</code> for this to succeed without a user gesture.</td>
-      </tr>
-      <tr>
-        <td><code>data-muted</code></td>
-        <td class="req-no center">No</td>
-        <td><code>true</code></td>
-        <td>Whether the player starts muted. Required if <code>autoplay=true</code> in most browsers.</td>
-      </tr>
-      <tr>
-        <td><code>data-fluid</code></td>
-        <td class="req-no center">No</td>
-        <td><code>true</code></td>
-        <td><code>true</code> = responsive 16:9 container scaling to width. <code>false</code> = fixed 640×480 box.</td>
-      </tr>
-      <tr>
-        <td><code>data-loop</code></td>
-        <td class="req-no center">No</td>
-        <td><code>false</code></td>
-        <td>Loop the content video after it ends.</td>
-      </tr>
-      <tr>
-        <td><code>data-preload</code></td>
-        <td class="req-no center">No</td>
-        <td><code>metadata</code></td>
-        <td>HTML5 video preload hint: <code>metadata</code> (recommended), <code>auto</code>, or <code>none</code>.</td>
-      </tr>
-      <tr>
-        <td><code>data-vpaid</code></td>
-        <td class="req-no center">No</td>
-        <td><code>insecure</code></td>
-        <td>IMA VPAID handling: <code>insecure</code> (max yield, runs VPAID in same frame), <code>enabled</code> (cross-origin iframe), or <code>disabled</code> (refuses VPAID creatives).</td>
-      </tr>
-      <tr>
-        <td><code>data-div-id</code></td>
-        <td class="req-no center">No</td>
-        <td><code>comparos-video-placement</code></td>
-        <td>ID of the mount div. If no element with this ID exists at boot, the engine creates one at the script's position. Override if you want to control placement via your own CSS.</td>
-      </tr>
-      <tr>
-        <td><code>data-cache</code></td>
-        <td class="req-no center">No</td>
-        <td><code>https://prebid.adnxs.com/pbc/v1/cache</code></td>
-        <td>Prebid Cache server. Default is the free public AppNexus cache. Switch to your own Prebid Server cache for higher SLA and volume.</td>
-      </tr>
+      <tr><td><code>src</code></td><td class="req-yes center">Yes</td><td>—</td><td>Versioned jsDelivr URL. Pin to a tag — never <code>@main</code>.</td></tr>
+      <tr><td><code>id</code></td><td class="req-yes center">Yes</td><td><code>adtech-player-core</code></td><td>Must be exactly this value.</td></tr>
+      <tr><td><code>async</code></td><td class="req-yes center">Yes</td><td>—</td><td>Required HTML attr; engine boots after DOMReady.</td></tr>
+      <tr><td><code>data-pub-id</code></td><td class="req-yes center">Yes</td><td>—</td><td>Limelight publisher ID.</td></tr>
+      <tr><td><code>data-adunit-id</code></td><td class="req-yes center">Yes</td><td>—</td><td>Limelight ad unit ID (numeric).</td></tr>
+      <tr><td><code>data-tag</code></td><td class="req-yes center">Yes</td><td>—</td><td>GAM master ad tag URL; must end with <code>correlator=</code>.</td></tr>
+      <tr><td><code>data-prebid-url</code></td><td class="req-yes center">Yes</td><td>—</td><td>Prebid.js build URL; must include <code>limelightDigitalBidAdapter</code>.</td></tr>
+      <tr><td><code>data-video</code></td><td class="req-no center">No</td><td>—</td><td>Content video (.mp4 / .m3u8).</td></tr>
+      <tr><td><code>data-host</code></td><td class="req-no center">No</td><td><code>ads-jbi003.rtba.bidsxchange.com</code></td><td>Limelight bidder endpoint.</td></tr>
+      <tr><td><code>data-timeout</code></td><td class="req-no center">No</td><td><code>1200</code></td><td>Prebid bidder timeout (ms). Industry default 1500–2000.</td></tr>
+      <tr><td><code>data-bias</code></td><td class="req-no center">No</td><td><code>0.10</code></td><td>USD added to winning CPM before bucketing.</td></tr>
+      <tr><td><code>data-autoplay</code> / <code>data-muted</code></td><td class="req-no center">No</td><td><code>true</code> / <code>true</code></td><td>Browser policy: autoplay requires muted.</td></tr>
+      <tr><td><code>data-fluid</code></td><td class="req-no center">No</td><td><code>true</code></td><td><code>true</code> = responsive 16:9; <code>false</code> = fixed 640×480.</td></tr>
+      <tr><td><code>data-loop</code></td><td class="req-no center">No</td><td><code>false</code></td><td>Loop content after end.</td></tr>
+      <tr><td><code>data-preload</code></td><td class="req-no center">No</td><td><code>metadata</code></td><td><code>metadata</code> / <code>auto</code> / <code>none</code>.</td></tr>
+      <tr><td><code>data-vpaid</code></td><td class="req-no center">No</td><td><code>insecure</code></td><td><code>insecure</code> / <code>enabled</code> / <code>disabled</code>.</td></tr>
+      <tr><td><code>data-div-id</code></td><td class="req-no center">No</td><td><code>comparos-video-placement</code></td><td>Mount div ID. Auto-created if missing.</td></tr>
+      <tr><td><code>data-cache</code></td><td class="req-no center">No</td><td><code>prebid.adnxs.com/pbc/v1/cache</code></td><td>Prebid Cache server.</td></tr>
     </tbody>
   </table>
-
   <div class="callout warn">
-    <span class="label">Don't change versions piecemeal</span>
-    <p>The <code>src</code> and <code>data-prebid-url</code> attributes must always point at the <em>same</em> version tag. The Tag Generator enforces this; if you hand-edit your snippet, keep them in sync.</p>
+    <span class="label">Keep <code>src</code> and <code>data-prebid-url</code> on the same version</span>
+    <p>The Tag Generator enforces this. If hand-editing, keep them synced.</p>
   </div>
 </section>
 
-<!-- ─── 6. GAM setup ────────────────────────────────────────────── -->
+<!-- ─── GAM setup ───────────────────────────────────────────────── -->
 <section id="gam-setup">
   <h2>GAM setup</h2>
-  <p>This is the side that handles the actual ad serving. If you've done Prebid + GAM integration before, this will be familiar. If not, it requires careful one-time configuration of <strong>custom key-values</strong>, a <strong>VAST wrapper creative</strong>, and <strong>price-bucket line items</strong>.</p>
+  <p>One-time setup: <strong>key-values</strong>, a <strong>VAST wrapper creative</strong>, and <strong>price-bucket line items</strong>.</p>
 
-  <h3 id="gam-keyvalues">Step 1: Create custom key-values</h3>
-  <p>In GAM go to <strong>Inventory → Key-values → New key-value</strong>. Create the following keys with <strong>Value Type: Predefined</strong> (or Free-form if you'd rather not enumerate every bucket):</p>
-
+  <h3>1. Custom key-values</h3>
+  <p>GAM → <strong>Inventory → Key-values → New key-value</strong>:</p>
   <table>
-    <thead>
-      <tr><th class="col-attr">Key name</th><th>Value type</th><th>Suggested values</th></tr>
-    </thead>
+    <thead><tr><th class="col-attr">Key</th><th>Type</th><th>Values</th></tr></thead>
     <tbody>
-      <tr><td><code>hb_pb</code></td><td>Predefined</td><td><code>0.00</code>, <code>0.10</code>, <code>0.20</code>, …, <code>20.00</code> (one value per $0.10 step)</td></tr>
+      <tr><td><code>hb_pb</code></td><td>Predefined</td><td><code>0.00</code>, <code>0.10</code>, …, <code>20.00</code> (per $0.10 step)</td></tr>
       <tr><td><code>hb_bidder</code></td><td>Predefined</td><td><code>limelightDigital</code>, <code>none</code></td></tr>
-      <tr><td><code>hb_uuid</code></td><td>Free-form</td><td>(left free-form — UUIDs are dynamic)</td></tr>
-      <tr><td><code>hb_size</code></td><td>Predefined</td><td><code>640x360</code>, <code>1280x720</code>, <code>1920x1080</code>, etc.</td></tr>
+      <tr><td><code>hb_uuid</code></td><td>Free-form</td><td>(dynamic UUIDs)</td></tr>
+      <tr><td><code>hb_size</code></td><td>Predefined</td><td><code>640x360</code>, <code>1280x720</code>, <code>1920x1080</code></td></tr>
       <tr><td><code>hb_format</code></td><td>Predefined</td><td><code>video</code></td></tr>
       <tr><td><code>hb_adid</code></td><td>Free-form</td><td>(dynamic)</td></tr>
       <tr><td><code>hb_source</code></td><td>Predefined</td><td><code>client</code>, <code>s2s</code></td></tr>
     </tbody>
   </table>
 
-  <div class="callout">
-    <span class="label">Why bidder-suffixed keys too?</span>
-    <p>Prebid also emits <code>hb_pb_limelightDigital</code>, <code>hb_uuid_limelightDigital</code>, etc. Targeting these is optional — they let you build "first-look" or per-bidder private auction line items. You can skip them for a simple setup.</p>
-  </div>
-
-  <h3 id="gam-creative">Step 2: Create the VAST wrapper creative</h3>
-  <p>The creative is a single <strong>VAST URL</strong> with a macro that pulls the cache UUID at serve time:</p>
-
+  <h3>2. VAST wrapper creative</h3>
+  <p>GAM → <strong>Delivery → Creatives → New → Video → VAST 3.0 ad tag</strong>. Paste:</p>
   <pre><code>https://prebid.adnxs.com/pbc/v1/cache?uuid=%%PATTERN:hb_uuid%%</code></pre>
+  <p>Duration: <strong>0:00</strong> (wrapper resolves real duration). Substitute your own cache URL if not using the AppNexus public cache.</p>
 
-  <p>Substitute the URL of your own Prebid Cache server if you operate one. The <code>%%PATTERN:hb_uuid%%</code> macro is GAM's syntax for "look up the <code>hb_uuid</code> key-value from the ad request and inject its value here."</p>
-
-  <p>To create:</p>
-  <ol>
-    <li>GAM → <strong>Delivery → Creatives → New creative</strong></li>
-    <li>Select your video ad unit's advertiser</li>
-    <li>Type: <strong>Video</strong> → <strong>VAST 3.0 ad tag</strong></li>
-    <li>Paste the URL above into the <strong>VAST tag URL</strong> field</li>
-    <li>Set duration to <strong>0:00</strong> (the wrapper resolves the real duration)</li>
-    <li>Save</li>
-  </ol>
-
-  <h3 id="gam-line-items">Step 3: Create price-bucket line items</h3>
-  <p>You need one line item per $0.10 price bucket from <code>$0.10</code> up to your maximum expected CPM (e.g. <code>$20.00</code> = 200 line items). The structure is identical for each; only the CPM and target value change.</p>
-
-  <h4>Per line item</h4>
+  <h3>3. Price-bucket line items</h3>
+  <p>One line item per $0.10 bucket (200 total for $0–$20). Use Prebid's <a href="https://docs.prebid.org/tools/line-item-generator.html" target="_blank" rel="noopener">Line Item Generator</a> to bulk-create via CSV.</p>
   <table>
     <thead><tr><th>Field</th><th>Value</th></tr></thead>
     <tbody>
-      <tr><td>Name</td><td><code>Prebid HB $2.50</code> (or your naming convention)</td></tr>
-      <tr><td>Inventory size</td><td>Video — match your ad unit's size(s)</td></tr>
+      <tr><td>Name</td><td><code>Prebid HB $2.50</code></td></tr>
       <tr><td>Type</td><td>Price Priority</td></tr>
-      <tr><td>CPM rate</td><td>Match the bucket exactly (e.g. <code>$2.50</code>)</td></tr>
-      <tr><td>Goal</td><td>None (unlimited) or your impression cap</td></tr>
-      <tr><td>Targeting → Inventory</td><td>Your video ad unit</td></tr>
-      <tr><td>Targeting → Key-values</td><td><code>hb_pb</code> is one of <code>2.50</code></td></tr>
-      <tr><td>Creative</td><td>The VAST wrapper from Step 2</td></tr>
+      <tr><td>CPM</td><td>Exact bucket (e.g. $2.50)</td></tr>
+      <tr><td>Targeting → key-values</td><td><code>hb_pb</code> is one of <code>2.50</code></td></tr>
+      <tr><td>Creative</td><td>The VAST wrapper from step 2</td></tr>
     </tbody>
   </table>
-
-  <p>Use Prebid's official <a href="https://docs.prebid.org/tools/line-item-generator.html" target="_blank" rel="noopener">Line Item Generator tool</a> to bulk-create all 200 line items via CSV upload — manual creation is impractical at this volume.</p>
-
   <div class="callout warn">
-    <span class="label">Exact-match values matter</span>
-    <p>Prebid's <code>hb_pb</code> values are always strings like <code>"2.50"</code> (two decimal places, no currency symbol). Your GAM line item targeting must match that exact string. A line item targeting <code>"2.5"</code> will not match <code>"2.50"</code> and will never serve.</p>
+    <span class="label">Exact string match</span>
+    <p>Prebid emits <code>"2.50"</code> (two decimals). A line item targeting <code>"2.5"</code> will never serve.</p>
   </div>
 
-  <h3 id="gam-fallback">Step 4: Set up house ad fallback</h3>
-  <p>When no bid wins, the engine sends <code>hb_pb=0.00&amp;hb_bidder=none</code>. Create one of:</p>
-  <ul>
-    <li>A <strong>house line item</strong> targeting <code>hb_pb=0.00</code> with a low priority and your fallback creative (an in-house promo, a sponsor card, or your own VAST passback).</li>
-    <li>A <strong>remnant line item</strong> targeting the same key-value pointing at AdSense / a tag-based ad network — GAM will fall through to fill the slot.</li>
-    <li>Leave it blank if you're OK with the slot serving nothing on no-bid (rare; most pubs want to fill 100%).</li>
-  </ul>
-
-  <h3 id="gam-orders">Step 5: Wrap line items in an Order</h3>
-  <p>GAM requires every line item to live inside an Order. Create a single Order called e.g. <strong>"Prebid Header Bidding"</strong> and assign all 200 price-bucket line items + the fallback to it. This lets you pause / activate the entire integration with one click.</p>
+  <h3>4. House fallback + order</h3>
+  <p>Add a low-priority line item targeting <code>hb_pb=0.00</code> with your house creative or AdSense passback. Wrap all line items in one Order (e.g. "Prebid Header Bidding") for one-click pause/activate.</p>
 </section>
 
-<!-- ─── 7. Limelight onboarding ─────────────────────────────────── -->
+<!-- ─── Limelight onboarding ────────────────────────────────────── -->
 <section id="limelight">
   <h2>Limelight onboarding</h2>
-  <p>The bidder side is owned by Limelight Digital. Steps you (or your account manager at the platform that integrated this player) follow:</p>
-
   <ol>
-    <li><strong>Apply for a Limelight account.</strong> If you don't have one, contact your platform's CSM to request publisher onboarding.</li>
-    <li><strong>Receive your credentials.</strong> Limelight provides:
-      <ul>
-        <li><code>publisherId</code> — numeric, e.g. <code>649658371</code> → goes into <code>data-pub-id</code></li>
-        <li><code>adUnitId</code> — numeric, e.g. <code>972556929</code> → goes into <code>data-adunit-id</code></li>
-        <li><code>host</code> — bidder endpoint, e.g. <code>ads-jbi003.rtba.bidsxchange.com</code> → goes into <code>data-host</code></li>
-      </ul>
-    </li>
-    <li><strong>Submit your domain(s) for allowlist.</strong> Limelight only bids on requests from approved publisher domains. Without this step, every auction returns no-bid in production.</li>
-    <li><strong>Wait for allowlist approval.</strong> Typically 1–3 business days.</li>
-    <li><strong>Verify bidding is live</strong> using the steps in <a href="#testing">Testing &amp; verification</a>.</li>
+    <li>Apply for a Limelight account via your CSM.</li>
+    <li>Receive credentials: <code>publisherId</code> → <code>data-pub-id</code>; <code>adUnitId</code> → <code>data-adunit-id</code>; <code>host</code> → <code>data-host</code>.</li>
+    <li>Submit publisher domain(s) for allowlist approval (1–3 business days).</li>
+    <li>Verify bidding using the <a href="#testing">testing checklist</a>.</li>
   </ol>
-
   <div class="callout tip">
-    <span class="label">Tip</span>
-    <p>You can test the <em>integration mechanics</em> (script loads, auction fires, GAM call goes out, ad plays from GAM's test creative) before your domain is allowlisted. The bidder side will just return no-bid until allowlisting completes. That's why the engine has a fallback path.</p>
+    <span class="label">Pre-allowlist</span>
+    <p>You can test integration mechanics before allowlisting completes — the bidder returns no-bid and GAM's fallback fills.</p>
   </div>
 </section>
 
-<!-- ─── 8. Consent management ───────────────────────────────────── -->
+<!-- ─── Consent management ──────────────────────────────────────── -->
 <section id="consent">
   <h2>Consent management</h2>
-  <p>The engine ships consent-aware defaults that are appropriate for <strong>non-EU traffic</strong> but require an override for EU / California / other-state-privacy traffic. Below is what to do for each scenario.</p>
+  <p>Defaults are tuned for non-EU traffic. EU and US-state-privacy publishers override.</p>
 
-  <h3>What the engine does by default</h3>
   <table>
-    <thead><tr><th>Framework</th><th>Default behavior</th></tr></thead>
+    <thead><tr><th>Framework</th><th>Default</th></tr></thead>
     <tbody>
-      <tr><td>GDPR (TCF v2)</td><td>Declares <code>gdprApplies: false</code> via static config. The bundled <code>tcfControl</code> module skips enforcement. Suitable for US/India/non-EU traffic.</td></tr>
-      <tr><td>USP (CCPA)</td><td>Auto-detects <code>window.__uspapi</code> with a 100 ms timeout. If no CMP responds, proceeds without USP signal.</td></tr>
-      <tr><td>GPP (US state privacy)</td><td><strong>Not activated.</strong> The bundled <code>consentManagementGpp</code> module cancels the auction outright when no GPP CMP is found, so it is intentionally left off.</td></tr>
+      <tr><td>GDPR (TCF v2)</td><td>Static <code>gdprApplies: false</code> — non-EU-safe.</td></tr>
+      <tr><td>USP (CCPA)</td><td>Auto-detects <code>__uspapi</code> (100 ms timeout).</td></tr>
+      <tr><td>GPP</td><td><strong>Off</strong> — module cancels auction without a GPP CMP.</td></tr>
     </tbody>
   </table>
 
-  <h3>EU publishers — enable real TCF v2 consent</h3>
-  <p>If you serve EU traffic, you MUST place a registered TCF v2 CMP on your page (OneTrust, Sourcepoint, Quantcast, Didomi, etc.) and override the engine's static GDPR config. Place this snippet <em>before</em> the engine's <code>&lt;script&gt;</code> tag in your page:</p>
-
+  <h3>EU — enable TCF v2</h3>
+  <p>Place a registered CMP (OneTrust, Sourcepoint, Quantcast, Didomi…). Add this script <em>before</em> the engine tag:</p>
   <pre><code><span class="tok-pun">&lt;</span><span class="tok-tag">script</span><span class="tok-pun">&gt;</span>
 <span class="tok-key">window</span>.pbjs = <span class="tok-key">window</span>.pbjs || { <span class="tok-key">que</span>: [] };
 pbjs.que.push(<span class="tok-key">function</span>() {
   pbjs.setConfig({
     consentManagement: {
-      gdpr: {
-        cmpApi: <span class="tok-str">'iab'</span>,        <span class="tok-com">// detect window.__tcfapi</span>
-        timeout: <span class="tok-num">8000</span>,         <span class="tok-com">// wait up to 8s for CMP response</span>
-        defaultGdprScope: <span class="tok-key">true</span>  <span class="tok-com">// assume GDPR applies unless CMP says otherwise</span>
-      }
+      gdpr: { cmpApi: <span class="tok-str">'iab'</span>, timeout: <span class="tok-num">8000</span>, defaultGdprScope: <span class="tok-key">true</span> }
     }
   });
 });
 <span class="tok-pun">&lt;/</span><span class="tok-tag">script</span><span class="tok-pun">&gt;</span></code></pre>
 
-  <p>This must run before <code>pbjs</code> finalizes config in the engine's auction. Putting it just before the engine <code>&lt;script&gt;</code> tag is reliable.</p>
-
-  <h3>California / Connecticut / Virginia (USP)</h3>
-  <p>The engine auto-detects USP. Just ensure your CMP exposes <code>window.__uspapi</code>. To extend the timeout (the default 100 ms is fast and may miss slow CMPs):</p>
-
-  <pre><code>pbjs.setConfig({
-  consentManagement: {
-    usp: { cmpApi: <span class="tok-str">'iab'</span>, timeout: <span class="tok-num">3000</span> }
-  }
-});</code></pre>
-
-  <h3>Multi-state US (GPP)</h3>
-  <p>If your CMP supports GPP, opt in explicitly:</p>
-
-  <pre><code>pbjs.setConfig({
-  consentManagement: {
-    gpp: { cmpApi: <span class="tok-str">'iab'</span>, timeout: <span class="tok-num">3000</span> }
-  }
-});</code></pre>
+  <h3>US state privacy — enable GPP</h3>
+  <pre><code>pbjs.setConfig({ consentManagement: { gpp: { cmpApi: <span class="tok-str">'iab'</span>, timeout: <span class="tok-num">3000</span> } } });</code></pre>
 
   <div class="callout danger">
-    <span class="label">Without a CMP in regulated jurisdictions</span>
-    <p>Operating in the EU, California, or other regulated states without a registered CMP is a regulatory risk independent of this player. The engine's permissive defaults are a publisher-experience choice — they do <strong>not</strong> constitute legal compliance. Consult counsel.</p>
+    <span class="label">Compliance ≠ engine config</span>
+    <p>The engine ships the technical hooks. Legal compliance depends on your CMP, privacy policy, and DPAs. Consult counsel.</p>
   </div>
 </section>
 
-<!-- ─── 9. Testing & verification ───────────────────────────────── -->
+<!-- ─── Testing & verification ──────────────────────────────────── -->
 <section id="testing">
   <h2>Testing &amp; verification</h2>
-  <p>Before declaring the integration live, verify each of the following.</p>
+  <p>Append <code>?debug=true</code> to your URL.</p>
 
-  <h3>Enable debug mode</h3>
-  <p>Append <code>?debug=true</code> to your page URL. The engine logs the auction flow in the browser console with color-coded steps.</p>
-
-  <h3>Console checklist</h3>
-  <p>Open DevTools → Console. Filter for <code>STEP</code>. You should see:</p>
+  <h3>Console (filter for <code>STEP</code>)</h3>
   <ul>
-    <li><span class="pill accent">STEP 0.5</span> Mount point auto-created (only if you didn't pre-place the div)</li>
-    <li><span class="pill accent">STEP 1</span> Auction Initialized via CDN. Target: limelightDigital | Timeout: 1200ms</li>
-    <li><span class="pill accent">STEP 1.5</span> Requesting video ad payload from Limelight routing networks. Player size: XXXxYYY</li>
-    <li>Either <span class="pill ok">🏆 WINNER</span> &lt;bidder&gt; | Raw CPM: $X.XX (real bid) or <span class="pill warn">⚠️ NO MARKET DEMAND</span> (no bid)</li>
-    <li><span class="pill accent">STEP 3</span> Math Engine processing. Target CPM calibrated… (only on winning bid)</li>
-    <li><span class="pill accent">STEP 6</span> Dispatching VAST Request via Cloud Engine layer.</li>
+    <li><span class="pill accent">STEP 1</span> Auction Initialized · Target: limelightDigital · Timeout: 1200ms</li>
+    <li><span class="pill accent">STEP 1.5</span> Requesting from Limelight. Player size: WxH</li>
+    <li><span class="pill ok">WINNER</span> &lt;bidder&gt; · Raw CPM: $X.XX, or <span class="pill warn">NO MARKET DEMAND</span></li>
+    <li><span class="pill accent">STEP 6</span> Dispatching VAST Request</li>
   </ul>
 
-  <h3>Network checklist</h3>
-  <p>Open DevTools → Network. Verify each of these requests fires:</p>
-
+  <h3>Network</h3>
   <table>
-    <thead><tr><th>Request</th><th>Expected status</th><th>What to confirm</th></tr></thead>
+    <thead><tr><th>Request</th><th>Status</th></tr></thead>
     <tbody>
-      <tr><td><code>cdn.jsdelivr.net/.../engine/player.js</code></td><td><span class="status-ok">200</span></td><td>Engine loaded</td></tr>
-      <tr><td><code>cdn.jsdelivr.net/.../prebid/prebid.js</code></td><td><span class="status-ok">200</span></td><td>Prebid bundle loaded</td></tr>
-      <tr><td><code>imasdk.googleapis.com/.../ima3.js</code></td><td><span class="status-ok">200</span></td><td>IMA SDK loaded</td></tr>
-      <tr><td><code>POST {host}/ortbhb</code> (e.g. <code>ads-jbi003.rtba.bidsxchange.com</code>)</td><td><span class="status-ok">200</span></td><td>OpenRTB bid request fired. Inspect Payload tab — should contain site, imp, video, ortb2 etc.</td></tr>
-      <tr><td><code>prebid.adnxs.com/pbc/v1/cache</code></td><td><span class="status-ok">200</span></td><td>Caches the winning VAST (only on a real winning bid)</td></tr>
-      <tr><td><code>GET pubads.g.doubleclick.net/gampad/ads?...</code></td><td><span class="status-ok">200</span></td><td>GAM ad call. Decode the <code>cust_params</code> query parameter — must contain <code>hb_pb</code>, <code>hb_bidder</code>, and (on a winning bid) <code>hb_uuid</code>.</td></tr>
+      <tr><td><code>cdn.jsdelivr.net/.../player.js</code> + <code>.../prebid.js</code></td><td class="center"><span class="status-ok">200</span></td></tr>
+      <tr><td><code>imasdk.googleapis.com/.../ima3.js</code></td><td class="center"><span class="status-ok">200</span></td></tr>
+      <tr><td><strong><code>POST {host}/ortbhb</code></strong> — inspect Payload</td><td class="center"><span class="status-ok">200</span></td></tr>
+      <tr><td><code>prebid.adnxs.com/pbc/v1/cache</code> (winning bid only)</td><td class="center"><span class="status-ok">200</span></td></tr>
+      <tr><td><strong><code>GET pubads.g.doubleclick.net/gampad/ads</code></strong> — decode <code>cust_params</code>, must contain <code>hb_pb</code>, <code>hb_bidder</code>, <code>hb_uuid</code></td><td class="center"><span class="status-ok">200</span></td></tr>
     </tbody>
   </table>
 
-  <h3>Visual checklist</h3>
+  <h3>Visual</h3>
   <ul>
-    <li>The video player renders at the expected size and position on the page.</li>
-    <li>A pre-roll ad plays before content (it will be Google's "Preroll 10 Seconds" test ad against the sample tag, or your bidder's real creative on a Limelight-allowlisted domain).</li>
-    <li>Content video plays after the ad completes.</li>
-    <li>Standard Video.js controls (play/pause, mute, volume, progress, fullscreen) appear and respond.</li>
+    <li>Pre-roll plays before content; Video.js controls (play / pause / mute / volume / progress / fullscreen) respond.</li>
   </ul>
-
-  <div class="callout tip">
-    <span class="label">Decoding the GAM URL</span>
-    <p>To inspect <code>cust_params</code> easily, copy the full GAM <code>gampad/ads</code> request URL, paste it into a URL decoder (or run <code>decodeURIComponent(decodeURIComponent(url))</code> in your console twice), and look for the <code>cust_params</code> value. It should be a <code>&amp;</code>-separated list of key=value pairs including <code>hb_pb</code>, <code>hb_bidder</code>, and on winning bids <code>hb_uuid</code>.</p>
-  </div>
 </section>
 
-<!-- ─── 10. Troubleshooting ─────────────────────────────────────── -->
+<!-- ─── Troubleshooting ─────────────────────────────────────────── -->
 <section id="troubleshooting">
   <h2>Troubleshooting</h2>
 
-  <details>
-    <summary>No <code>POST /ortbhb</code> request in the Network tab</summary>
-    <div>
-      <p>Means Prebid never fired the bidder. Possible causes:</p>
-      <ul>
-        <li><strong>Adapter not in Prebid build.</strong> Inspect <code>pbjs.installedModules</code> in the console — <code>limelightDigitalBidAdapter</code> must be present. If not, your <code>data-prebid-url</code> is pointing at a build without it.</li>
-        <li><strong>Consent module blocking the auction.</strong> Look for <code>"Canceling auction as per consentManagement config"</code> in console. See <a href="#consent">Consent management</a>.</li>
-        <li><strong>Adapter rejected the ad unit.</strong> Look for <code>auctionDebug</code> messages with type <code>WARNING</code>. Common: <em>"video ad unit containing bidders that don't support video"</em> — your Prebid build is missing the adapter or its video support.</li>
-      </ul>
-    </div>
-  </details>
+  <details><summary>No <code>POST /ortbhb</code> in Network</summary><div>
+    <ul>
+      <li><code>pbjs.installedModules</code> must include <code>limelightDigitalBidAdapter</code>. If missing, fix <code>data-prebid-url</code>.</li>
+      <li>Look for <em>"Canceling auction as per consentManagement config"</em> in console (see <a href="#consent">Consent</a>).</li>
+    </ul>
+  </div></details>
 
-  <details>
-    <summary><code>POST /ortbhb</code> returns 200 but bid response is empty</summary>
-    <div>
-      <p>Bidder responded but didn't bid. Almost always means:</p>
-      <ul>
-        <li><strong>Domain not allowlisted by Limelight.</strong> Verify with Limelight that your origin (e.g. <code>https://www.example.com</code>) is on the approved list. New allowlist entries can take 1–3 business days.</li>
-        <li><strong>Floor below Limelight's threshold.</strong> If you've set a floor, lower it.</li>
-        <li><strong>Ad slot size not supported.</strong> The engine sends the actual rendered mount size. If the player is unusually small (e.g. &lt; 300×200), bidders may not bid. Check <code>STEP 1.5</code> log for the size.</li>
-      </ul>
-    </div>
-  </details>
+  <details><summary><code>200</code> response but empty <code>seatbid</code></summary><div>
+    <ul>
+      <li><strong>Domain not allowlisted</strong> by Limelight — the most common cause.</li>
+      <li>Player rendered &lt; 300×200 — bidders may reject small inventory.</li>
+    </ul>
+  </div></details>
 
-  <details>
-    <summary>Bid wins but no ad plays / wrong ad plays / GAM falls through to house</summary>
-    <div>
-      <p>The auction worked but the GAM side failed to resolve the bidder's creative. Check:</p>
-      <ul>
-        <li><strong>The GAM URL <code>cust_params</code> must contain <code>hb_uuid</code>.</strong> Decode the URL and confirm. If missing, you're on an old engine version (&lt; v1.2.0) — upgrade.</li>
-        <li><strong>Your line item targeting must match <code>hb_pb</code> exactly.</strong> Prebid emits <code>"2.50"</code>, your line item must target <code>"2.50"</code>, not <code>"2.5"</code>.</li>
-        <li><strong>Your VAST wrapper creative must use <code>%%PATTERN:hb_uuid%%</code>.</strong> Confirm in GAM → Delivery → Creatives → your wrapper. The macro must be present and spelled correctly.</li>
-        <li><strong>Your Prebid Cache must be reachable.</strong> If you use a private cache, confirm it accepts requests from GAM's origin and has the cached entry.</li>
-      </ul>
-    </div>
-  </details>
+  <details><summary>Bid wins but no ad plays / GAM falls through</summary><div>
+    <ul>
+      <li><code>cust_params</code> must contain <code>hb_uuid</code>. Missing → engine &lt; v1.2.0, upgrade.</li>
+      <li>Line item targeting must match Prebid's string format exactly: <code>"2.50"</code> not <code>"2.5"</code>.</li>
+      <li>VAST wrapper must use <code>%%PATTERN:hb_uuid%%</code>.</li>
+    </ul>
+  </div></details>
 
-  <details>
-    <summary><code>Request timeout after 1200ms</code> in console</summary>
-    <div>
-      <p>Bidder didn't respond in time. Options:</p>
-      <ul>
-        <li>Increase <code>data-timeout</code> to <code>1500</code> or <code>2000</code> ms. Industry standard for video is 1500–3000 ms.</li>
-        <li>Check Limelight's regional endpoint — if your traffic is far from <code>ads-jbi003</code>, ask Limelight if they have a closer host.</li>
-        <li>Inspect <code>timeToRespond</code> in <code>pbjs.getEvents()</code> → <code>auctionEnd.args.bidderRequests</code>. If consistently just over 1200, your network path is the bottleneck.</li>
-      </ul>
-    </div>
-  </details>
+  <details><summary><code>Request timeout after 1200ms</code></summary><div>
+    <p>Increase <code>data-timeout</code> to <code>1500</code>–<code>2000</code> ms, or ask Limelight for a regional endpoint.</p>
+  </div></details>
 
-  <details>
-    <summary>Ad plays but content doesn't resume / player stays paused after ad</summary>
-    <div>
-      <p>IMA's <code>CONTENT_RESUME_REQUESTED</code> event didn't fire or was caught by a publisher's CSS rule. Check:</p>
-      <ul>
-        <li>The mount div has no parent rule forcing <code>pointer-events: none</code> or <code>opacity: 0</code> on the ad container.</li>
-        <li>The browser didn't suspend the page during the ad (tab backgrounded). Re-test in a foreground tab.</li>
-      </ul>
-    </div>
-  </details>
+  <details><summary>Autoplay doesn't start</summary><div>
+    <p>Confirm <code>data-autoplay="true"</code> AND <code>data-muted="true"</code>. HTTPS required. iOS Safari has additional restrictions with no workaround.</p>
+  </div></details>
 
-  <details>
-    <summary>Player doesn't autoplay</summary>
-    <div>
-      <p>Browser autoplay policies require <code>muted=true</code> for unattended autoplay. Confirm:</p>
-      <ul>
-        <li><code>data-autoplay="true"</code> AND <code>data-muted="true"</code> are both set.</li>
-        <li>The page is served over HTTPS (some browsers refuse autoplay on http://).</li>
-        <li>The user hasn't disabled autoplay globally in their browser settings.</li>
-      </ul>
-      <p>On iOS Safari, additional restrictions apply (no autoplay until first user gesture in some contexts) — there is no workaround at the engine level.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>Console error: <code>currentScript missing anchor validation</code></summary>
-    <div>
-      <p>The engine couldn't locate its own <code>&lt;script&gt;</code> tag. The fix is to ensure the snippet has <code>id="adtech-player-core"</code> attribute. If you regenerated the tag and stripped the ID, regenerate.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>Mixed content warnings in the console</summary>
-    <div>
-      <p>Your page is served over HTTPS but one of these URLs is <code>http://</code>:</p>
-      <ul>
-        <li><code>data-video</code> — the content video URL</li>
-        <li><code>data-tag</code> — the GAM ad tag URL</li>
-        <li>A creative returned by Limelight or GAM that has an http resource inside</li>
-      </ul>
-      <p>The browser will block these. Force all URLs to HTTPS.</p>
-    </div>
-  </details>
+  <details><summary>Mixed-content warnings</summary><div>
+    <p>HTTPS page + <code>http://</code> content URL / GAM tag / creative. Force everything to HTTPS.</p>
+  </div></details>
 </section>
 
-<!-- ─── 11. Browser support ─────────────────────────────────────── -->
+<!-- ─── Browser support ─────────────────────────────────────────── -->
 <section id="browsers">
   <h2>Browser support</h2>
-
   <table>
     <thead><tr><th>Browser</th><th>Status</th><th>Notes</th></tr></thead>
     <tbody>
-      <tr><td>Chrome (desktop)</td><td><span class="status-ok">Tested</span></td><td>Reference platform. All features verified.</td></tr>
-      <tr><td>Edge (desktop, Chromium)</td><td><span class="status-ok">Tested</span></td><td>Equivalent to Chrome.</td></tr>
-      <tr><td>Firefox (desktop)</td><td><span class="status-warn">Should work</span></td><td>Prebid + IMA + video.js all support Firefox. Test in your environment before mass rollout.</td></tr>
-      <tr><td>Safari (desktop)</td><td><span class="status-warn">Should work</span></td><td>Watch for ITP / 3rd-party cookie restrictions that may affect bidder ID sync.</td></tr>
-      <tr><td>iOS Safari (mobile)</td><td><span class="status-warn">Test required</span></td><td>Autoplay restrictions stricter. <code>playsinline</code> attribute is set by the engine. VPAID creatives may fail; prefer SIMID.</td></tr>
-      <tr><td>Android Chrome (mobile)</td><td><span class="status-warn">Test required</span></td><td>Generally well-supported. Some Android in-app webviews are restricted.</td></tr>
-      <tr><td>IE11 and earlier</td><td><span class="status-err">Not supported</span></td><td>Engine uses ES2017 features. No IE support.</td></tr>
+      <tr><td>Chrome / Edge (desktop)</td><td><span class="status-ok">Tested</span></td><td>Reference platform.</td></tr>
+      <tr><td>Firefox / Safari (desktop)</td><td><span class="status-warn">Should work</span></td><td>Test before mass rollout. Safari: watch for ITP.</td></tr>
+      <tr><td>iOS Safari</td><td><span class="status-warn">Test required</span></td><td>Strict autoplay; <code>playsinline</code> set by engine. Prefer SIMID over VPAID.</td></tr>
+      <tr><td>Android Chrome</td><td><span class="status-warn">Test required</span></td><td>In-app webviews restricted.</td></tr>
+      <tr><td>IE11 / earlier</td><td><span class="status-err">Unsupported</span></td><td>Engine uses ES2017+.</td></tr>
     </tbody>
   </table>
-
-  <h3>Minimum browser requirements</h3>
-  <ul>
-    <li>ES2017+ (async/await, modern <code>URL</code> API)</li>
-    <li>HTMLMediaElement (HTML5 video)</li>
-    <li><code>fetch</code> + <code>Promise</code></li>
-    <li>HTTPS context (no <code>http://</code> embed)</li>
-  </ul>
+  <p>Requires: ES2017+, HTMLMediaElement, <code>fetch</code>, HTTPS context.</p>
 </section>
 
-<!-- ─── 12. FAQ ─────────────────────────────────────────────────── -->
+<!-- ─── FAQ ─────────────────────────────────────────────────────── -->
 <section id="faq">
   <h2>FAQ</h2>
-
-  <details>
-    <summary>Can I run multiple players on the same page?</summary>
-    <div>
-      <p>Not in the current engine. The integration assumes a single video ad unit per page. Multi-player support is on the v2 roadmap. Workaround for now: load the engine in an iframe per player.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>Can I add other Prebid bidders besides limelightDigital?</summary>
-    <div>
-      <p>You need a custom Prebid build that includes the additional adapters. Either ask your account manager to provide a build that includes the bidders you want, or build your own from <a href="https://github.com/prebid/Prebid.js" target="_blank" rel="noopener">github.com/prebid/Prebid.js</a> with the relevant <code>--modules</code> flags.</p>
-      <p>The engine currently only registers one bidder (<code>limelightDigital</code>) per auction. Adding more bidders requires an engine code change — talk to your account manager.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>What happens if Prebid fails to load?</summary>
-    <div>
-      <p>The engine catches the failure and calls GAM directly with <code>hb_pb=0.00&amp;hb_bidder=none</code>. Your house ad / fallback line item fills the impression. The publisher never loses an ad opportunity.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>How do I track auction performance?</summary>
-    <div>
-      <p>The current build doesn't include a Prebid Analytics adapter. To track auction-level metrics (bid latency, bid rate, win rate per bidder), request a Prebid build with your preferred analytics adapter (Magnite, RTBHouse, custom).</p>
-      <p>Impression-level metrics (eCPM, revenue, fill rate) are available natively in GAM Reports — filter by the <code>hb_bidder</code> key-value.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>Will ad blockers affect this?</summary>
-    <div>
-      <p>Yes, like all Prebid integrations. Common ad blockers (uBlock Origin, AdBlock Plus) will block: the engine script itself, prebid.js, the bidder endpoint, the GAM call, the IMA SDK, and the resulting ad. The engine has no special evasion behavior. Industry consensus is to detect ad blockers via a separate sniffer and either ask the user to disable it or serve content without ads.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>What's the latency impact on my page?</summary>
-    <div>
-      <p>The engine script is <code>async</code> and doesn't block page rendering. The auction adds ~1200 ms (the configured timeout) before the first ad starts playing — content video is already loaded and ready by then. Overall: zero impact on Time to Interactive; a configurable delay only on the pre-roll ad start.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>Can I customize the player controls or skin?</summary>
-    <div>
-      <p>The player is video.js v8 with the default skin. To customize, override video.js CSS by placing rules <em>after</em> the engine's <code>&lt;script&gt;</code> tag, targeting <code>.video-js</code> selectors. The engine doesn't expose a JS API for control configuration — file an issue if you need one.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>How often does the player refresh the auction?</summary>
-    <div>
-      <p>Once per page load. There is no automatic refresh. If you want a mid-roll ad after content, that's not currently supported by the engine.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>What's the difference between <code>@v1.2.2</code> and <code>@main</code>?</summary>
-    <div>
-      <p><code>@v1.2.2</code> is an immutable tag — jsDelivr serves the exact bytes that were tested at release time and the URL is cached aggressively (1-year CDN TTL).</p>
-      <p><code>@main</code> points at the latest commit on the main branch, cached for ~12 hours by jsDelivr. Use <code>@main</code> for development; always pin to a version tag for production.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>Is this GDPR / CCPA compliant out of the box?</summary>
-    <div>
-      <p>The engine includes the technical hooks for compliance (TCF v2 detection, USP detection, optional GPP). Whether your overall integration is compliant depends on: (1) you placing a registered CMP on your page in regulated jurisdictions; (2) your privacy policy disclosures; (3) your data processing agreements with bidders. Consult counsel — the engine does not replace a compliance program.</p>
-    </div>
-  </details>
+  <details><summary>Multiple players on the same page?</summary><div><p>Not currently. Workaround: iframe per player.</p></div></details>
+  <details><summary>Other Prebid bidders?</summary><div><p>Need a custom Prebid build with those adapters AND an engine code change to register them. Talk to your account manager.</p></div></details>
+  <details><summary>If Prebid fails to load?</summary><div><p>Engine catches it and calls GAM with <code>hb_pb=0.00&amp;hb_bidder=none</code>. House line item fills.</p></div></details>
+  <details><summary>Auction analytics?</summary><div><p>Impression-level: GAM Reports filtered by <code>hb_bidder</code>. Auction-level (bid latency/rate): request a Prebid build with an analytics adapter.</p></div></details>
+  <details><summary>Latency impact?</summary><div><p><code>async</code> script — zero impact on Time to Interactive. Adds ~timeout ms before pre-roll start.</p></div></details>
+  <details><summary>Auction refresh / mid-rolls?</summary><div><p>Not currently supported. Once per page load.</p></div></details>
+  <details><summary><code>@v1.2.2</code> vs <code>@main</code>?</summary><div><p>Tags are immutable (1-year CDN cache). <code>@main</code> = latest commit (~12h cache). Pin tags for prod.</p></div></details>
 </section>
 
-<!-- ─── 13. Changelog ───────────────────────────────────────────── -->
+<!-- ─── Changelog ───────────────────────────────────────────────── -->
 <section id="changelog">
   <h2>Changelog</h2>
-
-  <h3>v1.2.2 — current</h3>
   <ul>
-    <li><strong>fix:</strong> declared GDPR not-applicable via static TCF config so the bundled <code>tcfControl</code> module no longer cancels auctions when no CMP is on the page. EU publishers override with their own dynamic config.</li>
-  </ul>
-
-  <h3>v1.2.1</h3>
-  <ul>
-    <li><strong>fix:</strong> dropped the GPP module from default consent config — it was cancelling auctions when no GPP CMP responded.</li>
-  </ul>
-
-  <h3>v1.2.0</h3>
-  <ul>
-    <li><strong>feat:</strong> engine now stitches the full Prebid targeting key-value set (<code>hb_pb</code>, <code>hb_bidder</code>, <strong><code>hb_uuid</code></strong>, <code>hb_size</code>, <code>hb_format</code>, <code>hb_adid</code>, plus bidder-suffixed variants) into GAM's <code>cust_params</code>. Previously only <code>hb_pb</code> and <code>hb_bidder</code> were sent — without <code>hb_uuid</code>, GAM could not resolve the winning bidder's cached VAST creative.</li>
-    <li><strong>feat:</strong> <code>playerSize</code> in the OpenRTB bid request is now measured from the actual mount div at auction time, not hard-coded to 640×360.</li>
-    <li><strong>feat:</strong> added <code>consentManagement</code> config (TCF v2 + USP auto-detection).</li>
-  </ul>
-
-  <h3>v1.1.0</h3>
-  <ul>
-    <li><strong>feat:</strong> shipped a custom Prebid build that includes the <code>limelightDigital</code> adapter. Previously the bundled Prebid only had <code>appnexusBidAdapter</code> and <code>magniteBidAdapter</code>, so <code>limelightDigital</code> was silently dropped at registration and no bid request ever went out.</li>
-  </ul>
-
-  <h3>v1.0.x</h3>
-  <ul>
-    <li><strong>init:</strong> initial release; versioned releases via jsDelivr, CI version-drift guard, AdOps tag generator, demo publisher page.</li>
+    <li><strong>v1.2.2</strong> — Static TCF config so tcfControl doesn't cancel auctions without a CMP.</li>
+    <li><strong>v1.2.1</strong> — Dropped GPP from defaults (was canceling auctions).</li>
+    <li><strong>v1.2.0</strong> — Full <code>hb_*</code> targeting (incl. <code>hb_uuid</code>); dynamic player size; consent management.</li>
+    <li><strong>v1.1.0</strong> — Custom Prebid build with <code>limelightDigital</code> adapter (the previous stock build silently dropped the bidder).</li>
+    <li><strong>v1.0.x</strong> — Initial release; versioned jsDelivr, CI version-drift guard, tag generator.</li>
   </ul>
 </section>
 
-<!-- ─── 14. Support ─────────────────────────────────────────────── -->
+<!-- ─── Support ─────────────────────────────────────────────────── -->
 <section id="support">
   <h2>Support</h2>
-  <p>For integration help, bug reports, and feature requests:</p>
   <ul>
-    <li><strong>Repository &amp; issues:</strong> <a href="https://github.com/aryanvani-pm/bidding-player" target="_blank" rel="noopener">github.com/aryanvani-pm/bidding-player</a></li>
-    <li><strong>Tag generator:</strong> <a href="./">aryanvani-pm.github.io/bidding-player</a></li>
-    <li><strong>Demo publisher page:</strong> <a href="./demo/publisher-test.html?debug=true">/demo/publisher-test.html?debug=true</a> (open with <code>?debug=true</code> to see the auction in your console)</li>
+    <li>Repo &amp; issues: <a href="https://github.com/aryanvani-pm/bidding-player" target="_blank" rel="noopener">github.com/aryanvani-pm/bidding-player</a></li>
+    <li>Tag generator: <a href="./">aryanvani-pm.github.io/bidding-player</a></li>
+    <li>Demo: <a href="./demo/publisher-test.html?debug=true">/demo/publisher-test.html?debug=true</a></li>
   </ul>
 </section>
 

@@ -332,21 +332,53 @@
 
     #logOutput {
       padding: 14px 20px;
-      font-family: 'Courier New', monospace;
+      font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
       font-size: 12px;
       line-height: 1.7;
-      max-height: 260px;
-      overflow-y: auto;
+      max-height: 460px;
+      overflow-y: scroll;             /* always show scrollbar so it's discoverable */
       color: var(--muted);
     }
-    #logOutput::-webkit-scrollbar { width: 5px; }
-    #logOutput::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    #logOutput::-webkit-scrollbar { width: 8px; }
+    #logOutput::-webkit-scrollbar-track { background: var(--surface2); }
+    #logOutput::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+    #logOutput::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
-    .log-line { display: flex; gap: 12px; }
-    .log-ts   { color: var(--text-dim); flex-shrink: 0; }
+    .log-line { display: flex; gap: 12px; align-items: baseline; padding: 1px 0; }
+    .log-line.kv { padding-left: 12px; }              /* indent key/value rows under their phase */
+    .log-line.phase { margin-top: 6px; }
+    .log-line.phase:first-child { margin-top: 0; }
+    .log-ts   { color: var(--text-dim); flex-shrink: 0; font-variant-numeric: tabular-nums; }
     .log-err  { color: var(--danger); }
     .log-ok   { color: var(--success); }
     .log-info { color: var(--accent); }
+    .log-kv-key  { color: var(--text-muted); }
+    .log-kv-val  { color: var(--text); }
+    .log-tree    { color: var(--text-dim); font-family: monospace; flex-shrink: 0; }
+    .log-phase-pill {
+      background: var(--accent);
+      color: var(--on-accent);
+      padding: 1px 8px;
+      border-radius: 3px;
+      font-weight: 700;
+      letter-spacing: .3px;
+    }
+    .log-tail-indicator {
+      position: absolute;
+      right: 24px;
+      bottom: 12px;
+      background: var(--accent);
+      color: var(--on-accent);
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,.4);
+    }
+    .log-tail-indicator.show { display: block; }
+    .log-card { position: relative; }
     .log-warn { color: var(--warning); }
 
     .bid-info {
@@ -606,8 +638,9 @@
   </div>
 
   <div class="card log-card">
-    <div class="card-header"><div class="dot"></div>Console Log</div>
+    <div class="card-header"><div class="dot"></div>Console Log <span style="margin-left:auto;font-size:11px;color:var(--text-dim);font-weight:400;letter-spacing:0;text-transform:none;">Scroll to read history · auto-follows the tail when at bottom</span></div>
     <div id="logOutput"><div class="log-line"><span class="log-ts">--:--:--</span><span class="log-info">Sandbox ready.</span></div></div>
+    <div class="log-tail-indicator" id="logTailIndicator">↓ Jump to latest</div>
   </div>
 </div>
 
@@ -735,14 +768,83 @@
    Tab 1 Sandbox Engineering Script Logic
 ───────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
-function ts() { return new Date().toTimeString().slice(0,8); }
-function log(msg, level = 'info') { const out = $('logOutput'); const line = document.createElement('div'); line.className = 'log-line'; line.innerHTML = `<span class="log-ts">${ts()}</span><span class="log-${level}">${msg}</span>`; out.appendChild(line); out.scrollTop = out.scrollHeight; }
+function ts() {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mm = String(d.getMinutes()).padStart(2,'0');
+  const ss = String(d.getSeconds()).padStart(2,'0');
+  const ms = String(d.getMilliseconds()).padStart(3,'0');
+  return `${hh}:${mm}:${ss}.${ms}`;
+}
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ─── Log infrastructure ──────────────────────────────────────────────
+// Follow-tail behaviour: auto-scroll to bottom ONLY when the user is already
+// at the bottom. If they scrolled up to read older lines, leave their
+// scroll position alone and show a "↓ Jump to latest" pill they can click.
+function isAtBottom() {
+  const out = $('logOutput');
+  return (out.scrollHeight - out.scrollTop - out.clientHeight) < 20;
+}
+function logRaw(html, level = 'info', extraClass = '') {
+  const out = $('logOutput');
+  const wasAtBottom = isAtBottom();
+  const line = document.createElement('div');
+  line.className = 'log-line' + (extraClass ? ' ' + extraClass : '');
+  line.innerHTML = `<span class="log-ts">${ts()}</span><span class="log-${level}">${html}</span>`;
+  out.appendChild(line);
+  if (wasAtBottom) {
+    out.scrollTop = out.scrollHeight;
+    $('logTailIndicator').classList.remove('show');
+  } else {
+    $('logTailIndicator').classList.add('show');
+  }
+}
+function log(msg, level = 'info') { logRaw(msg, level); }
+
+// Phase header: bold pill + label, visually separates each lifecycle stage.
+function phase(n, title) {
+  logRaw(`<span class="log-phase-pill">PHASE ${n}</span> <span style="color:var(--text);font-weight:600;">${escHtml(title)}</span>`, 'info', 'phase');
+}
+// Indented key/value row underneath a phase. `last` chooses the tree glyph.
+function kv(key, value, last = false) {
+  const glyph = last ? '└─' : '├─';
+  logRaw(`<span class="log-tree">${glyph}</span> <span class="log-kv-key">${escHtml(key)}:</span> <span class="log-kv-val">${escHtml(value)}</span>`, 'info', 'kv');
+}
+// Same as kv but the value is rendered as a code block / URL for legibility.
+function kvCode(key, value, last = false) {
+  const glyph = last ? '└─' : '├─';
+  logRaw(`<span class="log-tree">${glyph}</span> <span class="log-kv-key">${escHtml(key)}:</span> <span class="log-kv-val" style="font-family:monospace;background:rgba(255,255,255,.04);padding:1px 5px;border-radius:3px;word-break:break-all;">${escHtml(value)}</span>`, 'info', 'kv');
+}
+
 function setStatus(msg, type) { const el = $('statusMsg'); el.textContent = msg; el.className = type; }
 function clearStatus() { const el = $('statusMsg'); el.className = ''; el.style.display = 'none'; }
 
-function milestone(step, msg) { log(`<span style="background:#d97757;color:#1a0e08;padding:1px 7px;border-radius:3px;font-weight:bold;">${step}</span> <span style="color:#4ade80;">${msg}</span>`, 'info'); }
-function milestoneWinner(bidder, rawCpm) { log(`<span style="background:linear-gradient(90deg,#f1c40f,#e67e22);color:#000;padding:1px 8px;border-radius:3px;font-weight:bold;">🏆 WINNER</span> <span style="color:#f1c40f;font-weight:bold;">${bidder} | Raw CPM: $${rawCpm.toFixed(2)}</span>`, 'info'); }
-function milestoneNoDemand() { log(`<span style="background:#3a3a3a;color:#bdc3c7;padding:1px 8px;border-radius:3px;font-weight:bold;">⚠️ NO DEMAND</span> <span style="color:#bdc3c7;">Fallback path engaged ($0.00 targeting).</span>`, 'warn'); }
+// Wire up tail-jump button: scrolls to bottom and resumes follow-tail.
+document.addEventListener('DOMContentLoaded', () => {
+  $('logTailIndicator').addEventListener('click', () => {
+    const out = $('logOutput');
+    out.scrollTop = out.scrollHeight;
+    $('logTailIndicator').classList.remove('show');
+  });
+  // Hide the pill whenever the user scrolls back to the bottom themselves.
+  $('logOutput').addEventListener('scroll', () => {
+    if (isAtBottom()) $('logTailIndicator').classList.remove('show');
+  }, { passive: true });
+});
+
+// Random-looking IDs for the synthetic ORTB display (so users can see how
+// real Prebid bid IDs / auction IDs look without us reaching out to a real
+// bidder from localhost).
+function shortId(len = 8) {
+  const chars = 'abcdef0123456789';
+  let s = ''; for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random()*chars.length)]; return s;
+}
+function uuid4() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0; const v = c === 'x' ? r : (r&0x3|0x8); return v.toString(16);
+  });
+}
 
 function buildCustomGranularity() { const buckets = []; for (let i = 0; i <= 30; i++) buckets.push({ min: (i * 0.10).toFixed(2), max: ((i + 1) * 0.10).toFixed(2), increment: 0.10 }); return { buckets }; }
 function roundToGranularity(cpm) { return Math.floor(cpm / 0.10) * 0.10; }
@@ -758,90 +860,243 @@ function createVideoEl() { const v = document.createElement('video'); v.id = 'ad
 function showBidInfo(items) { $('bidInfo').innerHTML = items.map(([k,v]) => `<div class="pill">${k}: <span class="val">${v}</span></div>`).join(''); }
 
 async function runSandbox() {
-  clearStatus(); if (!validate()) { setStatus('Fill in required options.', 'error'); return; }
-  $('runBtn').disabled = true; $('btnSpinner').style.display = 'block'; setStatus('Processing test auction…', 'info');
-  
-  const contentUrl = $('contentUrl').value.trim(); const gamBaseTag = $('gamTag').value.trim();
-  const mockCpmRaw = $('mockCpm').value.trim();
-  
-  let bid = { cpm: 0, bidder: 'none', isMock: true };
+  clearStatus();
+  if (!validate()) { setStatus('Fill in required options.', 'error'); return; }
+  $('runBtn').disabled = true; $('btnSpinner').style.display = 'block';
+  setStatus('Processing test auction…', 'info');
+
+  // Clear previous log
+  $('logOutput').innerHTML = '';
+  $('logTailIndicator').classList.remove('show');
+
+  const t0 = performance.now();
+  const contentUrl   = $('contentUrl').value.trim();
+  const gamBaseTag   = $('gamTag').value.trim();
+  const mockCpmRaw   = $('mockCpm').value.trim();
+  const lmltHost     = $('lmltHost').value.trim();
+  const lmltPubId    = $('lmltPubId').value.trim();
+  const lmltAdUnitId = $('lmltAdUnitId').value.trim();
+  const prebidCache  = $('prebidCacheUrl').value.trim();
+  const pbTimeout    = parseInt($('prebidTimeout').value, 10) || 1200;
+
+  const auctionId       = uuid4();
+  const bidderRequestId = shortId(16);
+  const adUnitCode      = 'atp-' + Date.now();
+  const adUnitUuid      = uuid4();
+
+  // ─── PHASE 1 — Configuration echo ─────────────────────────────────
+  phase(1, 'Configuration & Validation');
+  kv('Content URL', contentUrl);
+  kv('GAM master ad tag', gamBaseTag.length > 90 ? gamBaseTag.substring(0, 90) + '…' : gamBaseTag);
+  kv('Limelight host', lmltHost);
+  kv('Publisher ID', lmltPubId);
+  kv('Ad Unit ID', lmltAdUnitId);
+  kv('Prebid cache', prebidCache);
+  kv('Bidder timeout', `${pbTimeout} ms`);
+  kv('Mock CPM input', mockCpmRaw === '' ? '(empty — will simulate no-bid)' : `$${mockCpmRaw}`, true);
+
+  // ─── PHASE 2 — Prebid auction registration (synthetic) ────────────
+  phase(2, 'Prebid Auction Registration (simulated)');
+  kv('Auction ID', auctionId);
+  kv('Ad unit code', adUnitCode);
+  kv('Ad unit UUID', adUnitUuid);
+  kv('Registered bidders', 'limelightDigital');
+  kv('Media type', 'video.instream');
+  kv('Bidder request ID', bidderRequestId, true);
+
+  // ─── PHASE 3 — ORTB bid request (synthetic) ───────────────────────
+  phase(3, 'OpenRTB Bid Request → ' + lmltHost);
+  const playerW = $('videoContainer').offsetWidth  || 640;
+  const playerH = $('videoContainer').offsetHeight || 360;
+  kv('Method · endpoint', `POST https://${lmltHost}/ortbhb`);
+  kv('imp[0].id', shortId(12));
+  kv('imp[0].video.w × h', `${playerW} × ${playerH}`);
+  kv('imp[0].video.mimes', 'video/mp4, application/x-mpegURL');
+  kv('imp[0].video.protocols', '[1,2,3,4,5,6]   (VAST 1.0–4.0 + wrapped)');
+  kv('imp[0].video.playbackmethod', '[2]   (autoplay sound off)');
+  kv('imp[0].ext.bidder.publisherId', lmltPubId);
+  kv('imp[0].ext.bidder.adUnitId', lmltAdUnitId);
+  kv('site.domain', location.hostname);
+  kv('site.page', location.href.length > 70 ? location.href.substring(0, 70) + '…' : location.href);
+  kv('tmax', `${pbTimeout} ms`, true);
+
+  // Small delay to make the visual flow legible.
+  await new Promise(r => setTimeout(r, 80));
+
+  // ─── PHASE 4 — Bid response (synthetic) ───────────────────────────
+  let bid;
   if (mockCpmRaw !== '') {
-    const math = applyBias(mockCpmRaw); milestoneWinner('mock-bid-injector', math.raw);
-    milestone('STEP 3', `Bias: +$0.05`); milestone('STEP 4', `Rounded target CPM: $${math.final.toFixed(2)}`);
-    bid = { cpm: math.final, bidder: 'mock-bid-injector', isMock: true };
+    const math = applyBias(mockCpmRaw);
+    const cacheUuid = uuid4();
+    const creativeId = shortId(10);
+    const bidId = shortId(16);
+    phase(4, 'Bid Response (1 bid received)');
+    kv('bidder', 'mock-bid-injector  (sandbox-only; real builds use limelightDigital)');
+    kv('seatbid[0].bid[0].id', bidId);
+    kv('seatbid[0].bid[0].impid', shortId(12));
+    kv('seatbid[0].bid[0].crid', creativeId);
+    kv('seatbid[0].bid[0].price', `$${math.raw.toFixed(2)} USD`);
+    kv('seatbid[0].bid[0].w × h', `${playerW} × ${playerH}`);
+    kv('seatbid[0].bid[0].adm', '<VAST version="3.0">…</VAST>   (cached)');
+    kv('cache UUID (prebid-cache)', cacheUuid);
+    kv('Bid status', '✓ valid', true);
+
+    phase(5, 'Price Bucketing & Bias');
+    kv('Raw CPM', `$${math.raw.toFixed(2)}`);
+    kv('Floor bias applied', '+$0.05');
+    kv('After bias', `$${math.biased.toFixed(2)}`);
+    kv('Bucket granularity', '$0.10 (custom)');
+    kv('Final hb_pb value', `$${math.final.toFixed(2)}`, true);
+    bid = { cpm: math.final, bidder: 'mock-bid-injector', cacheUuid, creativeId, bidId, isMock: true };
   } else {
-    milestoneNoDemand();
+    phase(4, 'Bid Response');
+    kv('bidder', 'mock-bid-injector');
+    kv('seatbid', '[]   (no bid)');
+    kv('Reason', 'mock CPM field empty — simulating no-demand fallback', true);
+    bid = { cpm: 0, bidder: 'none', cacheUuid: null, isMock: true };
   }
 
-  // Stitch bid into the GAM tag's cust_params WITHOUT clobbering existing
-  // pairs (e.g. sample_ct=linear, which the GAM sample ad slot targets).
-  // Earlier this just overwrote cust_params and IMA returned error 303
-  // (No Ads VAST response after one or more Wrappers) because sample_ct
-  // was lost.
+  await new Promise(r => setTimeout(r, 80));
+
+  // ─── PHASE 6 — GAM cust_params stitch ─────────────────────────────
   const urlObj = new URL(gamBaseTag);
-  urlObj.searchParams.set('correlator', Date.now().toString());
+  const correlator = Date.now().toString();
+  urlObj.searchParams.set('correlator', correlator);
   const existingCust = urlObj.searchParams.get('cust_params') || '';
-  const hbPairs = `hb_pb=${bid.cpm.toFixed(2)}&hb_bidder=${bid.bidder}`;
-  urlObj.searchParams.set('cust_params', existingCust ? `${existingCust}&${hbPairs}` : hbPairs);
-  
-  disposePlayer(); const videoEl = createVideoEl();
+  let hbPairs = `hb_pb=${bid.cpm.toFixed(2)}&hb_bidder=${bid.bidder}`;
+  if (bid.cacheUuid) hbPairs += `&hb_uuid=${bid.cacheUuid}`;
+  if (bid.creativeId) hbPairs += `&hb_adid=${bid.creativeId}`;
+  hbPairs += `&hb_size=${playerW}x${playerH}&hb_format=video`;
+  const finalCust = existingCust ? `${existingCust}&${hbPairs}` : hbPairs;
+  urlObj.searchParams.set('cust_params', finalCust);
+
+  phase(6, 'GAM Targeting Key-Value Stitch');
+  kv('Existing cust_params', existingCust || '(empty)');
+  kv('hb_pb', bid.cpm.toFixed(2));
+  kv('hb_bidder', bid.bidder);
+  if (bid.cacheUuid)  kv('hb_uuid', bid.cacheUuid);
+  if (bid.creativeId) kv('hb_adid', bid.creativeId);
+  kv('hb_size', `${playerW}x${playerH}`);
+  kv('hb_format', 'video');
+  kv('Final cust_params', finalCust);
+  kv('correlator', correlator, true);
+
+  // ─── PHASE 7 — GAM ad call ─────────────────────────────────────────
+  phase(7, 'GAM Ad Request');
+  kv('iu', urlObj.searchParams.get('iu') || '(missing)');
+  kv('sz', urlObj.searchParams.get('sz') || '(missing)');
+  kv('output', urlObj.searchParams.get('output') || 'vast');
+  kvCode('Final URL', urlObj.toString(), true);
+
+  // Set up the player + IMA bridge.
+  disposePlayer();
+  const videoEl = createVideoEl();
   const player = videojs(videoEl, { autoplay: true, muted: true, controls: true, fluid: true, sources: [{ src: contentUrl, type: 'video/mp4' }] });
   currentPlayer = player;
-  
+
   player.ready(() => {
     const videoContainer = $('videoContainer');
     const adContainer = document.createElement('div'); adContainer.id = 'adContainer'; videoContainer.appendChild(adContainer);
-    const adc = new google.ima.AdDisplayContainer(adContainer, videoEl); const loader = new google.ima.AdsLoader(adc);
+    const adc    = new google.ima.AdDisplayContainer(adContainer, videoEl);
+    const loader = new google.ima.AdsLoader(adc);
+
     function logAdError(scope, e) {
       let msg = 'unknown';
-      try { const err = e && e.getError && e.getError(); if (err) msg = `[${err.getErrorCode && err.getErrorCode()}] ${err.getMessage && err.getMessage()}`; } catch(_) {}
-      log(`<span style="background:#d93f3f;color:#fff;padding:1px 7px;border-radius:3px;font-weight:bold;">AD_ERROR (${scope})</span> ${msg}`, 'err');
+      try {
+        const err = e && e.getError && e.getError();
+        if (err) msg = `[${err.getErrorCode && err.getErrorCode()}] ${err.getMessage && err.getMessage()}`;
+      } catch(_) {}
+      logRaw(`<span style="background:var(--danger);color:#fff;padding:1px 7px;border-radius:3px;font-weight:bold;">AD_ERROR (${scope})</span> ${escHtml(msg)}`, 'err', 'phase');
     }
     loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, (e) => {
       logAdError('loader', e);
       adContainer.classList.remove('ad-active');
       player.play().catch(()=>{});
     });
+
     loader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, (e) => {
-      milestone('STEP 7', 'AdsManager loaded.');
+      phase(8, 'GAM Response → IMA AdsManager');
       const mgr = e.getAdsManager(videoEl);
+
+      // Hook every meaningful IMA AdEvent for full visibility.
+      const T = google.ima.AdEvent.Type;
+      const eventsOfInterest = {
+        [T.AD_BREAK_READY]:          'AD_BREAK_READY',
+        [T.LOADED]:                  'LOADED',
+        [T.STARTED]:                 'STARTED',
+        [T.IMPRESSION]:              'IMPRESSION',
+        [T.FIRST_QUARTILE]:          'FIRST_QUARTILE',
+        [T.MIDPOINT]:                'MIDPOINT',
+        [T.THIRD_QUARTILE]:          'THIRD_QUARTILE',
+        [T.COMPLETE]:                'COMPLETE',
+        [T.SKIPPED]:                 'SKIPPED',
+        [T.CLICK]:                   'CLICK',
+        [T.PAUSED]:                  'PAUSED',
+        [T.RESUMED]:                 'RESUMED'
+      };
+      Object.keys(eventsOfInterest).forEach(type => {
+        mgr.addEventListener(type, (ev) => {
+          let extra = '';
+          try {
+            const ad = ev.getAd && ev.getAd();
+            if (ad) {
+              if (type === T.LOADED || type === T.STARTED) {
+                extra = ` · creative=${ad.getCreativeId ? ad.getCreativeId() : '?'} · duration=${ad.getDuration ? ad.getDuration().toFixed(1) + 's' : '?'}`;
+              }
+            }
+          } catch(_) {}
+          logRaw(`<span style="color:var(--text-muted);">IMA event:</span> <span style="color:var(--success);font-weight:600;">${eventsOfInterest[type]}</span><span style="color:var(--text-dim);">${escHtml(extra)}</span>`, 'info', 'kv');
+        });
+      });
+
       mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, (evt) => {
         logAdError('manager', evt);
         adContainer.classList.remove('ad-active');
         try { mgr.destroy(); } catch (_) {}
         player.play().catch(()=>{});
       });
-      mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_PAUSE_REQUESTED, () => {
-        log('Ad starting — pausing content.', 'info');
+      mgr.addEventListener(T.CONTENT_PAUSE_REQUESTED, () => {
+        logRaw('<span style="color:var(--accent);font-weight:600;">CONTENT_PAUSE_REQUESTED</span> — content paused, ad overlay elevated.', 'info', 'kv');
         player.pause(); adContainer.classList.add('ad-active');
       });
-      mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_RESUME_REQUESTED, () => {
-        log('Ad ended — resuming content.', 'info');
+      mgr.addEventListener(T.CONTENT_RESUME_REQUESTED, () => {
+        logRaw('<span style="color:var(--accent);font-weight:600;">CONTENT_RESUME_REQUESTED</span> — ad finished, content resuming.', 'info', 'kv');
         adContainer.classList.remove('ad-active'); player.play().catch(()=>{});
       });
-      mgr.addEventListener(google.ima.AdEvent.Type.ALL_ADS_COMPLETED, () => {
-        log('All ads completed.', 'ok');
+      mgr.addEventListener(T.ALL_ADS_COMPLETED, () => {
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+        phase(9, `Auction complete · ${elapsed}s total`);
+        kv('AdsManager', 'destroyed', true);
         adContainer.classList.remove('ad-active');
         try { mgr.destroy(); } catch (_) {}
       });
-      // Use the container's rendered dimensions with safe fallbacks.
-      // videoEl.offsetWidth is unreliable because video.js wraps the element
-      // and IMA can refuse to start the ad if dims are too small or zero.
+
       const initW = videoContainer.offsetWidth  || videoEl.offsetWidth  || 640;
       const initH = videoContainer.offsetHeight || videoEl.offsetHeight || 360;
-      milestone('STEP 8', `IMA init at ${initW}×${initH}.`);
+      kv('VAST', 'received from GAM');
+      kv('Ad slot dimensions', `${initW} × ${initH}`);
+      kv('ViewMode', 'NORMAL', true);
       try { mgr.init(initW, initH, google.ima.ViewMode.NORMAL); mgr.start(); }
-      catch (err) { log(`mgr.start failed: ${err && err.message}`, 'err'); }
+      catch (err) { logRaw(`mgr.start failed: ${escHtml(err && err.message)}`, 'err', 'phase'); }
     });
-    const req = new google.ima.AdsRequest(); req.adTagUrl = urlObj.toString();
-    // Hint IMA about the slot size up-front (alongside mgr.init).
-    req.linearAdSlotWidth  = videoContainer.offsetWidth  || 640;
-    req.linearAdSlotHeight = videoContainer.offsetHeight || 360;
-    adc.initialize(); loader.requestAds(req); milestone('STEP 6', 'VAST request dispatched.');
-    showBidInfo([['CPM', `$${bid.cpm.toFixed(2)}`], ['Source', 'Sandbox']]);
+
+    const req = new google.ima.AdsRequest();
+    req.adTagUrl = urlObj.toString();
+    req.linearAdSlotWidth  = playerW;
+    req.linearAdSlotHeight = playerH;
+    adc.initialize();
+    loader.requestAds(req);
+    showBidInfo([
+      ['CPM', `$${bid.cpm.toFixed(2)}`],
+      ['Bidder', bid.bidder],
+      ['Source', 'Sandbox (mock)']
+    ]);
   });
-  
-  $('playerCard').style.display = 'block'; $('runBtn').disabled = false; $('btnSpinner').style.display = 'none'; setStatus('Execution finished.', 'success');
+
+  $('playerCard').style.display = 'block';
+  $('runBtn').disabled = false;
+  $('btnSpinner').style.display = 'none';
+  setStatus('Auction dispatched — see log for full breakdown.', 'success');
 }
 $('runBtn').addEventListener('click', runSandbox);
 $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard').style.display = 'none'; clearStatus(); });
