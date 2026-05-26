@@ -816,6 +816,32 @@ function kvCode(key, value, last = false) {
   const glyph = last ? '└─' : '├─';
   logRaw(`<span class="log-tree">${glyph}</span> <span class="log-kv-key">${escHtml(key)}:</span> <span class="log-kv-val" style="font-family:monospace;background:rgba(255,255,255,.04);padding:1px 5px;border-radius:3px;word-break:break-all;">${escHtml(value)}</span>`, 'info', 'kv');
 }
+// kvAdd: shows "+ key = value   (source)" — used to highlight that something is
+// being APPENDED to an existing structure (e.g. hb_* keys appended to GAM cust_params).
+function kvAdd(key, value, source = '', last = false) {
+  const glyph = last ? '└─' : '├─';
+  const src = source ? ` <span style="color:var(--text-dim);font-style:italic;">${escHtml(source)}</span>` : '';
+  logRaw(`<span class="log-tree">${glyph}</span> <span style="color:var(--success);font-weight:700;">+</span> <span class="log-kv-key">${escHtml(key)}</span> <span class="log-tree">=</span> <span class="log-kv-val">${escHtml(value)}</span>${src}`, 'info', 'kv');
+}
+// kvUrl: pretty-prints a URL across multiple lines, splitting at every &
+// query param boundary so a 1000-char ad tag is actually readable.
+function kvUrl(label, url, last = false) {
+  let pretty = url;
+  try {
+    const u = new URL(url);
+    const params = Array.from(u.searchParams.entries()).map(([k, v]) => {
+      const truncatedV = v.length > 90 ? v.substring(0, 90) + '…' : v;
+      return `&nbsp;&nbsp;&amp;${escHtml(k)}=${escHtml(truncatedV)}`;
+    });
+    pretty = `${escHtml(u.origin + u.pathname)}?<br>${params.join('<br>')}`;
+  } catch (_) { pretty = escHtml(url); }
+  const glyph = last ? '└─' : '├─';
+  logRaw(`<span class="log-tree">${glyph}</span> <span class="log-kv-key">${escHtml(label)}:</span><br><div style="margin-left:24px;margin-top:4px;font-family:monospace;background:rgba(255,255,255,.04);padding:6px 10px;border-radius:4px;border-left:2px solid var(--accent);color:var(--text);font-size:11px;line-height:1.55;word-break:break-all;">${pretty}</div>`, 'info', 'kv');
+}
+// Section sub-header within a phase, e.g. "Input", "Appends", "Output".
+function subhead(label) {
+  logRaw(`<span class="log-tree">│</span> <span style="color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:.6px;font-size:10.5px;">${escHtml(label)}</span>`, 'info', 'kv');
+}
 
 function setStatus(msg, type) { const el = $('statusMsg'); el.textContent = msg; el.className = type; }
 function clearStatus() { const el = $('statusMsg'); el.className = ''; el.style.display = 'none'; }
@@ -958,35 +984,55 @@ async function runSandbox() {
 
   await new Promise(r => setTimeout(r, 80));
 
-  // ─── PHASE 6 — GAM cust_params stitch ─────────────────────────────
+  // ─── PHASE 6 — Append Prebid response into GAM master ad tag ──────
+  // This is the *stitch* operation: take the GAM master tag the publisher
+  // provided, mutate cust_params to include the winning bid's hb_* keys,
+  // refresh the correlator. Result is the URL that gets handed to IMA.
   const urlObj = new URL(gamBaseTag);
   const correlator = Date.now().toString();
+  const oldCorrelator = urlObj.searchParams.get('correlator') || '(empty)';
   urlObj.searchParams.set('correlator', correlator);
   const existingCust = urlObj.searchParams.get('cust_params') || '';
+
+  phase(6, 'Appending Prebid response into GAM master ad tag');
+  subhead('Input · GAM master tag (from publisher)');
+  kvUrl('Master ad tag (pre-stitch)', gamBaseTag);
+  kv('Pre-existing cust_params', existingCust || '(empty)');
+  kv('Pre-existing correlator', oldCorrelator);
+
+  subhead('Appends · Prebid winner → GAM cust_params');
+  if (bid.bidder !== 'none') {
+    kvAdd('hb_pb',       bid.cpm.toFixed(2),  '(bucketed + biased winning CPM)');
+    kvAdd('hb_bidder',   bid.bidder,           '(bid response → bidder name)');
+    if (bid.cacheUuid)  kvAdd('hb_uuid',  bid.cacheUuid,  '(Prebid Cache UUID → resolves VAST inside GAM creative)');
+    if (bid.creativeId) kvAdd('hb_adid',  bid.creativeId, '(bid response → creative ID)');
+    kvAdd('hb_size',   `${playerW}x${playerH}`, '(measured player size)');
+    kvAdd('hb_format', 'video',                  '(media type)');
+  } else {
+    kvAdd('hb_pb',     '0.00', '(no-bid fallback — house line item fills)');
+    kvAdd('hb_bidder', 'none', '(no-bid fallback)');
+  }
+  kvAdd('correlator', correlator, '(fresh per-request timestamp — bypasses GAM dedup)', true);
+
+  // Build the merged cust_params string (Prebid keys appended after existing).
   let hbPairs = `hb_pb=${bid.cpm.toFixed(2)}&hb_bidder=${bid.bidder}`;
-  if (bid.cacheUuid) hbPairs += `&hb_uuid=${bid.cacheUuid}`;
+  if (bid.cacheUuid)  hbPairs += `&hb_uuid=${bid.cacheUuid}`;
   if (bid.creativeId) hbPairs += `&hb_adid=${bid.creativeId}`;
   hbPairs += `&hb_size=${playerW}x${playerH}&hb_format=video`;
   const finalCust = existingCust ? `${existingCust}&${hbPairs}` : hbPairs;
   urlObj.searchParams.set('cust_params', finalCust);
 
-  phase(6, 'GAM Targeting Key-Value Stitch');
-  kv('Existing cust_params', existingCust || '(empty)');
-  kv('hb_pb', bid.cpm.toFixed(2));
-  kv('hb_bidder', bid.bidder);
-  if (bid.cacheUuid)  kv('hb_uuid', bid.cacheUuid);
-  if (bid.creativeId) kv('hb_adid', bid.creativeId);
-  kv('hb_size', `${playerW}x${playerH}`);
-  kv('hb_format', 'video');
-  kv('Final cust_params', finalCust);
-  kv('correlator', correlator, true);
+  subhead('Output · merged cust_params');
+  kvCode('cust_params (post-stitch)', finalCust, true);
 
-  // ─── PHASE 7 — GAM ad call ─────────────────────────────────────────
-  phase(7, 'GAM Ad Request');
-  kv('iu', urlObj.searchParams.get('iu') || '(missing)');
-  kv('sz', urlObj.searchParams.get('sz') || '(missing)');
-  kv('output', urlObj.searchParams.get('output') || 'vast');
-  kvCode('Final URL', urlObj.toString(), true);
+  // ─── PHASE 7 — Final ad tag URL handed to IMA ─────────────────────
+  phase(7, 'Final ad tag URL handed to IMA');
+  kv('Method', 'GET');
+  kv('Endpoint', urlObj.origin + urlObj.pathname);
+  kv('iu (ad unit path)',  urlObj.searchParams.get('iu')     || '(missing)');
+  kv('sz (sizes)',         urlObj.searchParams.get('sz')     || '(missing)');
+  kv('output',             urlObj.searchParams.get('output') || 'vast');
+  kvUrl('Final ad tag URL', urlObj.toString(), true);
 
   // Set up the player + IMA bridge.
   disposePlayer();
