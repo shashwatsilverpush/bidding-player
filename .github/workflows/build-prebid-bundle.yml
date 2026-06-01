@@ -15,7 +15,9 @@ on:
       modules:
         description: 'Comma-separated bidder/module list (consent modules added automatically)'
         required: true
-        default: 'limelightDigitalBidAdapter'
+        # Default keeps the main bundle's 6 adapters in sync with BIDDER_CATALOG
+        # in index.html. Override when building a slimmer or experimental bundle.
+        default: 'limelightDigitalBidAdapter,appnexusBidAdapter,rubiconBidAdapter,pubmaticBidAdapter,openxBidAdapter,incrementxBidAdapter'
       bundle_name:
         description: 'Output filename without .js extension (e.g. prebid-limelight-appnexus)'
         required: true

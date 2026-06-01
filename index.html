@@ -905,7 +905,7 @@
     <div class="adops-grid">
       <div class="adops-field full" data-required="true">
         <label>Release Version / Branch<span class="req-star">*</span></label>
-        <input type="text" id="adopsVersion" value="v2.1.1" />
+        <input type="text" id="adopsVersion" value="v2.1.2" />
         <span class="field-info">Use a tag like <code>v1.0.0</code> for production (immutable, recommended) or a branch name like <code>feat/foo</code> for testing. The CDN URLs in <em>Hosting &amp; CDN</em> auto-update from this value.</span>
       </div>
     </div>
@@ -959,12 +959,12 @@
         <div class="adops-grid">
           <div class="adops-field full" data-required="true">
             <label>Universal Hosted Engine Script URL<span class="req-star">*</span></label>
-            <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.1.1/engine/player.js" />
+            <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.1.2/engine/player.js" />
             <span class="field-info">Auto-derived from the release version above. Override only if you know what you are doing.</span>
           </div>
           <div class="adops-field full" data-required="true">
             <label>Prebid.js Hosted Library URL<span class="req-star">*</span></label>
-            <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.1.1/prebid/prebid.js" />
+            <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.1.2/prebid/prebid.js" />
             <span class="field-info">Pick the bundle from <code>prebid/</code> that contains the bidders you tick above. <a href="adops-guide.html#prebid-bundles" target="_blank" rel="noopener" style="color:var(--accent);">How to build a new bundle ↗</a></span>
           </div>
           <div class="adops-field">
@@ -1516,6 +1516,17 @@ const BIDDER_CATALOG = [
     params: [
       { key: 'unit',      label: 'Ad Unit ID',      default: '', required: true },
       { key: 'delDomain', label: 'Delivery Domain', default: '', required: true },
+    ],
+  },
+  {
+    // Prebid docs: https://docs.prebid.org/dev-docs/bidders/incrementx.html
+    // Bidder code 'incrementx', adapter module 'incrementxBidAdapter'.
+    // Only one required param: placementId (alphanumeric, e.g. IX-HB-123).
+    id: 'incrementx',
+    label: 'IncrementX',
+    module: 'incrementxBidAdapter',
+    params: [
+      { key: 'placementId', label: 'Placement ID', default: '', required: true },
     ],
   },
 ];
