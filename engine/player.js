@@ -265,6 +265,13 @@
           bidderTimeout: cfg.timeout,
           cache: { url: cfg.cacheUrl },
           priceGranularity: { buckets: buckets },
+          // Emit per-bidder hb_*_<bidderCode> targeting keys for EVERY bid,
+          // not just the winner. Lets AdOps build per-bidder GAM line items
+          // (e.g. target hb_pb_incrementx separately) or do bidder-level
+          // revenue attribution inside GAM reports. The standard winner-only
+          // keys (hb_pb, hb_bidder, hb_uuid …) are still emitted in parallel,
+          // so default GAM setups keep working unchanged.
+          enableSendAllBids: true,
           // Consent defaults are tuned for non-EU traffic. We declare GDPR
           // as not-applicable via a static TCF config so the bundled
           // tcfControl module does not cancel the auction when no CMP is
