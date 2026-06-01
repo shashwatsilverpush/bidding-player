@@ -873,6 +873,12 @@
         <tr><td class="label-cell">Prebid Timeout</td><td class="input-cell"><input type="number" id="prebidTimeout" value="1200" /></td></tr>
         <tr><td class="label-cell">Prebid Cache URL <span class="req">*</span></td><td class="input-cell"><input type="text" id="prebidCacheUrl" value="https://prebid.adnxs.com/pbc/v1/cache" /></td></tr>
         <tr><td class="label-cell">Mock Bid CPM</td><td class="input-cell"><input type="number" id="mockCpm" value="2.5" step="0.01" /></td></tr>
+        <tr><td class="label-cell">Strategic Bias</td><td class="input-cell">
+          <span style="display:flex; align-items:center; gap:12px;">
+            <span class="toggle-switch on" id="sandboxBiasToggle" role="switch" aria-label="Apply strategic bias in sandbox simulation"></span>
+            <span id="sandboxBiasStateLabel" style="font-size:12px; color:var(--text-muted);">On (+$0.05)</span>
+          </span>
+        </td></tr>
       </tbody>
     </table>
   </div>
@@ -1148,7 +1154,18 @@ function uuid4() {
 
 function buildCustomGranularity() { const buckets = []; for (let i = 0; i <= 30; i++) buckets.push({ min: (i * 0.10).toFixed(2), max: ((i + 1) * 0.10).toFixed(2), increment: 0.10 }); return { buckets }; }
 function roundToGranularity(cpm) { return Math.floor(cpm / 0.10) * 0.10; }
-function applyBias(cpm) { const raw = parseFloat(cpm); const biased = parseFloat((raw + 0.05).toFixed(2)); const final = parseFloat(roundToGranularity(biased).toFixed(2)); return { raw, biased, final }; }
+function applyBias(cpm) {
+  // Sandbox-only: honour the Strategic Bias toggle in the Auction Configuration
+  // card. When the toggle is off, no bias is added — the raw CPM is just
+  // bucketed (parallels the Production tag's data-bias="0.00" path).
+  const raw = parseFloat(cpm);
+  const tgl = document.getElementById('sandboxBiasToggle');
+  const biasOn = tgl ? tgl.classList.contains('on') : true;
+  const biasAmount = biasOn ? 0.05 : 0;
+  const biased = parseFloat((raw + biasAmount).toFixed(2));
+  const final = parseFloat(roundToGranularity(biased).toFixed(2));
+  return { raw, biased, final, biasOn };
+}
 
 const MANDATORY = ['contentUrl', 'gamTag', 'prebidCacheUrl'];
 function validate() {
@@ -1281,7 +1298,7 @@ async function runSandbox() {
     const math = applyBias(winner.cpm);
     kv('Winner', `${winner.meta.label || winner.bidder}  ($${winner.cpm.toFixed(2)})`);
     kv('Raw winning CPM', `$${math.raw.toFixed(2)}`);
-    kv('Floor bias applied', '+$0.05');
+    kv('Floor bias applied', math.biasOn ? '+$0.05' : '(disabled — toggle off)');
     kv('After bias', `$${math.biased.toFixed(2)}`);
     kv('Bucket granularity', '$0.10 (custom)');
     kv('Final hb_pb value', `$${math.final.toFixed(2)}`, true);
@@ -1461,6 +1478,21 @@ async function runSandbox() {
 }
 $('runBtn').addEventListener('click', runSandbox);
 $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard').style.display = 'none'; clearStatus(); });
+
+// Sandbox-side Strategic Bias toggle: flips the 'on' class + updates its
+// label. The actual bias math reads the toggle inside applyBias() so the
+// next "Run Auction" reflects the current state with no extra plumbing.
+(function wireSandboxBiasToggle() {
+  const tgl = $('sandboxBiasToggle');
+  if (!tgl) return;
+  const lbl = $('sandboxBiasStateLabel');
+  function sync() {
+    const on = tgl.classList.contains('on');
+    if (lbl) lbl.textContent = on ? 'On (+$0.05)' : 'Off (raw bucketed CPM)';
+  }
+  tgl.addEventListener('click', () => { tgl.classList.toggle('on'); sync(); });
+  sync();
+})();
 
 /* ─────────────────────────────────────────────
    SHARED bidder picker + catalog
