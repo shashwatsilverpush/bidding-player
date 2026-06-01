@@ -702,6 +702,12 @@
       line-height: 1.5;
       margin: 4px 0 14px;
     }
+    /* Sandbox uses the same .bidder-cards grid as Production but lives in a
+       plain .card (no .bidder-picker-wrap shell). These rules give the inner
+       hint + grid the same breathing room without doubling up on borders. */
+    .sandbox-bidder-body { padding: 14px 16px 16px; }
+    .sandbox-bidder-hint { margin: 0 0 14px; font-size: 11.5px; color: var(--text-muted); line-height: 1.55; }
+    .sandbox-bidder-body .bidder-cards { grid-column: auto; }
     .bidder-picker-hint code {
       background: var(--bg);
       padding: 1px 6px;
@@ -850,6 +856,14 @@
   </header>
 
   <div class="card">
+    <div class="card-header"><div class="dot"></div>Bidders Under Test <span style="margin-left:auto;font-size:11px;color:var(--text-dim);font-weight:400;letter-spacing:0;text-transform:none;">v2 multi-bidder · 5 SSPs</span></div>
+    <div class="sandbox-bidder-body">
+      <p class="sandbox-bidder-hint">Tick the SSPs to include in this auction. Each ticked bidder gets a synthetic bid request in phase 3; the highest mock CPM wins phases 4–7. Limelight is on by default.</p>
+      <div id="sandboxBidderCards" class="bidder-cards"></div>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-header"><div class="dot"></div>Auction Configuration</div>
     <table>
       <thead><tr><th>Field</th><th>Value</th></tr></thead>
@@ -857,9 +871,6 @@
         <tr><td class="label-cell">Content URL <span class="req">*</span></td><td class="input-cell"><input type="text" id="contentUrl" value="https://vjs.zencdn.net/v/oceans.mp4" /></td></tr>
         <tr><td class="label-cell">GAM Base Tag <span class="req">*</span></td><td class="input-cell"><textarea id="gamTag">https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator=</textarea></td></tr>
         <tr><td class="label-cell">Prebid Timeout</td><td class="input-cell"><input type="number" id="prebidTimeout" value="1200" /></td></tr>
-        <tr><td class="label-cell">Limelight Host <span class="req">*</span></td><td class="input-cell"><input type="text" id="lmltHost" value="ads-jbi003.rtba.bidsxchange.com" /></td></tr>
-        <tr><td class="label-cell">Limelight Publisher ID <span class="req">*</span></td><td class="input-cell"><input type="text" id="lmltPubId" value="649658371" /></td></tr>
-        <tr><td class="label-cell">Limelight Ad Unit ID <span class="req">*</span></td><td class="input-cell"><input type="number" id="lmltAdUnitId" value="972556929" /></td></tr>
         <tr><td class="label-cell">Prebid Cache URL <span class="req">*</span></td><td class="input-cell"><input type="text" id="prebidCacheUrl" value="https://prebid.adnxs.com/pbc/v1/cache" /></td></tr>
         <tr><td class="label-cell">Mock Bid CPM</td><td class="input-cell"><input type="number" id="mockCpm" value="2.5" step="0.01" /></td></tr>
       </tbody>
@@ -1139,8 +1150,20 @@ function buildCustomGranularity() { const buckets = []; for (let i = 0; i <= 30;
 function roundToGranularity(cpm) { return Math.floor(cpm / 0.10) * 0.10; }
 function applyBias(cpm) { const raw = parseFloat(cpm); const biased = parseFloat((raw + 0.05).toFixed(2)); const final = parseFloat(roundToGranularity(biased).toFixed(2)); return { raw, biased, final }; }
 
-const MANDATORY = ['contentUrl', 'gamTag', 'lmltHost', 'lmltPubId', 'lmltAdUnitId', 'prebidCacheUrl'];
-function validate() { let ok = true; MANDATORY.forEach(id => { const el = $(id); if (!el.value.trim()) { el.classList.add('error'); ok = false; } else { el.classList.remove('error'); } }); return ok; }
+const MANDATORY = ['contentUrl', 'gamTag', 'prebidCacheUrl'];
+function validate() {
+  let ok = true, msg = '';
+  MANDATORY.forEach(id => {
+    const el = $(id);
+    if (!el.value.trim()) { el.classList.add('error'); ok = false; if (!msg) msg = 'Fill in required options.'; }
+    else { el.classList.remove('error'); }
+  });
+  // Sandbox bidder picker: at least one ticked + all required params valid.
+  const picker = readBidders('#sandboxBidderCards', 'sb_');
+  if (!picker.bidders.length && !picker.errors.length) { ok = false; if (!msg) msg = 'Tick at least one bidder.'; }
+  else if (picker.errors.length) { ok = false; if (!msg) msg = picker.errors[0]; }
+  return { ok, msg, picker };
+}
 MANDATORY.forEach(id => $(id).addEventListener('input', () => $(id).classList.remove('error')));
 
 let currentPlayer = null;
@@ -1150,7 +1173,8 @@ function showBidInfo(items) { $('bidInfo').innerHTML = items.map(([k,v]) => `<di
 
 async function runSandbox() {
   clearStatus();
-  if (!validate()) { setStatus('Fill in required options.', 'error'); return; }
+  const v = validate();
+  if (!v.ok) { setStatus(v.msg || 'Fill in required options.', 'error'); return; }
   $('runBtn').disabled = true; $('btnSpinner').style.display = 'block';
   setStatus('Processing test auction…', 'info');
 
@@ -1162,11 +1186,12 @@ async function runSandbox() {
   const contentUrl   = $('contentUrl').value.trim();
   const gamBaseTag   = $('gamTag').value.trim();
   const mockCpmRaw   = $('mockCpm').value.trim();
-  const lmltHost     = $('lmltHost').value.trim();
-  const lmltPubId    = $('lmltPubId').value.trim();
-  const lmltAdUnitId = $('lmltAdUnitId').value.trim();
   const prebidCache  = $('prebidCacheUrl').value.trim();
   const pbTimeout    = parseInt($('prebidTimeout').value, 10) || 1200;
+
+  // Bidder picker was already validated in validate(); read it back here.
+  const bidders = v.picker.bidders;
+  const bidderMeta = id => BIDDER_CATALOG.find(c => c.id === id) || {};
 
   const auctionId       = uuid4();
   const bidderRequestId = shortId(16);
@@ -1177,9 +1202,7 @@ async function runSandbox() {
   phase(1, 'Configuration & Validation');
   kv('Content URL', contentUrl);
   kv('GAM master ad tag', gamBaseTag.length > 90 ? gamBaseTag.substring(0, 90) + '…' : gamBaseTag);
-  kv('Limelight host', lmltHost);
-  kv('Publisher ID', lmltPubId);
-  kv('Ad Unit ID', lmltAdUnitId);
+  kv('Bidders under test', bidders.map(b => b.bidder).join(', '));
   kv('Prebid cache', prebidCache);
   kv('Bidder timeout', `${pbTimeout} ms`);
   kv('Mock CPM input', mockCpmRaw === '' ? '(empty — will simulate no-bid)' : `$${mockCpmRaw}`, true);
@@ -1189,58 +1212,87 @@ async function runSandbox() {
   kv('Auction ID', auctionId);
   kv('Ad unit code', adUnitCode);
   kv('Ad unit UUID', adUnitUuid);
-  kv('Registered bidders', 'limelightDigital');
+  kv('Registered bidders', bidders.map(b => b.bidder).join(', '));
+  kv('Adapter modules',    bidders.map(b => bidderMeta(b.bidder).module || b.bidder).join(', '));
   kv('Media type', 'video.instream');
   kv('Bidder request ID', bidderRequestId, true);
 
-  // ─── PHASE 3 — ORTB bid request (synthetic) ───────────────────────
-  phase(3, 'OpenRTB Bid Request → ' + lmltHost);
+  // ─── PHASE 3 — ORTB bid requests, one per ticked bidder ───────────
+  // Limelight has a real RTBHb host; other adapters proxy through Prebid
+  // and don't expose a single endpoint at the tag level, so we just label
+  // them as adapter-managed in the sandbox telemetry.
   const playerW = $('videoContainer').offsetWidth  || 640;
   const playerH = $('videoContainer').offsetHeight || 360;
-  kv('Method · endpoint', `POST https://${lmltHost}/ortbhb`);
-  kv('imp[0].id', shortId(12));
-  kv('imp[0].video.w × h', `${playerW} × ${playerH}`);
-  kv('imp[0].video.mimes', 'video/mp4, application/x-mpegURL');
-  kv('imp[0].video.protocols', '[1,2,3,4,5,6]   (VAST 1.0–4.0 + wrapped)');
-  kv('imp[0].video.playbackmethod', '[2]   (autoplay sound off)');
-  kv('imp[0].ext.bidder.publisherId', lmltPubId);
-  kv('imp[0].ext.bidder.adUnitId', lmltAdUnitId);
-  kv('site.domain', location.hostname);
-  kv('site.page', location.href.length > 70 ? location.href.substring(0, 70) + '…' : location.href);
-  kv('tmax', `${pbTimeout} ms`, true);
+  phase(3, `OpenRTB Bid Requests (${bidders.length} bidder${bidders.length === 1 ? '' : 's'})`);
+  bidders.forEach((b, i) => {
+    const meta = bidderMeta(b.bidder);
+    const endpoint = b.bidder === 'limelightDigital' && b.params.host
+      ? `POST https://${b.params.host}/ortbhb`
+      : `(managed by Prebid adapter: ${meta.module || b.bidder})`;
+    subhead(`▸ ${meta.label || b.bidder}  (${b.bidder})`);
+    kv('Method · endpoint', endpoint);
+    kv('imp[0].id', shortId(12));
+    kv('imp[0].video.w × h', `${playerW} × ${playerH}`);
+    kv('imp[0].video.mimes', 'video/mp4, application/x-mpegURL');
+    kv('imp[0].video.protocols', '[1,2,3,4,5,6]   (VAST 1.0–4.0 + wrapped)');
+    kv('imp[0].video.playbackmethod', '[2]   (autoplay sound off)');
+    Object.entries(b.params).forEach(([k, val]) => {
+      kv(`imp[0].ext.bidder.${k}`, String(val));
+    });
+    kv('site.domain', location.hostname);
+    kv('site.page', location.href.length > 70 ? location.href.substring(0, 70) + '…' : location.href);
+    kv('tmax', `${pbTimeout} ms`, i === bidders.length - 1);
+  });
 
   // Small delay to make the visual flow legible.
   await new Promise(r => setTimeout(r, 80));
 
-  // ─── PHASE 4 — Bid response (synthetic) ───────────────────────────
+  // ─── PHASE 4 — Bid responses ──────────────────────────────────────
+  // Per-bidder mock CPMs: first ticked bidder (catalog order) gets the
+  // headline mockCpm; each subsequent bidder bids $0.20 less. Predictable
+  // + pedagogical — the auction always picks a clear winner.
   let bid;
   if (mockCpmRaw !== '') {
-    const math = applyBias(mockCpmRaw);
-    const cacheUuid = uuid4();
-    const creativeId = shortId(10);
-    const bidId = shortId(16);
-    phase(4, 'Bid Response (1 bid received)');
-    kv('bidder', 'mock-bid-injector  (sandbox-only; real builds use limelightDigital)');
-    kv('seatbid[0].bid[0].id', bidId);
-    kv('seatbid[0].bid[0].impid', shortId(12));
-    kv('seatbid[0].bid[0].crid', creativeId);
-    kv('seatbid[0].bid[0].price', `$${math.raw.toFixed(2)} USD`);
-    kv('seatbid[0].bid[0].w × h', `${playerW} × ${playerH}`);
-    kv('seatbid[0].bid[0].adm', '<VAST version="3.0">…</VAST>   (cached)');
-    kv('cache UUID (prebid-cache)', cacheUuid);
-    kv('Bid status', '✓ valid', true);
+    const headlineCpm = parseFloat(mockCpmRaw);
+    const bidLevels = bidders.map((b, i) => ({
+      ...b,
+      meta: bidderMeta(b.bidder),
+      cpm: Math.max(0.01, +(headlineCpm - i * 0.20).toFixed(2)),
+      cacheUuid: uuid4(),
+      creativeId: shortId(10),
+      bidId: shortId(16),
+    }));
+    phase(4, `Bid Responses (${bidLevels.length} bid${bidLevels.length === 1 ? '' : 's'} received)`);
+    bidLevels.forEach(bl => {
+      subhead(`▸ ${bl.meta.label || bl.bidder}  ($${bl.cpm.toFixed(2)})`);
+      kv('seatbid[0].bid[0].id', bl.bidId);
+      kv('seatbid[0].bid[0].impid', shortId(12));
+      kv('seatbid[0].bid[0].crid', bl.creativeId);
+      kv('seatbid[0].bid[0].price', `$${bl.cpm.toFixed(2)} USD`);
+      kv('seatbid[0].bid[0].w × h', `${playerW} × ${playerH}`);
+      kv('seatbid[0].bid[0].adm', '<VAST version="3.0">…</VAST>   (cached)');
+      kv('cache UUID (prebid-cache)', bl.cacheUuid);
+    });
+
+    // Highest CPM wins (ties broken by tick order — first in catalog wins).
+    const winner = bidLevels.reduce((a, c) => c.cpm > a.cpm ? c : a);
 
     phase(5, 'Price Bucketing & Bias');
-    kv('Raw CPM', `$${math.raw.toFixed(2)}`);
+    const math = applyBias(winner.cpm);
+    kv('Winner', `${winner.meta.label || winner.bidder}  ($${winner.cpm.toFixed(2)})`);
+    kv('Raw winning CPM', `$${math.raw.toFixed(2)}`);
     kv('Floor bias applied', '+$0.05');
     kv('After bias', `$${math.biased.toFixed(2)}`);
     kv('Bucket granularity', '$0.10 (custom)');
     kv('Final hb_pb value', `$${math.final.toFixed(2)}`, true);
-    bid = { cpm: math.final, bidder: 'mock-bid-injector', cacheUuid, creativeId, bidId, isMock: true };
+    bid = { cpm: math.final, bidder: winner.bidder, cacheUuid: winner.cacheUuid, creativeId: winner.creativeId, bidId: winner.bidId, isMock: true };
   } else {
-    phase(4, 'Bid Response');
-    kv('bidder', 'mock-bid-injector');
-    kv('seatbid', '[]   (no bid)');
+    phase(4, 'Bid Responses');
+    bidders.forEach(b => {
+      const meta = bidderMeta(b.bidder);
+      subhead(`▸ ${meta.label || b.bidder}`);
+      kv('seatbid', '[]   (no bid)');
+    });
     kv('Reason', 'mock CPM field empty — simulating no-demand fallback', true);
     bid = { cpm: 0, bidder: 'none', cacheUuid: null, isMock: true };
   }
@@ -1411,143 +1463,166 @@ $('runBtn').addEventListener('click', runSandbox);
 $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard').style.display = 'none'; clearStatus(); });
 
 /* ─────────────────────────────────────────────
+   SHARED bidder picker + catalog
+   Hoisted out of the Production IIFE so the Sandbox tab can render its own
+   picker against the same catalog. Both pickers share the card UI; they
+   differ only in root element ID, input ID prefix, and an optional
+   onChange callback (the Sandbox uses onChange to refresh the LIVE badge).
+───────────────────────────────────────────── */
+const BIDDER_CATALOG = [
+  {
+    id: 'limelightDigital',
+    label: 'Limelight Digital',
+    module: 'limelightDigitalBidAdapter',
+    defaultOn: true,
+    params: [
+      { key: 'host',        label: 'Host',         default: 'ads-jbi003.rtba.bidsxchange.com', required: true },
+      { key: 'publisherId', label: 'Publisher ID', default: '649658371',  required: true },
+      { key: 'adUnitId',    label: 'Ad Unit ID',   default: '972556929',  required: true, type: 'number' },
+      { key: 'adUnitType',  label: '',             default: 'video',      hidden: true },
+    ],
+  },
+  {
+    id: 'appnexus',
+    label: 'AppNexus / Xandr',
+    module: 'appnexusBidAdapter',
+    params: [
+      { key: 'placementId', label: 'Placement ID', default: '', required: true, type: 'number' },
+    ],
+  },
+  {
+    id: 'rubicon',
+    label: 'Magnite (Rubicon)',
+    module: 'rubiconBidAdapter',
+    params: [
+      { key: 'accountId', label: 'Account ID', default: '', required: true, type: 'number' },
+      { key: 'siteId',    label: 'Site ID',    default: '', required: true, type: 'number' },
+      { key: 'zoneId',    label: 'Zone ID',    default: '', required: true, type: 'number' },
+    ],
+  },
+  {
+    id: 'pubmatic',
+    label: 'PubMatic',
+    module: 'pubmaticBidAdapter',
+    params: [
+      { key: 'publisherId', label: 'Publisher ID', default: '', required: true },
+      { key: 'adSlot',      label: 'Ad Slot',      default: '', required: true },
+    ],
+  },
+  {
+    id: 'openx',
+    label: 'OpenX',
+    module: 'openxBidAdapter',
+    params: [
+      { key: 'unit',      label: 'Ad Unit ID',      default: '', required: true },
+      { key: 'delDomain', label: 'Delivery Domain', default: '', required: true },
+    ],
+  },
+];
+
+/* Render bidder cards into a given root with a given input-id prefix.
+   Same catalog drives both pickers; root + prefix + onChange are the only
+   things that vary between Sandbox and Production. */
+function renderBidderPicker(rootId, inputPrefix, onChange) {
+  const root = document.getElementById(rootId);
+  if (!root) return;
+  root.innerHTML = BIDDER_CATALOG.map(b => {
+    const checkedCls = b.defaultOn ? ' checked' : '';
+    const paramsHtml = b.params.filter(p => !p.hidden).map(p => {
+      const inputId = inputPrefix + b.id + '_' + p.key;
+      return `
+        <div class="bidder-param">
+          <label for="${inputId}">${p.label}${p.required ? ' <span style="color:var(--danger);">*</span>' : ''}</label>
+          <input type="${p.type === 'number' ? 'text' : 'text'}"
+                 id="${inputId}"
+                 data-bidder="${b.id}"
+                 data-param-key="${p.key}"
+                 data-param-type="${p.type || 'string'}"
+                 data-required="${p.required ? 'true' : 'false'}"
+                 value="${p.default || ''}"
+                 placeholder="${p.label}" />
+        </div>`;
+    }).join('');
+    return `
+      <div class="bidder-card${checkedCls}" data-bidder-id="${b.id}">
+        <div class="bidder-card-head" data-toggle-bidder="${b.id}">
+          <div class="bidder-checkbox"></div>
+          <div class="bidder-card-name">${b.label}</div>
+          <div class="bidder-card-module">${b.module}</div>
+        </div>
+        <div class="bidder-card-body">${paramsHtml}</div>
+      </div>`;
+  }).join('');
+
+  root.querySelectorAll('[data-toggle-bidder]').forEach(head => {
+    head.addEventListener('click', () => {
+      head.closest('.bidder-card').classList.toggle('checked');
+      if (typeof onChange === 'function') onChange();
+    });
+  });
+}
+
+/* Read picker state → array of Prebid bid objects. Validates required params,
+   adds .invalid class to bad inputs, returns { bidders, errors }. */
+function readBidders(rootSel, inputPrefix) {
+  const result = [];
+  const errors = [];
+  document.querySelectorAll(rootSel + ' .bidder-card.checked').forEach(card => {
+    const bidderId = card.dataset.bidderId;
+    const meta = BIDDER_CATALOG.find(b => b.id === bidderId);
+    if (!meta) return;
+    const params = {};
+    let cardOk = true;
+    meta.params.forEach(p => {
+      if (p.hidden) { params[p.key] = p.default; return; }
+      const input = document.getElementById(inputPrefix + bidderId + '_' + p.key);
+      if (!input) return;
+      input.classList.remove('invalid');
+      const raw = input.value.trim();
+      if (!raw) {
+        if (p.required) { input.classList.add('invalid'); errors.push(`${meta.label}: ${p.label} is required`); cardOk = false; }
+        return;
+      }
+      if (p.type === 'number') {
+        const n = Number(raw);
+        if (!Number.isFinite(n)) { input.classList.add('invalid'); errors.push(`${meta.label}: ${p.label} must be numeric`); cardOk = false; return; }
+        params[p.key] = n;
+      } else {
+        params[p.key] = raw;
+      }
+    });
+    card.classList.toggle('invalid', !cardOk);
+    if (cardOk) result.push({ bidder: bidderId, params });
+  });
+  return { bidders: result, errors };
+}
+
+/* Sandbox-only: render the picker into #sandboxBidderCards with sb_ inputs
+   and keep the header LIVE badge in sync with the ticked set. */
+function updateSandboxBadge() {
+  const labels = [...document.querySelectorAll('#sandboxBidderCards .bidder-card.checked')]
+    .map(card => (BIDDER_CATALOG.find(b => b.id === card.dataset.bidderId) || {}).label)
+    .filter(Boolean);
+  const badge = document.querySelector('.live-badge');
+  if (!badge) return;
+  badge.innerHTML = '<span class="pulse"></span>Bidders: ' + (labels.length ? labels.join(', ') : '(none)') + ' (LIVE)';
+}
+renderBidderPicker('sandboxBidderCards', 'sb_', updateSandboxBadge);
+updateSandboxBadge();
+
+/* ─────────────────────────────────────────────
    Tab 2 Generation Compiler Core Systems
 ───────────────────────────────────────────── */
 (function adopsModule() {
   const get = id => document.getElementById(id).value.trim();
   function escJs(str) { return String(str || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/<\//g, '<\\/'); }
 
-  /* ─── Bidder catalog ──────────────────────────────────────────────
-     Every entry here is a Prebid bidder code + the param schema it expects.
-     Editing this list is the way to onboard a new SSP — adding/removing a
-     bidder here does NOT change the engine, only what shows up in the picker.
-     The `module` field is the Prebid adapter name used by the CI build
-     workflow (`build-prebid-bundle.yml`) when assembling the bundle.       */
-  const BIDDER_CATALOG = [
-    {
-      id: 'limelightDigital',
-      label: 'Limelight Digital',
-      module: 'limelightDigitalBidAdapter',
-      defaultOn: true,
-      params: [
-        { key: 'host',        label: 'Host',         default: 'ads-jbi003.rtba.bidsxchange.com', required: true },
-        { key: 'publisherId', label: 'Publisher ID', default: '649658371',  required: true },
-        { key: 'adUnitId',    label: 'Ad Unit ID',   default: '972556929',  required: true, type: 'number' },
-        { key: 'adUnitType',  label: '',             default: 'video',      hidden: true },
-      ],
-    },
-    {
-      id: 'appnexus',
-      label: 'AppNexus / Xandr',
-      module: 'appnexusBidAdapter',
-      params: [
-        { key: 'placementId', label: 'Placement ID', default: '', required: true, type: 'number' },
-      ],
-    },
-    {
-      id: 'rubicon',
-      label: 'Magnite (Rubicon)',
-      module: 'rubiconBidAdapter',
-      params: [
-        { key: 'accountId', label: 'Account ID', default: '', required: true, type: 'number' },
-        { key: 'siteId',    label: 'Site ID',    default: '', required: true, type: 'number' },
-        { key: 'zoneId',    label: 'Zone ID',    default: '', required: true, type: 'number' },
-      ],
-    },
-    {
-      id: 'pubmatic',
-      label: 'PubMatic',
-      module: 'pubmaticBidAdapter',
-      params: [
-        { key: 'publisherId', label: 'Publisher ID', default: '', required: true },
-        { key: 'adSlot',      label: 'Ad Slot',      default: '', required: true },
-      ],
-    },
-    {
-      id: 'openx',
-      label: 'OpenX',
-      module: 'openxBidAdapter',
-      params: [
-        { key: 'unit',      label: 'Ad Unit ID',      default: '', required: true },
-        { key: 'delDomain', label: 'Delivery Domain', default: '', required: true },
-      ],
-    },
-  ];
-
-  /* Render the picker cards into #bidderCards */
-  function renderBidderPicker() {
-    const root = document.getElementById('bidderCards');
-    root.innerHTML = BIDDER_CATALOG.map(b => {
-      const checkedCls = b.defaultOn ? ' checked' : '';
-      const paramsHtml = b.params.filter(p => !p.hidden).map(p => {
-        const inputId = 'bp_' + b.id + '_' + p.key;
-        return `
-          <div class="bidder-param">
-            <label for="${inputId}">${p.label}${p.required ? ' <span style="color:var(--danger);">*</span>' : ''}</label>
-            <input type="${p.type === 'number' ? 'text' : 'text'}"
-                   id="${inputId}"
-                   data-bidder="${b.id}"
-                   data-param-key="${p.key}"
-                   data-param-type="${p.type || 'string'}"
-                   data-required="${p.required ? 'true' : 'false'}"
-                   value="${p.default || ''}"
-                   placeholder="${p.label}" />
-          </div>`;
-      }).join('');
-      return `
-        <div class="bidder-card${checkedCls}" data-bidder-id="${b.id}">
-          <div class="bidder-card-head" data-toggle-bidder="${b.id}">
-            <div class="bidder-checkbox"></div>
-            <div class="bidder-card-name">${b.label}</div>
-            <div class="bidder-card-module">${b.module}</div>
-          </div>
-          <div class="bidder-card-body">${paramsHtml}</div>
-        </div>`;
-    }).join('');
-
-    root.querySelectorAll('[data-toggle-bidder]').forEach(head => {
-      head.addEventListener('click', () => {
-        head.closest('.bidder-card').classList.toggle('checked');
-      });
-    });
-  }
-
-  /* Read picker state → array of Prebid bid objects */
-  function readBidders() {
-    const result = [];
-    const errors = [];
-    document.querySelectorAll('#bidderCards .bidder-card.checked').forEach(card => {
-      const bidderId = card.dataset.bidderId;
-      const meta = BIDDER_CATALOG.find(b => b.id === bidderId);
-      if (!meta) return;
-      const params = {};
-      let cardOk = true;
-      meta.params.forEach(p => {
-        if (p.hidden) { params[p.key] = p.default; return; }
-        const input = document.getElementById('bp_' + bidderId + '_' + p.key);
-        if (!input) return;
-        input.classList.remove('invalid');
-        const raw = input.value.trim();
-        if (!raw) {
-          if (p.required) { input.classList.add('invalid'); errors.push(`${meta.label}: ${p.label} is required`); cardOk = false; }
-          return;
-        }
-        if (p.type === 'number') {
-          const n = Number(raw);
-          if (!Number.isFinite(n)) { input.classList.add('invalid'); errors.push(`${meta.label}: ${p.label} must be numeric`); cardOk = false; return; }
-          params[p.key] = n;
-        } else {
-          params[p.key] = raw;
-        }
-      });
-      card.classList.toggle('invalid', !cardOk);
-      if (cardOk) result.push({ bidder: bidderId, params });
-    });
-    return { bidders: result, errors };
-  }
+  // Bidder catalog + picker helpers live at script scope above (see the
+  // "SHARED bidder picker + catalog" block); the IIFE references them via
+  // closure.
 
   function getSettings() {
-    const picker = readBidders();
+    const picker = readBidders('#bidderCards', 'bp_');
     let biddersError = '';
     if (!picker.bidders.length && !picker.errors.length) {
       biddersError = 'Tick at least one bidder.';
@@ -1693,7 +1768,7 @@ $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard')
   $('tglBias').addEventListener('click', () => { $('tglBias').classList.toggle('on'); syncBiasUI(); });
   syncBiasUI();
 
-  renderBidderPicker();
+  renderBidderPicker('bidderCards', 'bp_');
 })();
 
 (function tabNav() {
