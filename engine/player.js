@@ -41,6 +41,10 @@
     // the slot stays collapsed until it scrolls ≥50% into view, autoplays
     // muted, then collapses again on completion or error.
     placement:   (currentScript.getAttribute("data-placement") || "instream").toLowerCase(),
+    // Sticky / floating-video: when the instream player scrolls out of view it
+    // shrinks and docks to a screen corner (with a close button) so the video —
+    // and any ad on it — keeps playing. Lifts viewability and completed views.
+    sticky:      currentScript.getAttribute("data-sticky") === "true",
     videoUrl:    currentScript.getAttribute("data-video") || "",
     autoplay:    currentScript.getAttribute("data-autoplay") === "true",
     muted:       currentScript.getAttribute("data-muted") === "true",
@@ -234,9 +238,13 @@
         }, false);
         loader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, function (e) {
           var mgr = e.getAdsManager(videoEl);
+          // Expose the manager so the sticky/floating logic can call mgr.resize()
+          // and reflow the live ad creative when the player docks/undocks.
+          container.__atpMgr = mgr;
           mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function () {
             adContainer.style.zIndex = "-1";
             adContainer.style.pointerEvents = "none";
+            container.__atpMgr = null;
             try { mgr.destroy(); } catch (_) {}
             player.play().catch(function(){});
           });
@@ -253,6 +261,7 @@
           mgr.addEventListener(google.ima.AdEvent.Type.ALL_ADS_COMPLETED, function () {
             adContainer.style.zIndex = "-1";
             adContainer.style.pointerEvents = "none";
+            container.__atpMgr = null;
             try { mgr.destroy(); } catch (_) {}
           });
           var w = container.offsetWidth || 640, h = container.offsetHeight || 360;
@@ -370,10 +379,89 @@
     } catch (e) { warn("outstream IMA setup: " + e.message); collapse(); }
   }
 
+  // Sticky / floating video. Wraps the instream mount so the wrapper holds the
+  // original layout space, then pins the mount to a screen corner whenever the
+  // wrapper scrolls out of the viewport. The video keeps playing while docked,
+  // so the ad stays viewable. A close (×) button lets the user dismiss it.
+  function setupSticky() {
+    if (!cfg.sticky || isOutstream()) return;
+    if (typeof IntersectionObserver !== "function") return;
+    var container = document.getElementById(cfg.divId);
+    if (!container || container.parentNode.getAttribute("data-atp-sticky") === "1") return;
+
+    // Wrap the mount so the wrapper reserves the in-flow space when we dock.
+    var wrapper = document.createElement("div");
+    wrapper.setAttribute("data-atp-sticky", "1");
+    container.parentNode.insertBefore(wrapper, container);
+    wrapper.appendChild(container);
+
+    var closeBtn = document.createElement("button");
+    closeBtn.setAttribute("aria-label", "Close floating video");
+    closeBtn.innerHTML = "&times;";
+    // z-index sits above the IMA ad overlay (which uses z-index:10 while playing)
+    // so the close control stays clickable over a running ad creative.
+    closeBtn.style.cssText = "position:absolute;top:6px;right:6px;width:26px;height:26px;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;font-size:18px;line-height:1;cursor:pointer;z-index:2147483647;display:none;align-items:center;justify-content:center;";
+
+    // Tell IMA to reflow the live ad creative to the current mount size, so the
+    // ad shrinks with the player on dock and grows back on undock instead of
+    // overflowing the smaller floating frame.
+    function resizeAd() {
+      var mgr = container.__atpMgr;
+      if (!mgr || !window.google || !google.ima) return;
+      try { mgr.resize(container.offsetWidth, container.offsetHeight, google.ima.ViewMode.NORMAL); } catch (_) {}
+    }
+
+    var stuck = false, dismissed = false, prevCss = "";
+    function dock() {
+      if (stuck || dismissed) return;
+      var h = container.offsetHeight;
+      if (!h) return;
+      wrapper.style.height = h + "px";
+      prevCss = container.style.cssText;
+      container.style.cssText = prevCss +
+        ";position:fixed;bottom:20px;right:20px;width:340px;max-width:42vw;height:auto;aspect-ratio:16/9;margin:0;z-index:2147483000;box-shadow:0 8px 30px rgba(0,0,0,.5);border-radius:8px;overflow:hidden;";
+      closeBtn.style.display = "flex";
+      stuck = true;
+      resizeAd();
+    }
+    function undock() {
+      if (!stuck) return;
+      container.style.cssText = prevCss;
+      wrapper.style.height = "";
+      closeBtn.style.display = "none";
+      stuck = false;
+      resizeAd();
+    }
+
+    container.appendChild(closeBtn);
+    closeBtn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      dismissed = true;
+      undock();
+      io.disconnect();
+      try { var v = document.getElementById(cfg.divId + "_video"); if (v) v.pause(); } catch (_) {}
+    });
+
+    var io = new IntersectionObserver(function (entries) {
+      var e = entries[0];
+      if (dismissed) return;
+      // Dock once the player has scrolled up and out of the viewport; undock as
+      // soon as any part of its in-flow slot is visible again.
+      if (!e.isIntersecting && e.boundingClientRect.top < 0) dock();
+      else if (e.isIntersecting) undock();
+    }, { threshold: 0 });
+    io.observe(wrapper);
+    step("6.5", "Sticky player armed — will float on scroll-out.");
+  }
+
   // Dispatch the resolved ad tag to the correct renderer for this placement.
   function render(finalTagUrl) {
-    if (isOutstream()) setupOutstream(finalTagUrl);
-    else setupPlayer(finalTagUrl);
+    if (isOutstream()) {
+      setupOutstream(finalTagUrl);
+    } else {
+      setupPlayer(finalTagUrl);
+      setupSticky();
+    }
   }
 
   function runAuction() {

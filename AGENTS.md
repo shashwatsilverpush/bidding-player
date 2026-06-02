@@ -22,7 +22,7 @@ The dashboard (`index.html`) lets AdOps generate production tags, run sandbox si
 
 ## 2. Current Version
 
-**VERSION:** `2.3.0`  
+**VERSION:** `2.4.0`  
 All `@vX.Y.Z` CDN references in `index.html` and `demo/publisher-test.html` **must** match this value.
 The `version-check.yml` CI workflow enforces this — it will fail the build if they drift.
 
@@ -75,6 +75,7 @@ To release a new version:
 | `data-floor-max` | none | Cap the winning CPM at this value before bias + bucketing. Disabled when absent/non-numeric |
 | `data-placement` | `instream` | `instream` plays the ad against content video via IMA pause/resume. `outstream` has no content video — slot stays collapsed until ≥50% in view, autoplays muted, collapses on completion/error |
 | `data-video` | required (instream only) | MP4 content video URL. Ignored/omitted for outstream |
+| `data-sticky` | `false` | Instream only. `true` makes the player float to the bottom-right corner when it scrolls out of view (keeps playing, ✕ to dismiss) and reflows the live IMA ad via `adsManager.resize()`. Ignored for outstream |
 | `data-prebid-url` | required | jsDelivr URL to the Prebid.js bundle |
 | `data-autoplay` | `true` | Autoplay the content video |
 | `data-muted` | `true` | Mute on load |
@@ -238,7 +239,11 @@ Final log line: `Final hb_pb value: $X.XX`
 
 ## 10. Release History
 
-### v2.3.0 (current)
+### v2.4.0 (current)
+- **Sticky / floating instream player** — `data-sticky="true"`. New `setupSticky()` in the engine wraps the instream mount in a flow-holding wrapper and uses an `IntersectionObserver` to pin the player `position:fixed` to the bottom-right corner when it scrolls out of view, restoring it inline on scroll-back. The wrapper reserves the original layout space (no jump). A ✕ button dismisses + pauses. The live IMA ad creative is reflowed to the docked size via `adsManager.resize()` (manager exposed as `container.__atpMgr`). Instream only — outstream already auto-collapses.
+- **Dashboard toggle** — "Sticky / Floating Player" in Player Behaviour (defaults off); emits `data-sticky="true"` only when on and placement is instream.
+
+### v2.3.0
 - **Outstream video support** — `data-placement="outstream"`. New `setupOutstream()` renderer in the engine: the mount starts collapsed (`height:0`), an `IntersectionObserver` (≥50% threshold) holds the ad until the slot scrolls into view, then `adsManager.start()` fires (muted autoplay). The slot expands to 16:9 on `CONTENT_PAUSE_REQUESTED` and collapses again on `ALL_ADS_COMPLETED`/`AD_ERROR`. No content video required.
 - **Engine render dispatch** — all auction render paths now go through `render()`, which routes to `setupOutstream()` or the existing `setupPlayer()` by `cfg.placement`. The Prebid adUnit `mediaTypes.video.context` is now `cfg.placement` (was hard-coded `"instream"`).
 - **Dashboard placement selector** — Production tag generator gained a Placement dropdown (instream/outstream) in Ad Serving. Selecting outstream dims/disables the Video Content URL field and the generated tag emits `data-placement="outstream"` with `data-video` omitted.
@@ -274,9 +279,9 @@ Final log line: `Final hb_pb value: $X.XX`
 
 ## 11. Planned / Future Features
 
-Priority order as of v2.3.0:
+Priority order as of v2.4.0:
 
-> **Shipped:** Floor price controls + GAM Key-Value reference (v2.2.0); Outstream video support (v2.3.0).
+> **Shipped:** Floor price controls + GAM Key-Value reference (v2.2.0); Outstream video support (v2.3.0); Sticky / floating instream player (v2.4.0).
 
 ### Near-term (next sprint)
 | # | Feature | Why |
@@ -344,4 +349,4 @@ The bundle is built via GitHub Actions (`build-prebid-bundle.yml`, manual dispat
 
 ---
 
-*Last updated: v2.3.0 — 2026-06-02*
+*Last updated: v2.4.0 — 2026-06-02*
