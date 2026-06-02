@@ -31,6 +31,11 @@
     // A missing/invalid attribute still falls back to 0.10 so legacy v1 tags
     // (which never set data-bias) keep their original behaviour.
     floorBias:   (function (b) { return isNaN(b) ? 0.10 : b; })(parseFloat(currentScript.getAttribute("data-bias"))),
+    // Floor min: bids below this CPM are rejected (treated as no-bid).
+    // Floor max: winning CPM is capped at this value before bias + bucketing.
+    // Both default to null (disabled) when the attribute is absent or non-numeric.
+    floorMin:    (function (v) { return isNaN(v) ? null : v; })(parseFloat(currentScript.getAttribute("data-floor-min"))),
+    floorMax:    (function (v) { return isNaN(v) ? null : v; })(parseFloat(currentScript.getAttribute("data-floor-max"))),
     videoUrl:    currentScript.getAttribute("data-video") || "",
     autoplay:    currentScript.getAttribute("data-autoplay") === "true",
     muted:       currentScript.getAttribute("data-muted") === "true",
@@ -321,27 +326,38 @@
             try { winner = (pbjs.getHighestCpmBids(code) || [])[0]; } catch (e) { warn("getHighestCpmBids: " + e.message); }
             var finalUrl;
             if (winner) {
-              winLog(winner.bidder, winner.cpm);
-              var finalCpm = applyBias(winner.cpm);
-              step(3, "Math Engine processing. Target CPM calibrated to granular bucket bounds.");
+              // Floor min: reject the winning bid if it didn't meet the
+              // publisher's minimum acceptable price. Falls through to the
+              // house line item exactly as if no bidder responded.
+              if (cfg.floorMin !== null && winner.cpm < cfg.floorMin) {
+                noBidLog();
+                finalUrl = stitchTag(cfg.adTagUrl, noBidTargeting());
+              } else {
+                // Floor max: cap the raw CPM before bias and bucketing so
+                // a runaway high bid doesn't overshoot the highest line item.
+                var rawCpm = (cfg.floorMax !== null && winner.cpm > cfg.floorMax) ? cfg.floorMax : winner.cpm;
+                winLog(winner.bidder, rawCpm);
+                var finalCpm = applyBias(rawCpm);
+                step(3, "Math Engine processing. Target CPM calibrated to granular bucket bounds.");
 
-              // Pull the full Prebid targeting set (hb_pb, hb_bidder, hb_uuid,
-              // hb_size, hb_format, hb_adid, plus bidder-suffixed variants).
-              // hb_uuid is the cache UUID — required for GAM to resolve the
-              // winning bidder's cached VAST creative.
-              var targeting = {};
-              try { targeting = pbjs.getAdserverTargetingForAdUnitCode(code) || {}; }
-              catch (e) { warn("getAdserverTargeting: " + e.message); }
+                // Pull the full Prebid targeting set (hb_pb, hb_bidder, hb_uuid,
+                // hb_size, hb_format, hb_adid, plus bidder-suffixed variants).
+                // hb_uuid is the cache UUID — required for GAM to resolve the
+                // winning bidder's cached VAST creative.
+                var targeting = {};
+                try { targeting = pbjs.getAdserverTargetingForAdUnitCode(code) || {}; }
+                catch (e) { warn("getAdserverTargeting: " + e.message); }
 
-              // Apply our floor bias to the price bucket (and the bidder-
-              // suffixed variant if present) so GAM line items targeting
-              // hb_pb still match the adjusted bucket.
-              var cpmStr = finalCpm.toFixed(2);
-              if (targeting.hb_pb) targeting.hb_pb = cpmStr;
-              var bidderKey = "hb_pb_" + winner.bidder;
-              if (targeting[bidderKey]) targeting[bidderKey] = cpmStr;
+                // Apply our floor bias to the price bucket (and the bidder-
+                // suffixed variant if present) so GAM line items targeting
+                // hb_pb still match the adjusted bucket.
+                var cpmStr = finalCpm.toFixed(2);
+                if (targeting.hb_pb) targeting.hb_pb = cpmStr;
+                var bidderKey = "hb_pb_" + winner.bidder;
+                if (targeting[bidderKey]) targeting[bidderKey] = cpmStr;
 
-              finalUrl = stitchTag(cfg.adTagUrl, targeting);
+                finalUrl = stitchTag(cfg.adTagUrl, targeting);
+              }
             } else {
               noBidLog();
               finalUrl = stitchTag(cfg.adTagUrl, noBidTargeting());

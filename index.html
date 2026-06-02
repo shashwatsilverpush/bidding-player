@@ -839,6 +839,7 @@
 <nav class="tab-nav" role="tablist">
   <button class="tab-btn active" data-tab="sandbox"    role="tab">🎛️ Sandbox Testing Suite</button>
   <button class="tab-btn"        data-tab="production" role="tab">🚀 Production Tag Generator</button>
+  <button class="tab-btn"        data-tab="gamkeys"    role="tab">📊 GAM Key-Values</button>
   <a class="tab-btn" href="docs.html" style="text-decoration:none;flex:0 0 auto;padding-left:14px;padding-right:14px;">📖 Publisher Docs ↗</a>
   <a class="tab-btn" href="adops-guide.html" style="text-decoration:none;flex:0 0 auto;padding-left:14px;padding-right:14px;">🛠️ Ad Ops Console ↗</a>
   <a class="tab-btn" href="publisher-guide.pdf" download style="text-decoration:none;flex:0 0 auto;padding-left:14px;padding-right:14px;">📄 PDF ↓</a>
@@ -879,6 +880,20 @@
             <span id="sandboxBiasStateLabel" style="font-size:12px; color:var(--text-muted);">On (+$0.05)</span>
           </span>
         </td></tr>
+        <tr><td class="label-cell">Floor Min ($)<div class="hint">Reject bids below</div></td><td class="input-cell">
+          <span style="display:flex; align-items:center; gap:10px;">
+            <span class="toggle-switch" id="sandboxFloorMinToggle" role="switch" aria-label="Enable floor minimum in sandbox"></span>
+            <input type="number" id="sandboxFloorMin" value="0.50" step="0.01" disabled style="width:90px;" />
+            <span id="sandboxFloorMinLabel" style="font-size:12px; color:var(--text-muted);">Off</span>
+          </span>
+        </td></tr>
+        <tr><td class="label-cell">Floor Max ($)<div class="hint">Cap bids above</div></td><td class="input-cell">
+          <span style="display:flex; align-items:center; gap:10px;">
+            <span class="toggle-switch" id="sandboxFloorMaxToggle" role="switch" aria-label="Enable floor maximum in sandbox"></span>
+            <input type="number" id="sandboxFloorMax" value="30.00" step="0.01" disabled style="width:90px;" />
+            <span id="sandboxFloorMaxLabel" style="font-size:12px; color:var(--text-muted);">Off</span>
+          </span>
+        </td></tr>
       </tbody>
     </table>
   </div>
@@ -911,7 +926,7 @@
     <div class="adops-grid">
       <div class="adops-field full" data-required="true">
         <label>Release Version / Branch<span class="req-star">*</span></label>
-        <input type="text" id="adopsVersion" value="v2.1.3" />
+        <input type="text" id="adopsVersion" value="v2.2.0" />
         <span class="field-info">Use a tag like <code>v1.0.0</code> for production (immutable, recommended) or a branch name like <code>feat/foo</code> for testing. The CDN URLs in <em>Hosting &amp; CDN</em> auto-update from this value.</span>
       </div>
     </div>
@@ -942,6 +957,28 @@
         <input type="number" id="adopsFloorBias" value="0.10" step="0.01" />
         <span class="field-info">Thumb-on-the-scale amount added to the winning header-bid CPM before price-bucketing. Switch off to pass the raw bucketed CPM through unchanged (emits <code>data-bias="0.00"</code>).</span>
       </div>
+      <div class="adops-field" id="floorMinField">
+        <label class="adops-inline-label">
+          <span>Floor Min ($)</span>
+          <span class="adops-inline-toggle">
+            <span class="adops-inline-toggle-state" id="floorMinStateLabel">Off</span>
+            <span class="toggle-switch" id="tglFloorMin" role="switch" aria-label="Enable floor minimum"></span>
+          </span>
+        </label>
+        <input type="number" id="adopsFloorMin" value="0.50" step="0.01" disabled />
+        <span class="field-info">Reject bids below this CPM. Bids that don't meet the floor fall through to your house line item (emits <code>data-floor-min="X"</code>).</span>
+      </div>
+      <div class="adops-field" id="floorMaxField">
+        <label class="adops-inline-label">
+          <span>Floor Max ($)</span>
+          <span class="adops-inline-toggle">
+            <span class="adops-inline-toggle-state" id="floorMaxStateLabel">Off</span>
+            <span class="toggle-switch" id="tglFloorMax" role="switch" aria-label="Enable floor maximum"></span>
+          </span>
+        </label>
+        <input type="number" id="adopsFloorMax" value="30.00" step="0.01" disabled />
+        <span class="field-info">Cap the winning CPM at this value before bias and bucketing — prevents high bids from overshooting your highest GAM line item (emits <code>data-floor-max="X"</code>).</span>
+      </div>
     </div>
 
     <!-- ── BIDDERS ── -->
@@ -965,12 +1002,12 @@
         <div class="adops-grid">
           <div class="adops-field full" data-required="true">
             <label>Universal Hosted Engine Script URL<span class="req-star">*</span></label>
-            <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.1.3/engine/player.js" />
+            <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.2.0/engine/player.js" />
             <span class="field-info">Auto-derived from the release version above. Override only if you know what you are doing.</span>
           </div>
           <div class="adops-field full" data-required="true">
             <label>Prebid.js Hosted Library URL<span class="req-star">*</span></label>
-            <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.1.3/prebid/prebid.js" />
+            <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.2.0/prebid/prebid.js" />
             <span class="field-info">Pick the bundle from <code>prebid/</code> that contains the bidders you tick above. <a href="adops-guide.html#prebid-bundles" target="_blank" rel="noopener" style="color:var(--accent);">How to build a new bundle ↗</a></span>
           </div>
           <div class="adops-field">
@@ -1041,6 +1078,162 @@
     </div>
   </div>
 </section>
+</div>
+
+<div class="tab-pane" id="tab-gamkeys" role="tabpanel">
+  <header>
+    <div class="logo">📊</div>
+    <div>
+      <h1>GAM Key-Value Reference</h1>
+      <p>All hb_* targeting keys emitted by the Bidding Player engine</p>
+    </div>
+    <div class="badge">Send All Bids · v2.2.0+</div>
+  </header>
+
+  <!-- Standard keys -->
+  <div class="card">
+    <div class="card-header"><div class="dot"></div>Standard Keys — Emitted on Every Winning Auction</div>
+    <table>
+      <thead><tr><th>Key</th><th>Example Value</th><th>Source</th><th>GAM Line Item Use</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code style="color:var(--accent);font-family:monospace;">hb_pb</code></td>
+          <td><code style="font-family:monospace;">2.50</code></td>
+          <td style="color:var(--text-muted);font-size:13px;">Winning CPM, bucketed + biased</td>
+          <td style="font-size:13px;color:var(--text-muted);">Target price-bucket line items. One line item per $0.10 step ($0.10–$30.00).</td>
+        </tr>
+        <tr>
+          <td><code style="color:var(--accent);font-family:monospace;">hb_bidder</code></td>
+          <td><code style="font-family:monospace;">appnexus</code></td>
+          <td style="color:var(--text-muted);font-size:13px;">Winning bidder code</td>
+          <td style="font-size:13px;color:var(--text-muted);">Bidder-level reporting. Can target bidder-specific creatives.</td>
+        </tr>
+        <tr>
+          <td><code style="color:var(--accent);font-family:monospace;">hb_uuid</code></td>
+          <td><code style="font-family:monospace;">3b25cafe…</code></td>
+          <td style="color:var(--text-muted);font-size:13px;">Prebid Cache UUID</td>
+          <td style="font-size:13px;"><span style="color:var(--warning);font-weight:600;">Required</span> <span style="color:var(--text-muted);">in VAST creative: <code style="font-size:11px;">…?uuid=%%PATTERN:hb_uuid%%</code></span></td>
+        </tr>
+        <tr>
+          <td><code style="color:var(--accent);font-family:monospace;">hb_adid</code></td>
+          <td><code style="font-family:monospace;">abc123ef</code></td>
+          <td style="color:var(--text-muted);font-size:13px;">Creative ID from bid response</td>
+          <td style="font-size:13px;color:var(--text-muted);">Attribution and creative-level reporting in GAM.</td>
+        </tr>
+        <tr>
+          <td><code style="color:var(--accent);font-family:monospace;">hb_size</code></td>
+          <td><code style="font-family:monospace;">640x360</code></td>
+          <td style="color:var(--text-muted);font-size:13px;">Measured player dimensions</td>
+          <td style="font-size:13px;color:var(--text-muted);">Size-based line item targeting.</td>
+        </tr>
+        <tr>
+          <td><code style="color:var(--accent);font-family:monospace;">hb_format</code></td>
+          <td><code style="font-family:monospace;">video</code></td>
+          <td style="color:var(--text-muted);font-size:13px;">Always "video" for instream</td>
+          <td style="font-size:13px;color:var(--text-muted);">Filter video-only line items from display line items.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Per-bidder keys -->
+  <div class="card">
+    <div class="card-header"><div class="dot"></div>Per-Bidder Keys — Send All Bids (enabled since v2.2.0)</div>
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text-muted);line-height:1.6;">
+      With <code style="color:var(--accent);">enableSendAllBids: true</code>, Prebid emits a copy of five standard keys for <strong style="color:var(--text);">every bidder</strong> that returned a bid — not just the winner. This lets you build per-bidder GAM line items (e.g. target <code style="color:var(--accent);">hb_pb_appnexus = 2.50</code>) and get bidder-level revenue attribution in GAM reports without custom scripting.
+    </div>
+    <table>
+      <thead><tr><th>Key Pattern</th><th>Example (AppNexus)</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code style="color:var(--accent);font-family:monospace;">hb_pb_&lt;bidder_code&gt;</code></td>
+          <td><code style="font-family:monospace;font-size:12px;">hb_pb_appnexus = 2.50</code></td>
+          <td style="font-size:13px;color:var(--text-muted);">Price bucket for this specific bidder</td>
+        </tr>
+        <tr>
+          <td><code style="color:var(--accent);font-family:monospace;">hb_bidder_&lt;bidder_code&gt;</code></td>
+          <td><code style="font-family:monospace;font-size:12px;">hb_bidder_appnexus = appnexus</code></td>
+          <td style="font-size:13px;color:var(--text-muted);">Bidder code — useful for per-bidder creative targeting</td>
+        </tr>
+        <tr>
+          <td><code style="color:var(--accent);font-family:monospace;">hb_adid_&lt;bidder_code&gt;</code></td>
+          <td><code style="font-family:monospace;font-size:12px;">hb_adid_appnexus = abc123</code></td>
+          <td style="font-size:13px;color:var(--text-muted);">Creative ID for this bidder's ad</td>
+        </tr>
+        <tr>
+          <td><code style="color:var(--accent);font-family:monospace;">hb_size_&lt;bidder_code&gt;</code></td>
+          <td><code style="font-family:monospace;font-size:12px;">hb_size_appnexus = 640x360</code></td>
+          <td style="font-size:13px;color:var(--text-muted);">Player size from this bidder's response</td>
+        </tr>
+        <tr>
+          <td><code style="color:var(--accent);font-family:monospace;">hb_uuid_&lt;bidder_code&gt;</code></td>
+          <td><code style="font-family:monospace;font-size:12px;">hb_uuid_appnexus = 3b25…</code></td>
+          <td style="font-size:13px;color:var(--text-muted);">Prebid cache UUID for this bidder's creative</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      Active bidder codes in this bundle:
+      <span id="gamKeysBidderPills"></span>
+    </div>
+  </div>
+
+  <!-- VAST creative template -->
+  <div class="card">
+    <div class="card-header"><div class="dot"></div>VAST Creative Template</div>
+    <div style="padding:18px 20px;">
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6;">
+        Your GAM header-bidding line items need a VAST wrapper creative that resolves the winning bid's cached ad. Paste this URL into the <strong>VAST tag URL</strong> field of your GAM creative:
+      </p>
+      <div style="background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;padding:14px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <code id="vastCreativeUrl" style="font-family:monospace;font-size:13px;color:var(--text);flex:1;word-break:break-all;">https://prebid.adnxs.com/pbc/v1/cache?uuid=%%PATTERN:hb_uuid%%</code>
+        <button class="adops-btn secondary" id="copyVastUrlBtn" style="flex-shrink:0;padding:7px 14px;font-size:12px;">📋 Copy</button>
+      </div>
+      <p style="font-size:12px;color:var(--text-dim);margin-top:10px;line-height:1.5;">
+        <code>%%PATTERN:hb_uuid%%</code> is a GAM macro replaced at ad-serve time with the value of the <code>hb_uuid</code> key-value. If you override the Prebid cache URL in <em>Hosting &amp; CDN</em>, update this creative URL to match.
+      </p>
+    </div>
+  </div>
+
+  <!-- Line item setup guide -->
+  <div class="card">
+    <div class="card-header"><div class="dot"></div>GAM Line Item Setup — Quick Guide</div>
+    <div style="padding:20px 22px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px 28px;">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);margin-bottom:10px;">Step 1 — Create Custom Key-Values in GAM</div>
+          <p style="font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:10px;">Admin → Key-values → New. Type: <strong>Predefined</strong>. Create each key below:</p>
+          <div id="gamKeysKeyValueList" style="font-family:monospace;font-size:11.5px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px 14px;line-height:2;max-height:260px;overflow-y:auto;"></div>
+          <button class="adops-btn secondary" id="copyAllKeysBtn" style="margin-top:10px;padding:7px 14px;font-size:12px;">📋 Copy all key names</button>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);margin-bottom:10px;">Step 2 — Create Price-Bucket Line Items</div>
+          <p style="font-size:13px;color:var(--text-muted);line-height:1.6;">Create one line item per <code>$0.10</code> price step:</p>
+          <ul style="font-size:13px;color:var(--text-muted);line-height:2;padding-left:18px;margin-top:8px;">
+            <li>Name: <code style="color:var(--text);">Prebid HB — $0.50</code></li>
+            <li>Type: <code style="color:var(--text);">Price Priority</code></li>
+            <li>Rate: <code style="color:var(--text);">$0.50 CPM</code></li>
+            <li>Priority: <code style="color:var(--text);">12</code> (above house, below direct)</li>
+            <li>Key-value targeting: <code style="color:var(--text);">hb_pb = 0.50</code></li>
+            <li>Creative: VAST wrapper (template above)</li>
+          </ul>
+          <p style="font-size:12px;color:var(--text-dim);margin-top:8px;">Repeat for $0.10 → $30.00 (<strong>300 line items</strong>). Use GAM's duplication feature or a setup script.</p>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);margin-bottom:10px;">Step 3 — Attach VAST Creative to Each Line Item</div>
+          <p style="font-size:13px;color:var(--text-muted);line-height:1.6;">
+            The VAST creative <span style="color:var(--warning);font-weight:600;">must</span> include <code style="color:var(--accent);">%%PATTERN:hb_uuid%%</code>. Without the cache UUID macro, GAM cannot resolve the winning bidder's ad and the slot will be empty. One creative can be shared across all 300 line items.
+          </p>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);margin-bottom:10px;">Step 4 — Verify with the Sandbox</div>
+          <p style="font-size:13px;color:var(--text-muted);line-height:1.6;">
+            Run a test in the Sandbox tab. <strong>Phase 5</strong> shows the exact <code>hb_pb</code> value sent to GAM — verify it matches a line item you've set up. <strong>Phase 6</strong> shows the full stitched ad tag URL with all key-values appended to <code>cust_params</code>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1294,15 +1487,35 @@ async function runSandbox() {
     // Highest CPM wins (ties broken by tick order — first in catalog wins).
     const winner = bidLevels.reduce((a, c) => c.cpm > a.cpm ? c : a);
 
+    const floorMinOn  = $('sandboxFloorMinToggle') && $('sandboxFloorMinToggle').classList.contains('on');
+    const floorMinVal = floorMinOn ? (parseFloat($('sandboxFloorMin').value) || 0) : null;
+    const floorMaxOn  = $('sandboxFloorMaxToggle') && $('sandboxFloorMaxToggle').classList.contains('on');
+    const floorMaxVal = floorMaxOn ? (parseFloat($('sandboxFloorMax').value) || 0) : null;
+
     phase(5, 'Price Bucketing & Bias');
-    const math = applyBias(winner.cpm);
-    kv('Winner', `${winner.meta.label || winner.bidder}  ($${winner.cpm.toFixed(2)})`);
-    kv('Raw winning CPM', `$${math.raw.toFixed(2)}`);
-    kv('Floor bias applied', math.biasOn ? '+$0.05' : '(disabled — toggle off)');
-    kv('After bias', `$${math.biased.toFixed(2)}`);
-    kv('Bucket granularity', '$0.10 (custom)');
-    kv('Final hb_pb value', `$${math.final.toFixed(2)}`, true);
-    bid = { cpm: math.final, bidder: winner.bidder, cacheUuid: winner.cacheUuid, creativeId: winner.creativeId, bidId: winner.bidId, isMock: true };
+    kv('Winner (raw)', `${winner.meta.label || winner.bidder}  ($${winner.cpm.toFixed(2)})`);
+
+    if (floorMinOn && winner.cpm < floorMinVal) {
+      kv('Floor min check', `FAIL — $${winner.cpm.toFixed(2)} < floor $${floorMinVal.toFixed(2)} → no-bid fallback`);
+      log('⚠ Floor min not met — auction falls through to house ad.', 'warn');
+      bid = { cpm: 0, bidder: 'none', cacheUuid: null, isMock: true };
+    } else {
+      if (floorMinOn) kv('Floor min check', `PASS — $${winner.cpm.toFixed(2)} ≥ $${floorMinVal.toFixed(2)}`);
+      let effectiveCpm = winner.cpm;
+      if (floorMaxOn && winner.cpm > floorMaxVal) {
+        kv('Floor max applied', `CPM capped $${winner.cpm.toFixed(2)} → $${floorMaxVal.toFixed(2)}`);
+        effectiveCpm = floorMaxVal;
+      } else if (floorMaxOn) {
+        kv('Floor max check', `within cap — $${winner.cpm.toFixed(2)} ≤ $${floorMaxVal.toFixed(2)}`);
+      }
+      const math = applyBias(effectiveCpm);
+      kv('Raw CPM (after floors)', `$${effectiveCpm.toFixed(2)}`);
+      kv('Floor bias applied', math.biasOn ? '+$0.05' : '(disabled — toggle off)');
+      kv('After bias', `$${math.biased.toFixed(2)}`);
+      kv('Bucket granularity', '$0.10 (custom)');
+      kv('Final hb_pb value', `$${math.final.toFixed(2)}`, true);
+      bid = { cpm: math.final, bidder: winner.bidder, cacheUuid: winner.cacheUuid, creativeId: winner.creativeId, bidId: winner.bidId, isMock: true };
+    }
   } else {
     phase(4, 'Bid Responses');
     bidders.forEach(b => {
@@ -1494,6 +1707,26 @@ $('resetBtn').addEventListener('click', () => { disposePlayer(); $('playerCard')
   sync();
 })();
 
+// Sandbox Floor Min / Floor Max toggles — enable/disable the input and
+// update the state label. Phase 5 reads these during simulation.
+(function wireSandboxFloorToggles() {
+  function wireFloor(toggleId, inputId, labelId) {
+    const tgl = $(toggleId);
+    if (!tgl) return;
+    const inp = $(inputId);
+    const lbl = $(labelId);
+    function sync() {
+      const on = tgl.classList.contains('on');
+      if (inp) inp.disabled = !on;
+      if (lbl) lbl.textContent = on ? 'On' : 'Off';
+    }
+    tgl.addEventListener('click', () => { tgl.classList.toggle('on'); sync(); });
+    sync();
+  }
+  wireFloor('sandboxFloorMinToggle', 'sandboxFloorMin', 'sandboxFloorMinLabel');
+  wireFloor('sandboxFloorMaxToggle', 'sandboxFloorMax', 'sandboxFloorMaxLabel');
+})();
+
 /* ─────────────────────────────────────────────
    SHARED bidder picker + catalog
    Hoisted out of the Production IIFE so the Sandbox tab can render its own
@@ -1679,7 +1912,11 @@ updateSandboxBadge();
       timeout:     parseInt(get('adopsTimeout'), 10) || 1200,
       biasEnabled: document.getElementById('tglBias').classList.contains('on'),
       // Honour an explicit 0; only fall back to the default when truly blank/NaN.
-      floorBias:   (function () { const b = parseFloat(get('adopsFloorBias')); return isNaN(b) ? 0.10 : b; })(),
+      floorBias:      (function () { const b = parseFloat(get('adopsFloorBias')); return isNaN(b) ? 0.10 : b; })(),
+      floorMinEnabled: document.getElementById('tglFloorMin').classList.contains('on'),
+      floorMin:       (function () { const v = parseFloat(get('adopsFloorMin')); return isNaN(v) ? 0.50 : v; })(),
+      floorMaxEnabled: document.getElementById('tglFloorMax').classList.contains('on'),
+      floorMax:       (function () { const v = parseFloat(get('adopsFloorMax')); return isNaN(v) ? 30.00 : v; })(),
       prebidUrl:   get('adopsPrebidUrl'),
       cacheUrl:    get('adopsCacheUrl'),
       divId:       get('adopsDivId') || 'comparos-video-placement',
@@ -1710,6 +1947,10 @@ updateSandboxBadge();
       '        data-tag="' + escJs(v.adTagUrl) + '"',
       '        data-timeout="' + v.timeout + '"',
       '        data-bias="' + (v.biasEnabled ? v.floorBias.toFixed(2) : '0.00') + '"',
+    ];
+    if (v.floorMinEnabled) lines.push('        data-floor-min="' + v.floorMin.toFixed(2) + '"');
+    if (v.floorMaxEnabled) lines.push('        data-floor-max="' + v.floorMax.toFixed(2) + '"');
+    lines.push(
       '        data-video="' + escJs(v.videoUrl) + '"',
       '        data-autoplay="' + (v.autoplay ? 'true' : 'false') + '"',
       '        data-muted="' + (v.muted ? 'true' : 'false') + '"',
@@ -1721,7 +1962,7 @@ updateSandboxBadge();
       '        data-cache="' + escJs(v.cacheUrl) + '"',
       '        data-prebid-url="' + escJs(v.prebidUrl) + '"',
       '        async><\/script>'
-    ];
+    );
     return lines.join('\n');
   }
 
@@ -1811,15 +2052,80 @@ updateSandboxBadge();
   $('tglBias').addEventListener('click', () => { $('tglBias').classList.toggle('on'); syncBiasUI(); });
   syncBiasUI();
 
+  // Floor Min / Floor Max toggles — same enable/disable pattern as bias.
+  function syncFloorUI(toggleId, inputId, labelId) {
+    const on = $(toggleId).classList.contains('on');
+    $(inputId).disabled = !on;
+    $(labelId).textContent = on ? 'On' : 'Off';
+  }
+  $('tglFloorMin').addEventListener('click', () => { $('tglFloorMin').classList.toggle('on'); syncFloorUI('tglFloorMin', 'adopsFloorMin', 'floorMinStateLabel'); });
+  $('tglFloorMax').addEventListener('click', () => { $('tglFloorMax').classList.toggle('on'); syncFloorUI('tglFloorMax', 'adopsFloorMax', 'floorMaxStateLabel'); });
+  syncFloorUI('tglFloorMin', 'adopsFloorMin', 'floorMinStateLabel');
+  syncFloorUI('tglFloorMax', 'adopsFloorMax', 'floorMaxStateLabel');
+
   renderBidderPicker('bidderCards', 'bp_');
 })();
 
 (function tabNav() {
-  const tabs = document.querySelectorAll('.tab-btn'); const panes = document.querySelectorAll('.tab-pane');
+  const tabs = document.querySelectorAll('.tab-btn[data-tab]');
+  const panes = document.querySelectorAll('.tab-pane');
   tabs.forEach(btn => btn.addEventListener('click', () => {
     tabs.forEach(b => b.classList.toggle('active', b === btn));
     panes.forEach(p => p.classList.toggle('active', p.id === 'tab-' + btn.dataset.tab));
   }));
+})();
+
+// ── GAM Key-Value Reference Tab ───────────────────────────────────────────
+(function initGamKeysTab() {
+  // Bidder code pills in the per-bidder keys footer.
+  const pillsRoot = $('gamKeysBidderPills');
+  if (pillsRoot) {
+    pillsRoot.innerHTML = BIDDER_CATALOG.map(b =>
+      `<span style="display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:2px 9px;font-size:11px;font-family:monospace;color:var(--accent);margin:2px;">${b.id}</span>`
+    ).join('');
+  }
+
+  // Build the full key list for Step 1 (standard + all per-bidder keys).
+  const standardKeys = ['hb_pb','hb_bidder','hb_uuid','hb_adid','hb_size','hb_format'];
+  const perBidderSuffixes = ['hb_pb','hb_bidder','hb_adid','hb_size','hb_uuid'];
+  const allKeys = [
+    ...standardKeys,
+    ...BIDDER_CATALOG.flatMap(b => perBidderSuffixes.map(k => `${k}_${b.id}`))
+  ];
+
+  const kvListRoot = $('gamKeysKeyValueList');
+  if (kvListRoot) {
+    kvListRoot.innerHTML = allKeys.map((k, i) => {
+      const isFirst = i === 0;
+      const isBidderBoundary = i === standardKeys.length || (i > standardKeys.length && (i - standardKeys.length) % perBidderSuffixes.length === 0);
+      const sep = (!isFirst && isBidderBoundary) ? '<div style="height:6px;"></div>' : '';
+      return `${sep}<div style="color:var(--accent);">${k}</div>`;
+    }).join('');
+  }
+
+  // Copy VAST creative URL.
+  const copyVastBtn = $('copyVastUrlBtn');
+  if (copyVastBtn) {
+    copyVastBtn.addEventListener('click', () => {
+      const url = $('vastCreativeUrl').textContent.trim();
+      (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject())
+        .catch(() => { const t = document.createElement('textarea'); t.value = url; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); });
+      copyVastBtn.textContent = '✓ Copied';
+      setTimeout(() => { copyVastBtn.textContent = '📋 Copy'; }, 2000);
+    });
+  }
+
+  // Copy all key names (newline-separated, ready to paste into GAM).
+  const copyAllBtn = $('copyAllKeysBtn');
+  if (copyAllBtn) {
+    copyAllBtn.addEventListener('click', () => {
+      const text = allKeys.join('\n');
+      (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject())
+        .catch(() => { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); });
+      copyAllBtn.textContent = '✓ Copied';
+      setTimeout(() => { copyAllBtn.textContent = '📋 Copy all key names'; }, 2000);
+    });
+  }
 })();
 </script>
 </body>
