@@ -183,7 +183,7 @@
   <h1>Ad Ops Dashboard Guide</h1>
   <p class="lead">Internal playbook for operating the Bidding Player platform — how to use the dashboard, how to onboard new publishers, and how to extend the system with new SSPs.</p>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <span class="pill accent">v2.1.3</span>
+    <span class="pill accent">v2.4.0</span>
     <span class="pill">Multi-bidder</span>
     <span class="pill">Internal docs</span>
   </div>
@@ -254,10 +254,11 @@
   <p>The <strong>Production Tag Generator</strong> tab produces the deployable <code>&lt;script&gt;</code> snippet for a publisher. The flow:</p>
 
   <ol class="steps">
-    <li><h3>Set the release version</h3><p>Type the tag (e.g. <code>v2.1.3</code>) at the top. The engine URL and Prebid URL auto-fill from this value. Always use a pinned tag for production — never <code>main</code>.</p></li>
     <li><h3>Fill the GAM master ad tag</h3><p>Paste the publisher's GAM master tag URL. It <em>must</em> end with <code>correlator=</code> so the engine can append a unique correlator per impression. If <code>cust_params</code> is missing, the engine adds it.</p></li>
-    <li><h3>Tick the bidders</h3><p>In the <strong>Bidders for this Publisher</strong> card, tick every SSP that should compete in this auction. Limelight is on by default. For each ticked bidder, fill in its required params (e.g. publisher ID, placement ID).</p></li>
-    <li><h3>Verify the Prebid URL matches</h3><p>The Prebid URL field must point at a bundle file that contains every adapter you ticked. If you ticked Limelight + AppNexus, the bundle must include both <code>limelightDigitalBidAdapter</code> and <code>appnexusBidAdapter</code> — see <a href="#prebid-bundles">Prebid bundle catalog</a>.</p></li>
+    <li><h3>Choose the placement</h3><p>Set <strong>Placement</strong> to <code>instream</code> (ad plays against a content video &mdash; needs a Video Content URL) or <code>outstream</code> (in-article, no content video; the slot autoplays muted on scroll-into-view and collapses when done). Outstream dims the Video Content URL field automatically.</p></li>
+    <li><h3>Set pricing controls (optional)</h3><p><strong>Strategic Bias</strong> (off by default), <strong>Floor Min</strong>, and <strong>Floor Max</strong> are toggles in Ad Serving &mdash; flip them on only when the publisher needs them. For instream, the <strong>Sticky / Floating Player</strong> toggle (in Player Behaviour) makes the player float to the corner on scroll-out.</p></li>
+    <li><h3>Tick the bidders</h3><p>In the <strong>Bidders</strong> card, tick every SSP that should compete in this auction. Limelight is on by default. For each ticked bidder, fill in its required params (e.g. publisher ID, placement ID).</p></li>
+    <li><h3>Verify the Prebid URL matches</h3><p>The engine + Prebid URLs are <strong>pinned to the latest release automatically</strong> (the version selector was removed in v2.3.0). They live in the collapsible <strong>Hosting &amp; CDN</strong> panel &mdash; override only when testing a feature branch. The Prebid URL must point at a bundle that contains every adapter you ticked &mdash; see <a href="#prebid-bundles">Prebid bundle catalog</a>.</p></li>
     <li><h3>Generate &amp; copy</h3><p>Click <strong>Generate Production Tag</strong>. Validation runs first — required fields and bidder params get red borders if invalid. Once green, copy the snippet from the output box and hand it to the publisher.</p></li>
   </ol>
 
@@ -273,14 +274,15 @@
   <table>
     <thead><tr><th style="width:200px;">Field</th><th>Purpose</th><th style="width:90px;">Required</th></tr></thead>
     <tbody>
-      <tr><td><strong>Release Version</strong></td><td>jsDelivr tag (e.g. <code>v2.1.3</code>) that the engine + Prebid URLs are derived from. Pin for prod.</td><td><span class="pill warn">Yes</span></td></tr>
-      <tr><td><strong>Engine Script URL</strong></td><td>Auto-derived. Override only when testing against a feature branch.</td><td><span class="pill warn">Yes</span></td></tr>
-      <tr><td><strong>Video Content URL</strong></td><td>The video the publisher wants in the player. Pre-roll plays before it.</td><td><span class="pill">No</span></td></tr>
       <tr><td><strong>GAM Master Ad Tag URL</strong></td><td>Publisher's GAM tag, must end with <code>correlator=</code>.</td><td><span class="pill warn">Yes</span></td></tr>
+      <tr><td><strong>Placement</strong></td><td><code>instream</code> (ad against content video) or <code>outstream</code> (in-article, no content video; autoplays muted on scroll-into-view, collapses when done). Emits <code>data-placement</code>.</td><td><span class="pill warn">Yes</span></td></tr>
+      <tr><td><strong>Video Content URL</strong></td><td>The video the publisher wants in the player; pre-roll plays before it. Instream only &mdash; dimmed for outstream.</td><td><span class="pill">Instream</span></td></tr>
       <tr><td><strong>Bidder Timeout</strong></td><td>How long Prebid waits for bid responses before calling the auction. Default 1200 ms.</td><td><span class="pill">No</span></td></tr>
-      <tr><td><strong>Strategic Bias</strong></td><td>Constant added to the winning bid's <code>hb_pb</code> before stitching. Used to tip ties to header bidding over GAM direct.</td><td><span class="pill">No</span></td></tr>
-      <tr><td><strong>Prebid.js URL</strong></td><td>The bundle file in <code>prebid/</code> that contains the adapters you ticked.</td><td><span class="pill warn">Yes</span></td></tr>
+      <tr><td><strong>Strategic Bias</strong></td><td>Constant added to the winning bid's <code>hb_pb</code> before stitching, to tip ties to header bidding. Toggle &mdash; <strong>off by default</strong>; off emits <code>data-bias="0.00"</code>.</td><td><span class="pill">No</span></td></tr>
+      <tr><td><strong>Floor Min / Floor Max</strong></td><td>Toggles. Min rejects sub-floor bids (fall through to house); Max caps the winning CPM before bias + bucketing. Emit <code>data-floor-min</code> / <code>data-floor-max</code> when on.</td><td><span class="pill">No</span></td></tr>
+      <tr><td><strong>Prebid.js URL</strong></td><td>The bundle file in <code>prebid/</code> that contains the adapters you ticked. Pinned to the latest release; in the Hosting &amp; CDN panel.</td><td><span class="pill warn">Yes</span></td></tr>
       <tr><td><strong>Bidder picker</strong></td><td>One card per SSP. Tick to include; fill params. Generates the <code>data-bidders</code> JSON.</td><td><span class="pill warn">≥1</span></td></tr>
+      <tr><td><strong>Sticky / Floating Player</strong></td><td>Instream only. Floats the player to the corner on scroll-out (keeps playing, &times; to close). Emits <code>data-sticky="true"</code>. <strong>Off by default.</strong></td><td><span class="pill">No</span></td></tr>
       <tr><td><strong>Loop Content</strong></td><td>Replays the content video after it ends. <strong>On by default</strong> — keeps inventory available for refresh.</td><td><span class="pill">No</span></td></tr>
       <tr><td><strong>VPAID Access Mode</strong></td><td><code>insecure</code> = highest yield (allows insecure VPAIDs). Switch to <code>enabled</code> only if the publisher requests it.</td><td><span class="pill">No</span></td></tr>
     </tbody>
@@ -299,9 +301,9 @@
     <tbody>
       <tr>
         <td><code>prebid/prebid.js</code><br><span class="pill ok">Default</span></td>
-        <td>limelightDigital, appnexus, rubicon (Magnite), pubmatic, openx</td>
+        <td>limelightDigital, appnexus, rubicon (Magnite), pubmatic, openx, incrementx</td>
         <td>286 KB</td>
-        <td>Every publisher — covers the 5 most common SSPs out of the box</td>
+        <td>Every publisher — covers the 6 common SSPs out of the box</td>
       </tr>
     </tbody>
   </table>
@@ -326,8 +328,8 @@
       <p><strong>prebid_version</strong> — Prebid.js release tag, e.g. <code>v11.11.0</code>. Stick to the same version we've been building against unless there's a reason to upgrade.</p>
     </li>
     <li><h3>Run &amp; wait</h3><p>~3 minutes. The workflow clones Prebid.js, runs <code>gulp build --modules=…</code>, commits the result to <code>prebid/&lt;bundle_name&gt;.js</code> on main.</p></li>
-    <li><h3>Tag a release</h3><p>Once the commit lands, tag the repo: <code>git tag v2.1.3 &amp;&amp; git push --tags</code>. jsDelivr will serve the new bundle at <code>@v2.1.3</code> within a few minutes.</p></li>
-    <li><h3>Use it in the tag generator</h3><p>In the dashboard, set the Release Version to <code>v2.1.3</code>, change the Prebid URL filename to your new bundle, tick the new bidder, fill its params, generate the tag.</p></li>
+    <li><h3>Tag a release</h3><p>Once the commit lands, bump <code>VERSION</code> and tag the repo: <code>git tag v2.X.Y &amp;&amp; git push --tags</code>. jsDelivr will serve the new bundle at <code>@v2.X.Y</code> within a few minutes.</p></li>
+    <li><h3>Use it in the tag generator</h3><p>In the dashboard, change the Prebid URL filename (in the Hosting &amp; CDN panel) to your new bundle, tick the new bidder, fill its params, generate the tag. The engine/Prebid URLs are pinned to the latest release automatically.</p></li>
   </ol>
 
   <div class="callout tip">
@@ -429,6 +431,18 @@
   <h2>Changelog</h2>
   <ul class="changelog">
     <li>
+      <div class="ver">v2.4.0</div>
+      <div class="desc"><strong>Sticky / floating instream player.</strong> New <code>data-sticky="true"</code> attribute (and a "Sticky / Floating Player" toggle in Player Behaviour, off by default). When an instream player scrolls out of view it floats to the bottom-right corner and keeps playing — with a &times; to dismiss — then snaps back inline on scroll-up. The original layout space is preserved and the live IMA ad creative is resized to fit the floating frame. Instream only (outstream already auto-collapses). Lifts viewability + completed-view rates.</div>
+    </li>
+    <li>
+      <div class="ver">v2.3.0</div>
+      <div class="desc"><strong>Outstream video support.</strong> New <code>data-placement="outstream"</code> and a Placement dropdown in the tag generator. Outstream needs no content video: the slot stays collapsed until it scrolls &ge;50% into view, autoplays muted, then collapses on completion/error. All engine render paths now route through a <code>render()</code> dispatcher by placement. Also: the dashboard's Release Version selector was removed — engine/Prebid URLs are pinned to the latest release (override in Hosting &amp; CDN).</div>
+    </li>
+    <li>
+      <div class="ver">v2.2.0</div>
+      <div class="desc"><strong>Floor price controls + GAM key-value reference.</strong> New <code>data-floor-min</code> (reject sub-floor bids → house line item) and <code>data-floor-max</code> (cap the winning CPM before bias + bucketing), wired into the engine, tag generator (toggles), and sandbox. Added a GAM Key-Value reference tab documenting standard + per-bidder <code>hb_*</code> keys, the <code>%%PATTERN:hb_uuid%%</code> macro, and line-item setup.</div>
+    </li>
+    <li>
       <div class="ver">v2.1.3</div>
       <div class="desc"><strong>Default bundle expansion + Pages deploy fix.</strong> The default <code>prebid/prebid.js</code> now contains all 5 common SSPs (Limelight + AppNexus + Magnite + PubMatic + OpenX) built from Prebid.js 11.13.0 — eliminates the "build a new bundle per publisher" step for the common case (286 KB total, +37 KB over the v2.0.0 Limelight-only build). Migrated GitHub Pages deploy from legacy Jekyll builder to <code>actions/deploy-pages</code> workflow after the legacy builder hung twice on large content commits. Fixed a latent bug in <code>build-prebid-bundle.yml</code> — Prebid.js tags lack the <code>v</code> prefix (e.g. <code>11.13.0</code>, not <code>v11.13.0</code>). Added <code>.nojekyll</code>.</div>
     </li>
@@ -460,9 +474,9 @@
 </section>
 
 <footer>
-  Bidding Player Ad Ops Console &bull; v2.1.3 &bull; Internal documentation<br>
+  Bidding Player Ad Ops Console &bull; v2.4.0 &bull; Internal documentation<br>
   Repo: <code>github.com/aryanvani-projects/bidding-player</code> &bull;
-  Engine: <code>cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.1.3/engine/player.js</code>
+  Engine: <code>cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.0/engine/player.js</code>
 </footer>
 
 </main>

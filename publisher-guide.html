@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Bidding Player — Publisher Integration Guide (v2.1.3)</title>
+<title>Bidding Player — Publisher Integration Guide (v2.4.0)</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <style>
   @page {
     size: A4;
     margin: 18mm 16mm 20mm;
     @bottom-center {
-      content: "Bidding Player — Publisher Integration Guide  •  v2.1.3  •  Page " counter(page) " of " counter(pages);
+      content: "Bidding Player — Publisher Integration Guide  •  v2.4.0  •  Page " counter(page) " of " counter(pages);
       font-family: 'Inter', -apple-system, sans-serif;
       font-size: 9pt;
       color: #888;
@@ -405,10 +405,10 @@
   </div>
 
   <dl class="cover-meta">
-    <div><dt>Version</dt><dd>v2.1.3</dd></div>
+    <div><dt>Version</dt><dd>v2.4.0</dd></div>
     <div><dt>License</dt><dd>MIT</dd></div>
     <div><dt>Repository</dt><dd>github.com/aryanvani-projects/bidding-player</dd></div>
-    <div><dt>Engine</dt><dd>cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.1.3/engine/player.js</dd></div>
+    <div><dt>Engine</dt><dd>cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.0/engine/player.js</dd></div>
     <div><dt>Documentation</dt><dd>aryanvani-projects.github.io/bidding-player/docs.html</dd></div>
     <div><dt>Tag generator</dt><dd>aryanvani-projects.github.io/bidding-player</dd></div>
   </dl>
@@ -498,7 +498,7 @@
 <section>
   <h2>04 &mdash; Embed code reference</h2>
   <p>The <strong>v2</strong> tag uses <code>data-bidders</code> &mdash; a JSON array of every SSP that should bid in this auction. The Prebid bundle at <code>data-prebid-url</code> must include adapters for every bidder listed.</p>
-  <pre><span class="tok-pun">&lt;</span><span class="tok-tag">script</span> <span class="tok-attr">src</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.1.3/engine/player.js"</span>
+  <pre><span class="tok-pun">&lt;</span><span class="tok-tag">script</span> <span class="tok-attr">src</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.0/engine/player.js"</span>
         <span class="tok-attr">id</span>=<span class="tok-str">"adtech-player-core"</span>
         <span class="tok-attr">data-bidders</span>=<span class="tok-str">'[
           {"bidder":"limelightDigital","params":{"host":"ads-jbi003...","publisherId":"649658371","adUnitId":972556929,"adUnitType":"video"}},
@@ -506,7 +506,7 @@
         ]'</span>
         <span class="tok-attr">data-tag</span>=<span class="tok-str">"https://pubads.g.doubleclick.net/gampad/ads?iu=/...&amp;output=vast&amp;correlator="</span>
         <span class="tok-attr">data-video</span>=<span class="tok-str">"https://your-cdn.example.com/content.mp4"</span>
-        <span class="tok-attr">data-prebid-url</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.1.3/prebid/prebid-limelight-appnexus.js"</span>
+        <span class="tok-attr">data-prebid-url</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.0/prebid/prebid-limelight-appnexus.js"</span>
         <span class="tok-attr">data-timeout</span>=<span class="tok-str">"1200"</span>  <span class="tok-attr">data-bias</span>=<span class="tok-str">"0.10"</span>
         <span class="tok-attr">data-autoplay</span>=<span class="tok-str">"true"</span>  <span class="tok-attr">data-muted</span>=<span class="tok-str">"true"</span>  <span class="tok-attr">data-fluid</span>=<span class="tok-str">"true"</span>
         <span class="tok-attr">async</span><span class="tok-pun">&gt;&lt;/</span><span class="tok-tag">script</span><span class="tok-pun">&gt;</span></pre>
@@ -521,16 +521,37 @@
       <tr><td><code>data-pub-id</code> / <code>-adunit-id</code> / <code>-host</code></td><td class="req-no center">Legacy</td><td>&mdash;</td><td><strong>v1 legacy shortcut.</strong> Engine builds a 1-element <code>limelightDigital</code> array from these. Ignored when <code>data-bidders</code> is set.</td></tr>
       <tr><td><code>data-tag</code></td><td class="req-yes center">Yes</td><td>&mdash;</td><td>GAM master ad tag URL; must end with <code>correlator=</code>.</td></tr>
       <tr><td><code>data-prebid-url</code></td><td class="req-yes center">Yes</td><td>&mdash;</td><td>Must include adapters for every bidder in <code>data-bidders</code>.</td></tr>
-      <tr><td><code>data-video</code></td><td class="req-no center">No</td><td>&mdash;</td><td>Content video (.mp4 / .m3u8).</td></tr>
+      <tr><td><code>data-video</code></td><td class="req-no center">No</td><td>&mdash;</td><td>Content video (.mp4 / .m3u8). Required for <code>instream</code>; omitted for <code>outstream</code>.</td></tr>
+      <tr><td><code>data-placement</code></td><td class="req-no center">No</td><td><code>instream</code></td><td><code>instream</code> plays the ad against your content video (pre-roll). <code>outstream</code> needs no content video &mdash; the slot stays collapsed until it scrolls &ge;50% into view, autoplays muted, then collapses. See <em>Placement modes</em> below.</td></tr>
+      <tr><td><code>data-sticky</code></td><td class="req-no center">No</td><td><code>false</code></td><td><strong>Instream only.</strong> <code>true</code> floats the player to the bottom-right corner when it scrolls out of view (keeps playing, &times; to dismiss) and reflows the live ad to fit. Lifts viewability &amp; completed views.</td></tr>
       <tr><td><code>data-timeout</code></td><td class="req-no center">No</td><td><code>1200</code></td><td>Bidder timeout (ms). Industry default 1500&ndash;2000.</td></tr>
-      <tr><td><code>data-bias</code></td><td class="req-no center">No</td><td><code>0.10</code></td><td>USD added to winning CPM before bucketing.</td></tr>
-      <tr><td><code>data-autoplay</code> / <code>-muted</code></td><td class="req-no center">No</td><td><code>true</code> / <code>true</code></td><td>Autoplay requires muted.</td></tr>
+      <tr><td><code>data-bias</code></td><td class="req-no center">No</td><td><code>0.10</code></td><td>USD added to winning CPM before bucketing. An explicit <code>0.00</code> disables the bias (passes the raw bucketed CPM through).</td></tr>
+      <tr><td><code>data-floor-min</code></td><td class="req-no center">No</td><td>&mdash;</td><td>Reject bids below this CPM (they fall through to your house line item). Omitted = no floor.</td></tr>
+      <tr><td><code>data-floor-max</code></td><td class="req-no center">No</td><td>&mdash;</td><td>Cap the winning CPM at this value before bias + bucketing. Omitted = no cap.</td></tr>
+      <tr><td><code>data-autoplay</code> / <code>-muted</code></td><td class="req-no center">No</td><td><code>true</code> / <code>true</code></td><td>Autoplay requires muted (browsers block unmuted autoplay). Outstream + sticky both rely on muted autoplay.</td></tr>
       <tr><td><code>data-fluid</code></td><td class="req-no center">No</td><td><code>true</code></td><td>Responsive 16:9 vs fixed 640&times;480.</td></tr>
       <tr><td><code>data-loop</code> / <code>-preload</code> / <code>-vpaid</code></td><td class="req-no center">No</td><td>see notes</td><td><code>false</code> / <code>metadata</code> / <code>insecure</code>.</td></tr>
       <tr><td><code>data-div-id</code></td><td class="req-no center">No</td><td><code>comparos-video-placement</code></td><td>Mount div ID. Auto-created if missing.</td></tr>
       <tr><td><code>data-cache</code></td><td class="req-no center">No</td><td>(AppNexus public cache)</td><td>Prebid Cache server.</td></tr>
     </tbody>
   </table>
+
+  <h3>Placement modes &mdash; instream vs outstream</h3>
+  <p>The <code>data-placement</code> attribute picks how the player renders:</p>
+  <table>
+    <thead><tr><th class="col-attr">Mode</th><th>When to use</th><th>Behaviour</th></tr></thead>
+    <tbody>
+      <tr><td><code>instream</code><br><span class="pill">default</span></td><td>You already have a <strong>content video</strong> (news clips, shows, sports).</td><td>The ad plays as pre-roll against your <code>data-video</code>, then content resumes. Best CPMs. Requires a content URL.</td></tr>
+      <tr><td><code>outstream</code></td><td>You have <strong>no video content</strong> &mdash; a text article, blog, or listing.</td><td>The unit drops into the article body, stays collapsed (zero height) until it scrolls &ge;50% into view, autoplays muted, then collapses again when the ad finishes or errors. No <code>data-video</code> needed.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Sticky / floating player <span class="pill">instream only</span></h3>
+  <p>Set <code>data-sticky="true"</code> to keep an instream player &mdash; and the ad on it &mdash; visible as the reader scrolls. When the player scrolls out of view it shrinks and pins to the bottom-right corner, still playing; it snaps back inline when scrolled back into view, and a <strong>&times;</strong> button lets the reader dismiss it. The original layout space is preserved (no content jump), and the live ad creative is resized to fit the floating frame.</p>
+  <div class="callout tip">
+    <span class="label">Why enable it</span>
+    <p>Floating keeps the impression on-screen instead of scrolling away &mdash; it raises <strong>viewability</strong> and <strong>completed-view</strong> rates, the metrics that drive video CPMs. Off by default; opt in per placement.</p>
+  </div>
 
   <h3>Onboarding a new SSP / Prebid bundle</h3>
   <p>The <code>prebid/</code> directory holds pre-built Prebid.js bundles. Each <code>data-prebid-url</code> picks one. To add a bundle with different adapters, trigger the <strong>"Build Prebid bundle"</strong> workflow in the Actions tab: supply the comma-separated module list and a filename, the workflow runs <code>gulp build</code> and commits the result on <code>main</code>. Full instructions in <code>prebid/README.md</code>.</p>
@@ -761,7 +782,7 @@ pbjs.que.push(<span class="tok-key">function</span>() {
     <div class="faq-a"><p><code>async</code> script &mdash; zero impact on Time to Interactive. Adds the bidder timeout (default 1200 ms) before pre-roll start.</p></div>
   </div>
   <div class="faq-item">
-    <div class="faq-q"><code>@v2.1.3</code> vs <code>@main</code>?</div>
+    <div class="faq-q"><code>@v2.4.0</code> vs <code>@main</code>?</div>
     <div class="faq-a"><p>Tags are immutable (1-year CDN cache). <code>@main</code> = latest commit (~12 h cache). Pin tags for prod.</p></div>
   </div>
   <div class="faq-item">
@@ -770,8 +791,8 @@ pbjs.que.push(<span class="tok-key">function</span>() {
   </div>
 
   <div class="footer-note">
-    Bidding Player &bull; v2.1.3 &bull; Built on Prebid.js, video.js, Google IMA SDK<br>
-    Engine: <code>cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.1.3/engine/player.js</code>
+    Bidding Player &bull; v2.4.0 &bull; Built on Prebid.js, video.js, Google IMA SDK<br>
+    Engine: <code>cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.0/engine/player.js</code>
   </div>
 </section>
 
