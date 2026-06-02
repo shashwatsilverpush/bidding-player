@@ -36,6 +36,11 @@
     // Both default to null (disabled) when the attribute is absent or non-numeric.
     floorMin:    (function (v) { return isNaN(v) ? null : v; })(parseFloat(currentScript.getAttribute("data-floor-min"))),
     floorMax:    (function (v) { return isNaN(v) ? null : v; })(parseFloat(currentScript.getAttribute("data-floor-max"))),
+    // "instream" (default) plays the ad against a content video via IMA's
+    // pause/resume flow. "outstream" has no content — the ad is the content:
+    // the slot stays collapsed until it scrolls ≥50% into view, autoplays
+    // muted, then collapses again on completion or error.
+    placement:   (currentScript.getAttribute("data-placement") || "instream").toLowerCase(),
     videoUrl:    currentScript.getAttribute("data-video") || "",
     autoplay:    currentScript.getAttribute("data-autoplay") === "true",
     muted:       currentScript.getAttribute("data-muted") === "true",
@@ -83,6 +88,7 @@
 
   function roundGran(c) { return Math.floor(c / 0.10) * 0.10; }
   function applyBias(raw) { return parseFloat(roundGran(raw + cfg.floorBias).toFixed(2)); }
+  function isOutstream() { return cfg.placement === "outstream"; }
 
   // Stitch full Prebid targeting key-value set into GAM cust_params.
   // `targeting` is a flat string→string map: { hb_pb, hb_bidder, hb_uuid, hb_size,
@@ -133,16 +139,26 @@
     container = document.createElement("div");
     container.id = cfg.divId;
     
-    var containerStyle = cfg.fluid
-      ? "max-width:960px;width:100%;margin:0 auto;position:relative;background:#000;aspect-ratio:16/9;"
-      : "width:640px;height:480px;margin:0 auto;position:relative;background:#000;";
+    // Outstream slots reserve no space until an ad actually renders — they
+    // start collapsed (height:0) and expand to 16:9 only when the ad begins,
+    // then collapse again on completion/error (see setupOutstream).
+    var containerStyle;
+    if (isOutstream()) {
+      containerStyle = "max-width:960px;width:100%;margin:0 auto;position:relative;background:#000;height:0;overflow:hidden;";
+    } else {
+      containerStyle = cfg.fluid
+        ? "max-width:960px;width:100%;margin:0 auto;position:relative;background:#000;aspect-ratio:16/9;"
+        : "width:640px;height:480px;margin:0 auto;position:relative;background:#000;";
+    }
     container.style.cssText = containerStyle;
 
     var video = document.createElement("video");
     video.id = cfg.divId + "_video";
     video.className = "video-js vjs-default-skin vjs-big-play-centered";
     video.setAttribute("playsinline", "");
-    video.setAttribute("controls", "");
+    // Outstream is a standalone ad — no content controls. Instream keeps the
+    // content player controls visible.
+    if (!isOutstream()) video.setAttribute("controls", "");
     video.setAttribute("preload", cfg.preload);
     if (cfg.loop) video.setAttribute("loop", "");
     video.style.cssText = "width:100%;height:100%;";
@@ -254,12 +270,118 @@
     });
   }
 
+  // Outstream renderer. No content video — IMA renders the ad directly into
+  // the (collapsed) mount. The ad is started only once the slot scrolls into
+  // view, and the slot collapses again the moment the ad finishes or errors.
+  function setupOutstream(finalTagUrl) {
+    var container = document.getElementById(cfg.divId);
+    var videoEl   = document.getElementById(cfg.divId + "_video");
+    if (!container || !videoEl) return;
+
+    function collapse() {
+      container.style.height = "0";
+      container.style.overflow = "hidden";
+    }
+    function expand() {
+      container.style.height = "";
+      container.style.overflow = "";
+      container.style.aspectRatio = "16/9";
+    }
+
+    if (typeof google === "undefined" || !google.ima) {
+      warn("Google IMA SDK blocked or not loaded. Outstream slot stays collapsed.");
+      collapse();
+      return;
+    }
+
+    try {
+      var vpMap = { insecure: google.ima.ImaSdkSettings.VpaidMode.INSECURE, enabled: google.ima.ImaSdkSettings.VpaidMode.ENABLED, disabled: google.ima.ImaSdkSettings.VpaidMode.DISABLED };
+      if (vpMap[cfg.vpaidMode] !== undefined && google.ima.settings && google.ima.settings.setVpaidMode) {
+        google.ima.settings.setVpaidMode(vpMap[cfg.vpaidMode]);
+      }
+    } catch (e) { warn("vpaid: " + e.message); }
+
+    var adContainer = document.createElement("div");
+    adContainer.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;";
+    container.appendChild(adContainer);
+
+    try {
+      var adc = new google.ima.AdDisplayContainer(adContainer, videoEl);
+      var loader = new google.ima.AdsLoader(adc);
+
+      loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function () {
+        collapse();
+      }, false);
+
+      loader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, function (e) {
+        var mgr = e.getAdsManager(videoEl);
+        mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function () {
+          collapse();
+          try { mgr.destroy(); } catch (_) {}
+        });
+        // No content to pause/resume — just size the slot to the ad.
+        mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_PAUSE_REQUESTED, function () {
+          expand();
+        });
+        mgr.addEventListener(google.ima.AdEvent.Type.ALL_ADS_COMPLETED, function () {
+          collapse();
+          try { mgr.destroy(); } catch (_) {}
+        });
+
+        // Start the ad only when the slot is at least half visible. Muted
+        // autoplay is allowed by browsers without a user gesture, which is
+        // why outstream tags must be served muted.
+        var started = false;
+        function startAd() {
+          if (started) return;
+          started = true;
+          try {
+            var w = container.offsetWidth || 640, h = container.offsetHeight || Math.round((container.offsetWidth || 640) * 9 / 16);
+            mgr.init(w, h, google.ima.ViewMode.NORMAL);
+            mgr.start();
+          } catch (e) { warn("outstream start: " + e.message); collapse(); }
+        }
+
+        if (typeof IntersectionObserver === "function") {
+          var io = new IntersectionObserver(function (entries) {
+            for (var i = 0; i < entries.length; i++) {
+              if (entries[i].isIntersecting && entries[i].intersectionRatio >= 0.5) {
+                io.disconnect();
+                startAd();
+                break;
+              }
+            }
+          }, { threshold: [0, 0.5, 1] });
+          io.observe(container);
+        } else {
+          // No IntersectionObserver support — fall back to immediate start.
+          startAd();
+        }
+        step(7, "Outstream ad loaded. Waiting for slot to enter viewport.");
+      }, false);
+
+      var req = new google.ima.AdsRequest();
+      req.adTagUrl = finalTagUrl;
+      req.linearAdSlotWidth = container.offsetWidth || 640;
+      req.linearAdSlotHeight = Math.round((container.offsetWidth || 640) * 9 / 16);
+      adc.initialize();
+      loader.requestAds(req);
+      step(6, "Dispatching outstream VAST request via Cloud Engine layer.");
+    } catch (e) { warn("outstream IMA setup: " + e.message); collapse(); }
+  }
+
+  // Dispatch the resolved ad tag to the correct renderer for this placement.
+  function render(finalTagUrl) {
+    if (isOutstream()) setupOutstream(finalTagUrl);
+    else setupPlayer(finalTagUrl);
+  }
+
   function runAuction() {
     var bidderNames = cfg.bidders.map(function (b) { return b.bidder; }).join(", ");
     step(1, "Auction Initialized via CDN. Bidders: " + bidderNames + " | Timeout: " + cfg.timeout + "ms");
     if (typeof pbjs === "undefined") {
       warn("Prebid failed network retrieval — Fallback active.");
-      setupPlayer(stitchTag(cfg.adTagUrl, noBidTargeting()));
+      render(stitchTag(cfg.adTagUrl, noBidTargeting()));
       return;
     }
     pbjs.que.push(function () {
@@ -311,7 +433,7 @@
         pbjs.addAdUnits([{
           code: code,
           mediaTypes: {
-            video: { context: "instream", playerSize: [pw, ph], mimes: ["video/mp4", "application/x-mpegURL"], protocols: [1,2,3,4,5,6], playbackmethod: [2], skip: 0 }
+            video: { context: cfg.placement, playerSize: [pw, ph], mimes: ["video/mp4", "application/x-mpegURL"], protocols: [1,2,3,4,5,6], playbackmethod: [2], skip: 0 }
           },
           bids: cfg.bidders
         }]);
@@ -363,12 +485,12 @@
               finalUrl = stitchTag(cfg.adTagUrl, noBidTargeting());
             }
             try { if (pbjs.removeAdUnit) pbjs.removeAdUnit(code); } catch (_) {}
-            setupPlayer(finalUrl);
+            render(finalUrl);
           }
         });
       } catch (e) {
         warn("requestBids execution break: " + e.message);
-        setupPlayer(stitchTag(cfg.adTagUrl, noBidTargeting()));
+        render(stitchTag(cfg.adTagUrl, noBidTargeting()));
       }
     });
   }
@@ -380,6 +502,6 @@
       loadScript("https://cdn.jsdelivr.net/npm/video.js@8/dist/video.min.js"),
       loadScript("https://imasdk.googleapis.com/js/sdkloader/ima3.js"),
       loadScript(cfg.prebidUrl)
-    ]).then(runAuction).catch(function (e) { warn("Dependency boot break: " + e.message); setupPlayer(stitchTag(cfg.adTagUrl, noBidTargeting())); });
+    ]).then(runAuction).catch(function (e) { warn("Dependency boot break: " + e.message); render(stitchTag(cfg.adTagUrl, noBidTargeting())); });
   });
 })();

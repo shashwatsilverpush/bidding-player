@@ -926,7 +926,7 @@
     <div class="adops-grid">
       <div class="adops-field full" data-required="true">
         <label>Release Version / Branch<span class="req-star">*</span></label>
-        <input type="text" id="adopsVersion" value="v2.2.0" />
+        <input type="text" id="adopsVersion" value="v2.3.0" />
         <span class="field-info">Use a tag like <code>v1.0.0</code> for production (immutable, recommended) or a branch name like <code>feat/foo</code> for testing. The CDN URLs in <em>Hosting &amp; CDN</em> auto-update from this value.</span>
       </div>
     </div>
@@ -939,6 +939,14 @@
         <textarea id="adopsAdTagUrl">https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator=</textarea>
       </div>
       <div class="adops-field full">
+        <label>Placement</label>
+        <select id="adopsPlacement" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font);font-size:13px;padding:9px 12px;outline:none;">
+          <option value="instream" selected>Instream (in-content video — requires content video)</option>
+          <option value="outstream">Outstream (in-article — no content video, viewable autoplay)</option>
+        </select>
+        <span class="field-info">Outstream emits <code>data-placement="outstream"</code>: the ad slot stays collapsed until it scrolls ≥50% into view, autoplays muted, then collapses on completion. No content video is needed.</span>
+      </div>
+      <div class="adops-field full" id="videoUrlField">
         <label>Video Content URL</label>
         <input type="text" id="adopsVideoUrl" value="https://vjs.zencdn.net/v/oceans.mp4" />
       </div>
@@ -1002,12 +1010,12 @@
         <div class="adops-grid">
           <div class="adops-field full" data-required="true">
             <label>Universal Hosted Engine Script URL<span class="req-star">*</span></label>
-            <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.2.0/engine/player.js" />
+            <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.3.0/engine/player.js" />
             <span class="field-info">Auto-derived from the release version above. Override only if you know what you are doing.</span>
           </div>
           <div class="adops-field full" data-required="true">
             <label>Prebid.js Hosted Library URL<span class="req-star">*</span></label>
-            <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.2.0/prebid/prebid.js" />
+            <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.3.0/prebid/prebid.js" />
             <span class="field-info">Pick the bundle from <code>prebid/</code> that contains the bidders you tick above. <a href="adops-guide.html#prebid-bundles" target="_blank" rel="noopener" style="color:var(--accent);">How to build a new bundle ↗</a></span>
           </div>
           <div class="adops-field">
@@ -1907,6 +1915,7 @@ updateSandboxBadge();
     }
     return {
       engineUrl:   get('adopsEngineCdnUrl'),
+      placement:   document.getElementById('adopsPlacement').value,
       videoUrl:    get('adopsVideoUrl'),
       adTagUrl:    get('adopsAdTagUrl'),
       timeout:     parseInt(get('adopsTimeout'), 10) || 1200,
@@ -1950,8 +1959,11 @@ updateSandboxBadge();
     ];
     if (v.floorMinEnabled) lines.push('        data-floor-min="' + v.floorMin.toFixed(2) + '"');
     if (v.floorMaxEnabled) lines.push('        data-floor-max="' + v.floorMax.toFixed(2) + '"');
+    const isOutstream = v.placement === 'outstream';
+    if (isOutstream) lines.push('        data-placement="outstream"');
+    // Outstream has no content video, so we omit data-video entirely.
+    if (!isOutstream) lines.push('        data-video="' + escJs(v.videoUrl) + '"');
     lines.push(
-      '        data-video="' + escJs(v.videoUrl) + '"',
       '        data-autoplay="' + (v.autoplay ? 'true' : 'false') + '"',
       '        data-muted="' + (v.muted ? 'true' : 'false') + '"',
       '        data-fluid="' + (v.sizing === 'fluid' ? 'true' : 'false') + '"',
@@ -1976,6 +1988,18 @@ updateSandboxBadge();
     document.getElementById('adopsPrebidUrl').value   = jsdelivrUrl(ref, 'prebid/prebid.js');
   }
   document.getElementById('adopsVersion').addEventListener('input', syncUrlsFromVersion);
+
+  // Outstream needs no content video — dim the field so AdOps isn't confused
+  // into thinking the (ignored) value matters.
+  function syncPlacementUI() {
+    const isOutstream = document.getElementById('adopsPlacement').value === 'outstream';
+    const field = document.getElementById('videoUrlField');
+    const input = document.getElementById('adopsVideoUrl');
+    input.disabled = isOutstream;
+    field.style.opacity = isOutstream ? '0.45' : '';
+  }
+  document.getElementById('adopsPlacement').addEventListener('change', syncPlacementUI);
+  syncPlacementUI();
 
   const REQUIRED_IDS = ['adopsVersion', 'adopsEngineCdnUrl', 'adopsAdTagUrl', 'adopsPrebidUrl'];
   function findEmptyRequired() { return REQUIRED_IDS.filter(id => !document.getElementById(id).value.trim()); }

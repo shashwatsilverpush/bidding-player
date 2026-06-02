@@ -22,7 +22,7 @@ The dashboard (`index.html`) lets AdOps generate production tags, run sandbox si
 
 ## 2. Current Version
 
-**VERSION:** `2.1.3`  
+**VERSION:** `2.3.0`  
 All `@vX.Y.Z` CDN references in `index.html` and `demo/publisher-test.html` **must** match this value.
 The `version-check.yml` CI workflow enforces this — it will fail the build if they drift.
 
@@ -71,7 +71,10 @@ To release a new version:
 | `data-tag` | required | GAM VAST tag URL |
 | `data-timeout` | `1200` | Prebid auction timeout (ms) |
 | `data-bias` | `0.10` | Floor bias added to winning CPM before bucketing. **Must be `"0.00"` to express zero** — empty string or omitting reverts to default 0.10 |
-| `data-video` | required | MP4 content video URL |
+| `data-floor-min` | none | Reject winning bids below this CPM (falls through to house line item). Disabled when absent/non-numeric |
+| `data-floor-max` | none | Cap the winning CPM at this value before bias + bucketing. Disabled when absent/non-numeric |
+| `data-placement` | `instream` | `instream` plays the ad against content video via IMA pause/resume. `outstream` has no content video — slot stays collapsed until ≥50% in view, autoplays muted, collapses on completion/error |
+| `data-video` | required (instream only) | MP4 content video URL. Ignored/omitted for outstream |
 | `data-prebid-url` | required | jsDelivr URL to the Prebid.js bundle |
 | `data-autoplay` | `true` | Autoplay the content video |
 | `data-muted` | `true` | Mute on load |
@@ -235,7 +238,16 @@ Final log line: `Final hb_pb value: $X.XX`
 
 ## 10. Release History
 
-### v2.1.3 (current)
+### v2.3.0 (current)
+- **Outstream video support** — `data-placement="outstream"`. New `setupOutstream()` renderer in the engine: the mount starts collapsed (`height:0`), an `IntersectionObserver` (≥50% threshold) holds the ad until the slot scrolls into view, then `adsManager.start()` fires (muted autoplay). The slot expands to 16:9 on `CONTENT_PAUSE_REQUESTED` and collapses again on `ALL_ADS_COMPLETED`/`AD_ERROR`. No content video required.
+- **Engine render dispatch** — all auction render paths now go through `render()`, which routes to `setupOutstream()` or the existing `setupPlayer()` by `cfg.placement`. The Prebid adUnit `mediaTypes.video.context` is now `cfg.placement` (was hard-coded `"instream"`).
+- **Dashboard placement selector** — Production tag generator gained a Placement dropdown (instream/outstream) in Ad Serving. Selecting outstream dims/disables the Video Content URL field and the generated tag emits `data-placement="outstream"` with `data-video` omitted.
+
+### v2.2.0
+- **Floor price controls** — `data-floor-min` (reject sub-floor bids → house line item) and `data-floor-max` (cap winning CPM before bias + bucketing). Wired into engine `bidsBackHandler`, the Production tag generator (toggle + input), and the sandbox simulation.
+- **GAM Key-Value reference tab** — new dashboard tab documenting standard + per-bidder `hb_*` keys, the `%%PATTERN:hb_uuid%%` VAST creative macro, and line-item setup steps.
+
+### v2.1.3
 - **Send All Bids** — `enableSendAllBids: true` in `pbjs.setConfig()`. Per-bidder GAM keys now emitted: `hb_pb_<bidder>`, `hb_adid_<bidder>`, etc.
 - **Sandbox Bias Toggle** — mirrored the Production bias on/off switch into the Sandbox simulation Auction Configuration table
 - **Prebid bundle updated** — includes all 6 adapters (IncrementX added in v2.1.2)
@@ -262,21 +274,21 @@ Final log line: `Final hb_pb value: $X.XX`
 
 ## 11. Planned / Future Features
 
-Priority order as of v2.1.3:
+Priority order as of v2.3.0:
+
+> **Shipped:** Floor price controls + GAM Key-Value reference (v2.2.0); Outstream video support (v2.3.0).
 
 ### Near-term (next sprint)
 | # | Feature | Why |
 |---|---|---|
-| 1 | **Floor price controls** — `data-floor-min`, `data-floor-max`, per-bidder floor override | AdOps almost always asks for this after bias toggle |
-| 2 | **Sandbox: Real Bid Request mode** | Fire real `pbjs.requestBids()` from sandbox; show actual response times + live CPMs |
-| 3 | **GAM Key-Value reference sheet** | List all `hb_*` keys emitted (including per-bidder Send All Bids keys) so AdOps can create line items |
+| 1 | **Sandbox: Real Bid Request mode** | Fire real `pbjs.requestBids()` from sandbox; show actual response times + live CPMs |
+| 2 | **Per-bidder floor override** | Floor min/max are global today; AdOps may want a per-SSP floor |
 
 ### Medium-term
 | # | Feature | Why |
 |---|---|---|
-| 4 | **Outstream video support** — `data-placement="outstream"` | New monetisation surface; no content video needed |
-| 5 | **Banner tag generator tab** | Many publishers need both video + display; bidder catalog is already set up |
-| 6 | **Companion banner rendering** — parse VAST companions and render to sidebar div | Same bid monetises two slots |
+| 3 | **Banner tag generator tab** | Many publishers need both video + display; bidder catalog is already set up |
+| 4 | **Companion banner rendering** — parse VAST companions and render to sidebar div | Same bid monetises two slots |
 
 ### Longer-term
 | # | Feature | Why |
@@ -332,4 +344,4 @@ The bundle is built via GitHub Actions (`build-prebid-bundle.yml`, manual dispat
 
 ---
 
-*Last updated: v2.1.3 — 2026-06-02*
+*Last updated: v2.3.0 — 2026-06-02*
