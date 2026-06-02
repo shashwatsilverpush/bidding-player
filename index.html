@@ -685,7 +685,38 @@
     .adops-inline-toggle-state { font-size: 10px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); }
     .adops-field input:disabled { opacity: .45; cursor: not-allowed; }
     .field-info { display: block; margin-top: 6px; font-size: 11.5px; color: var(--text-muted); line-height: 1.55; }
-    
+
+    /* Section subheadline — one-line muted intro under an .adops-subhead */
+    .adops-subnote { margin: -4px 0 14px; font-size: 12px; color: var(--text-muted); line-height: 1.5; font-weight: 400; }
+
+    /* Info-icon tooltip — short inline hint + hover/focus detail bubble.
+       Keeps field labels clean; full explanation lives in the bubble. */
+    .info-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 15px; height: 15px; margin-left: 6px; flex: none;
+      border-radius: 50%; border: 1px solid var(--border-strong);
+      background: var(--surface3); color: var(--text-muted);
+      font-size: 10px; font-weight: 700; font-style: normal; line-height: 1;
+      cursor: help; position: relative; vertical-align: middle; user-select: none;
+    }
+    .info-icon:hover, .info-icon:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+    .info-bubble {
+      position: absolute; bottom: calc(100% + 9px); left: 50%; transform: translateX(-50%);
+      width: 262px; max-width: 72vw; padding: 10px 12px;
+      background: var(--surface3); border: 1px solid var(--border-strong); border-radius: 8px;
+      box-shadow: 0 8px 26px rgba(0,0,0,0.55);
+      font-size: 12px; font-weight: 400; font-style: normal; line-height: 1.55;
+      color: var(--text); text-transform: none; letter-spacing: normal; text-align: left;
+      opacity: 0; visibility: hidden; transition: opacity .12s ease; z-index: 60; pointer-events: none;
+    }
+    .info-bubble::after {
+      content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+      border: 6px solid transparent; border-top-color: var(--border-strong);
+    }
+    .info-bubble code { background: var(--surface2); color: var(--accent); padding: 1px 5px; border-radius: 3px; }
+    .info-bubble a { color: var(--accent); }
+    .info-icon:hover .info-bubble, .info-icon:focus .info-bubble, .info-icon:focus-visible .info-bubble { opacity: 1; visibility: visible; }
+
     .adops-field.invalid input, .adops-field.invalid textarea, .adops-field.invalid select {
       border-color: var(--danger) !important; box-shadow: 0 0 0 3px var(--danger-glow) !important; animation: shake-error .35s ease-in-out;
     }
@@ -952,8 +983,15 @@
 </div>
 
 <div class="tab-pane" id="tab-production" role="tabpanel">
+  <header>
+    <div class="logo">&#9654;</div>
+    <div>
+      <h1>Production Tag Generator</h1>
+      <p>Configure the auction, then generate a copy-paste embed tag for the publisher.</p>
+    </div>
+    <div class="badge">Engine v2.3.0 &bull; Prebid.js v11.11.0</div>
+  </header>
 <section class="adops-section" id="adopsSection">
-  <div class="adops-header">📋 AD OPS TAG GENERATOR TOOL<span class="adops-pill">Production</span></div>
   <div class="adops-body">
     <!-- Release version is pinned to the latest immutable tag. The selector
          was removed from the UI; power users can still override the resolved
@@ -962,28 +1000,19 @@
 
     <!-- ── AD SERVING ── -->
     <div class="adops-subhead">Ad Serving</div>
+    <p class="adops-subnote">The ad tag, placement type, and pricing controls that drive the auction.</p>
     <div class="adops-grid">
       <div class="adops-field full" data-required="true">
         <label>GAM Master Ad Tag URL<span class="req-star">*</span></label>
         <textarea id="adopsAdTagUrl">https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator=</textarea>
       </div>
       <div class="adops-field full">
-        <label>Placement</label>
+        <label>Placement<span class="info-icon" tabindex="0" role="button" aria-label="Placement help">i<span class="info-bubble"><strong>Instream</strong> — publisher already has a video player with content (news, shows, sports); the ad runs pre/mid/post-roll. Requires a content video URL. Best CPMs.<br><br><strong>Outstream</strong> — no video content (article, blog, listing). The unit drops into the body, autoplays muted on scroll-into-view, and collapses when done. Emits <code>data-placement="outstream"</code>.</span></span></label>
         <select id="adopsPlacement" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font);font-size:13px;padding:9px 12px;outline:none;">
           <option value="instream" selected>Instream (in-content video — requires content video)</option>
           <option value="outstream">Outstream (in-article — no content video, viewable autoplay)</option>
         </select>
-        <span class="field-info">Outstream emits <code>data-placement="outstream"</code>: the ad slot stays collapsed until it scrolls ≥50% into view, autoplays muted, then collapses on completion. No content video is needed.</span>
-        <div class="placement-help" style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;line-height:1.55;">
-          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
-            <div style="color:var(--accent);font-weight:700;margin-bottom:4px;">Instream — when to use</div>
-            <div>Publisher already has a <strong>video player with content</strong> (news clips, shows, sports). The ad plays pre/mid/post-roll against that content. <strong>Requires</strong> a content video URL and a mount inside their player. Best CPMs, but only works where real video content exists.</div>
-          </div>
-          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
-            <div style="color:var(--accent);font-weight:700;margin-bottom:4px;">Outstream — when to use</div>
-            <div>Publisher has <strong>no video content</strong> — a text article, blog, or listing page. The unit drops into the article body, autoplays muted on scroll-into-view, and collapses when done. <strong>No content video.</strong> New monetisation surface for display-only inventory.</div>
-          </div>
-        </div>
+        <span class="field-info">Instream needs a content video; outstream is self-contained and autoplays on scroll.</span>
       </div>
       <div class="adops-field full" id="videoUrlField">
         <label>Video Content URL</label>
@@ -995,50 +1024,47 @@
       </div>
       <div class="adops-field" id="biasField">
         <label class="adops-inline-label">
-          <span>Strategic Bias ($)</span>
+          <span>Strategic Bias ($)<span class="info-icon" tabindex="0" role="button" aria-label="Strategic Bias help">i<span class="info-bubble">A thumb-on-the-scale amount added to the winning header-bid CPM before price-bucketing. Switch off to pass the raw bucketed CPM through unchanged (emits <code>data-bias="0.00"</code>).</span></span></span>
           <span class="adops-inline-toggle">
             <span class="adops-inline-toggle-state" id="biasStateLabel">Off</span>
             <span class="toggle-switch" id="tglBias" role="switch" aria-label="Apply strategic bias"></span>
           </span>
         </label>
         <input type="number" id="adopsFloorBias" value="0.10" step="0.01" disabled />
-        <span class="field-info">Thumb-on-the-scale amount added to the winning header-bid CPM before price-bucketing. Switch off to pass the raw bucketed CPM through unchanged (emits <code>data-bias="0.00"</code>).</span>
+        <span class="field-info">Nudges the winning CPM up before bucketing. Off by default.</span>
       </div>
       <div class="adops-field" id="floorMinField">
         <label class="adops-inline-label">
-          <span>Floor Min ($)</span>
+          <span>Floor Min ($)<span class="info-icon" tabindex="0" role="button" aria-label="Floor Min help">i<span class="info-bubble">Reject bids below this CPM. Bids that don't meet the floor fall through to your house line item (emits <code>data-floor-min="X"</code>).</span></span></span>
           <span class="adops-inline-toggle">
             <span class="adops-inline-toggle-state" id="floorMinStateLabel">Off</span>
             <span class="toggle-switch" id="tglFloorMin" role="switch" aria-label="Enable floor minimum"></span>
           </span>
         </label>
         <input type="number" id="adopsFloorMin" value="0.50" step="0.01" disabled />
-        <span class="field-info">Reject bids below this CPM. Bids that don't meet the floor fall through to your house line item (emits <code>data-floor-min="X"</code>).</span>
+        <span class="field-info">Lowest CPM you'll accept. Below this, bids are rejected.</span>
       </div>
       <div class="adops-field" id="floorMaxField">
         <label class="adops-inline-label">
-          <span>Floor Max ($)</span>
+          <span>Floor Max ($)<span class="info-icon" tabindex="0" role="button" aria-label="Floor Max help">i<span class="info-bubble">Cap the winning CPM at this value before bias and bucketing — prevents high bids from overshooting your highest GAM line item (emits <code>data-floor-max="X"</code>).</span></span></span>
           <span class="adops-inline-toggle">
             <span class="adops-inline-toggle-state" id="floorMaxStateLabel">Off</span>
             <span class="toggle-switch" id="tglFloorMax" role="switch" aria-label="Enable floor maximum"></span>
           </span>
         </label>
         <input type="number" id="adopsFloorMax" value="30.00" step="0.01" disabled />
-        <span class="field-info">Cap the winning CPM at this value before bias and bucketing — prevents high bids from overshooting your highest GAM line item (emits <code>data-floor-max="X"</code>).</span>
+        <span class="field-info">Highest CPM to pass through. Caps bids that overshoot your top line item.</span>
       </div>
     </div>
 
     <!-- ── BIDDERS ── -->
     <div class="adops-subhead">Bidders<span class="adops-subhead-tag">v2 multi-bidder</span></div>
+    <p class="adops-subnote">Tick the SSPs that should compete — the highest CPM wins the impression.</p>
     <div class="adops-grid">
       <div class="bidder-picker-wrap">
-        <p class="bidder-picker-hint">Tick the SSPs that should compete. The highest CPM wins the impression. Limelight is on by default — add others as your inventory expands.</p>
+        <p class="bidder-picker-hint">Limelight is on by default. Add others as your inventory expands.<span class="info-icon" tabindex="0" role="button" aria-label="Bundle compatibility help">i<span class="info-bubble"><strong>⚠ Bundle compatibility:</strong> the Prebid URL (in <em>Hosting &amp; CDN</em> below) must point at a bundle that includes every adapter you tick. If an adapter is missing, that bidder is silently dropped at auction time. Need an SSP not listed? <a href="adops-guide.html#prebid-bundles" target="_blank" rel="noopener">Trigger a new bundle build ↗</a></span></span></p>
 
         <div id="bidderCards" class="bidder-cards"></div>
-
-        <div class="bidder-picker-footer">
-          <span class="warn">⚠ Bundle compatibility:</span> the Prebid URL (in <em>Hosting &amp; CDN</em> below) must point at a bundle that includes every adapter you tick. If an adapter is missing the bidder is silently dropped at auction time. Need an SSP not listed? <a href="adops-guide.html#prebid-bundles" target="_blank" rel="noopener" style="color:var(--accent);">Trigger a new bundle build ↗</a>
-        </div>
       </div>
     </div>
 
@@ -1048,14 +1074,14 @@
       <div class="adops-disclosure-body">
         <div class="adops-grid">
           <div class="adops-field full" data-required="true">
-            <label>Universal Hosted Engine Script URL<span class="req-star">*</span></label>
+            <label>Universal Hosted Engine Script URL<span class="req-star">*</span><span class="info-icon" tabindex="0" role="button" aria-label="Engine URL help">i<span class="info-bubble">Auto-derived from the pinned release version. Override only if you know what you are doing.</span></span></label>
             <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.3.0/engine/player.js" />
-            <span class="field-info">Auto-derived from the release version above. Override only if you know what you are doing.</span>
+            <span class="field-info">Auto-filled — pinned to the latest release.</span>
           </div>
           <div class="adops-field full" data-required="true">
-            <label>Prebid.js Hosted Library URL<span class="req-star">*</span></label>
+            <label>Prebid.js Hosted Library URL<span class="req-star">*</span><span class="info-icon" tabindex="0" role="button" aria-label="Prebid URL help">i<span class="info-bubble">Pick the bundle from <code>prebid/</code> that contains the bidders you tick above. <a href="adops-guide.html#prebid-bundles" target="_blank" rel="noopener">How to build a new bundle ↗</a></span></span></label>
             <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.3.0/prebid/prebid.js" />
-            <span class="field-info">Pick the bundle from <code>prebid/</code> that contains the bidders you tick above. <a href="adops-guide.html#prebid-bundles" target="_blank" rel="noopener" style="color:var(--accent);">How to build a new bundle ↗</a></span>
+            <span class="field-info">Must include every bidder you ticked above.</span>
           </div>
           <div class="adops-field">
             <label>Prebid Cache URL</label>
@@ -1115,7 +1141,7 @@
       <textarea id="adopsOutputEngine" readonly placeholder="Click ⚡ Generate to yield delivery embed code..."></textarea>
       <div class="adops-block-actions">
         <button class="adops-btn secondary" id="adopsCopyEngineBtn">📋 Copy Integration Tag</button>
-        <span class="adops-engine-note">💡 How to use: The publisher copies this tiny, high-performance snippet and inserts it exactly where they want the video player canvas to initialize. The script automatically handles asset streaming and auction tasks remotely.</span>
+        <span class="adops-engine-note">💡 Paste this snippet where the player should appear.<span class="info-icon" tabindex="0" role="button" aria-label="How to use help">i<span class="info-bubble">The publisher copies this snippet and inserts it exactly where they want the video player to initialize. The script handles asset streaming and the auction remotely — no other setup needed.</span></span></span>
       </div>
     </div>
 
