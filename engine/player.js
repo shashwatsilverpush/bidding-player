@@ -169,6 +169,10 @@
     // this same element — a loop attribute makes the ad creative restart and,
     // combined with the ALL_ADS_COMPLETED collapse, flicker the slot.
     if (cfg.loop && !isOutstream()) video.setAttribute("loop", "");
+    // Outstream starts on scroll (no user gesture), so the ad must be muted for
+    // the browser to allow autoplay. Mute the element up front; the ads manager
+    // volume is also set to 0 at start time (see setupOutstream).
+    if (isOutstream() && cfg.muted) { video.muted = true; video.setAttribute("muted", ""); }
     video.style.cssText = "width:100%;height:100%;";
     container.appendChild(video);
 
@@ -322,13 +326,15 @@
       var adc = new google.ima.AdDisplayContainer(adContainer, videoEl);
       var loader = new google.ima.AdsLoader(adc);
 
-      loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function () {
+      loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (e) {
+        warn("outstream loader error: " + ((e && e.getError && e.getError()) || "unknown"));
         collapse();
       }, false);
 
       loader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, function (e) {
         var mgr = e.getAdsManager(videoEl);
-        mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function () {
+        mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (ev) {
+          warn("outstream ad error: " + ((ev && ev.getError && ev.getError()) || "unknown"));
           collapse();
           try { mgr.destroy(); } catch (_) {}
         });
@@ -351,6 +357,10 @@
           try {
             var w = container.offsetWidth || 640, h = container.offsetHeight || Math.round((container.offsetWidth || 640) * 9 / 16);
             mgr.init(w, h, google.ima.ViewMode.NORMAL);
+            // Mute the ad creative so the browser allows autoplay without a user
+            // gesture. Outstream starts on scroll (no click), so an unmuted ad
+            // would be blocked → AD_ERROR → the slot would flash and collapse.
+            try { mgr.setVolume(cfg.muted ? 0 : 1); } catch (_) {}
             mgr.start();
           } catch (e) { warn("outstream start: " + e.message); collapse(); }
         }

@@ -22,7 +22,7 @@ The dashboard (`index.html`) lets AdOps generate production tags, run sandbox si
 
 ## 2. Current Version
 
-**VERSION:** `2.4.1`  
+**VERSION:** `2.4.2`  
 All `@vX.Y.Z` CDN references in `index.html` and `demo/publisher-test.html` **must** match this value.
 The `version-check.yml` CI workflow enforces this — it will fail the build if they drift.
 
@@ -239,7 +239,10 @@ Final log line: `Final hb_pb value: $X.XX`
 
 ## 10. Release History
 
-### v2.4.1 (current)
+### v2.4.2 (current)
+- **Outstream muted-autoplay fix** — the outstream path read `cfg.muted` but never applied it, so IMA tried to autoplay the ad with sound. Outstream starts on scroll (no user gesture), so the browser blocked the unmuted autoplay → `AD_ERROR` → the slot expanded to a black frame then immediately collapsed (a "split-second flash"). Fix: `ensureMount` sets `videoEl.muted` for outstream, and `setupOutstream` calls `adsManager.setVolume(0)` before `start()`. Also: the outstream `AD_ERROR` handlers now log the IMA error (`?debug=true`) instead of collapsing silently.
+
+### v2.4.1
 - **Outstream loop fix** — `data-loop` is a content-video setting and must never apply to outstream (there is no content video, and IMA renders the ad through the same `<video>` element — a `loop` attribute makes the ad creative restart and, with `ALL_ADS_COMPLETED → collapse`, flicker the slot for a split second). Engine: `ensureMount` now only sets the `loop` attribute when `cfg.loop && !isOutstream()`. Dashboard: `buildEngineFile` omits `data-loop` entirely for outstream tags. Fixes a "the ad flashes then disappears" report on an outstream tag carrying `data-loop="true"`.
 
 ### v2.4.0
@@ -352,4 +355,4 @@ The bundle is built via GitHub Actions (`build-prebid-bundle.yml`, manual dispat
 
 ---
 
-*Last updated: v2.4.1 — 2026-06-02*
+*Last updated: v2.4.2 — 2026-06-03*
