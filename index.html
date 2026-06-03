@@ -989,14 +989,14 @@
       <h1>Production Tag Generator</h1>
       <p>Configure the auction, then generate a copy-paste embed tag for the publisher.</p>
     </div>
-    <div class="badge">Engine v2.4.0 &bull; Prebid.js v11.11.0</div>
+    <div class="badge">Engine v2.4.1 &bull; Prebid.js v11.11.0</div>
   </header>
 <section class="adops-section" id="adopsSection">
   <div class="adops-body">
     <!-- Release version is pinned to the latest immutable tag. The selector
          was removed from the UI; power users can still override the resolved
          CDN URLs directly in the Hosting & CDN panel below. -->
-    <input type="hidden" id="adopsVersion" value="v2.4.0" />
+    <input type="hidden" id="adopsVersion" value="v2.4.1" />
 
     <!-- ── AD SERVING ── -->
     <div class="adops-subhead">Ad Serving</div>
@@ -1075,12 +1075,12 @@
         <div class="adops-grid">
           <div class="adops-field full" data-required="true">
             <label>Universal Hosted Engine Script URL<span class="req-star">*</span><span class="info-icon" tabindex="0" role="button" aria-label="Engine URL help">i<span class="info-bubble">Auto-derived from the pinned release version. Override only if you know what you are doing.</span></span></label>
-            <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.0/engine/player.js" />
+            <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.1/engine/player.js" />
             <span class="field-info">Auto-filled — pinned to the latest release.</span>
           </div>
           <div class="adops-field full" data-required="true">
             <label>Prebid.js Hosted Library URL<span class="req-star">*</span><span class="info-icon" tabindex="0" role="button" aria-label="Prebid URL help">i<span class="info-bubble">Pick the bundle from <code>prebid/</code> that contains the bidders you tick above. <a href="adops-guide.html#prebid-bundles" target="_blank" rel="noopener">How to build a new bundle ↗</a></span></span></label>
-            <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.0/prebid/prebid.js" />
+            <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.1/prebid/prebid.js" />
             <span class="field-info">Must include every bidder you ticked above.</span>
           </div>
           <div class="adops-field">
@@ -2035,8 +2035,12 @@ updateSandboxBadge();
     lines.push(
       '        data-autoplay="' + (v.autoplay ? 'true' : 'false') + '"',
       '        data-muted="' + (v.muted ? 'true' : 'false') + '"',
-      '        data-fluid="' + (v.sizing === 'fluid' ? 'true' : 'false') + '"',
-      '        data-loop="' + (v.loop ? 'true' : 'false') + '"',
+      '        data-fluid="' + (v.sizing === 'fluid' ? 'true' : 'false') + '"'
+    );
+    // data-loop is a content-video setting — meaningless for outstream (no
+    // content video, and the engine ignores it there). Omit it for outstream.
+    if (!isOutstream) lines.push('        data-loop="' + (v.loop ? 'true' : 'false') + '"');
+    lines.push(
       '        data-preload="' + v.preload + '"',
       '        data-vpaid="' + v.vpaid + '"',
       '        data-div-id="' + escJs(v.divId) + '"',

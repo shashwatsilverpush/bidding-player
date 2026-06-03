@@ -22,7 +22,7 @@ The dashboard (`index.html`) lets AdOps generate production tags, run sandbox si
 
 ## 2. Current Version
 
-**VERSION:** `2.4.0`  
+**VERSION:** `2.4.1`  
 All `@vX.Y.Z` CDN references in `index.html` and `demo/publisher-test.html` **must** match this value.
 The `version-check.yml` CI workflow enforces this — it will fail the build if they drift.
 
@@ -239,7 +239,10 @@ Final log line: `Final hb_pb value: $X.XX`
 
 ## 10. Release History
 
-### v2.4.0 (current)
+### v2.4.1 (current)
+- **Outstream loop fix** — `data-loop` is a content-video setting and must never apply to outstream (there is no content video, and IMA renders the ad through the same `<video>` element — a `loop` attribute makes the ad creative restart and, with `ALL_ADS_COMPLETED → collapse`, flicker the slot for a split second). Engine: `ensureMount` now only sets the `loop` attribute when `cfg.loop && !isOutstream()`. Dashboard: `buildEngineFile` omits `data-loop` entirely for outstream tags. Fixes a "the ad flashes then disappears" report on an outstream tag carrying `data-loop="true"`.
+
+### v2.4.0
 - **Sticky / floating instream player** — `data-sticky="true"`. New `setupSticky()` in the engine wraps the instream mount in a flow-holding wrapper and uses an `IntersectionObserver` to pin the player `position:fixed` to the bottom-right corner when it scrolls out of view, restoring it inline on scroll-back. The wrapper reserves the original layout space (no jump). A ✕ button dismisses + pauses. The live IMA ad creative is reflowed to the docked size via `adsManager.resize()` (manager exposed as `container.__atpMgr`). Instream only — outstream already auto-collapses.
 - **Dashboard toggle** — "Sticky / Floating Player" in Player Behaviour (defaults off); emits `data-sticky="true"` only when on and placement is instream.
 
@@ -349,4 +352,4 @@ The bundle is built via GitHub Actions (`build-prebid-bundle.yml`, manual dispat
 
 ---
 
-*Last updated: v2.4.0 — 2026-06-02*
+*Last updated: v2.4.1 — 2026-06-02*

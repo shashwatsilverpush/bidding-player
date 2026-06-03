@@ -164,7 +164,11 @@
     // content player controls visible.
     if (!isOutstream()) video.setAttribute("controls", "");
     video.setAttribute("preload", cfg.preload);
-    if (cfg.loop) video.setAttribute("loop", "");
+    // `loop` is a CONTENT-video setting (instream only). Never set it for
+    // outstream: there is no content video, and IMA renders the ad through
+    // this same element — a loop attribute makes the ad creative restart and,
+    // combined with the ALL_ADS_COMPLETED collapse, flicker the slot.
+    if (cfg.loop && !isOutstream()) video.setAttribute("loop", "");
     video.style.cssText = "width:100%;height:100%;";
     container.appendChild(video);
 

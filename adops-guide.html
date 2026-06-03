@@ -183,7 +183,7 @@
   <h1>Ad Ops Dashboard Guide</h1>
   <p class="lead">Internal playbook for operating the Bidding Player platform — how to use the dashboard, how to onboard new publishers, and how to extend the system with new SSPs.</p>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <span class="pill accent">v2.4.0</span>
+    <span class="pill accent">v2.4.1</span>
     <span class="pill">Multi-bidder</span>
     <span class="pill">Internal docs</span>
   </div>
@@ -431,6 +431,10 @@
   <h2>Changelog</h2>
   <ul class="changelog">
     <li>
+      <div class="ver">v2.4.1</div>
+      <div class="desc"><strong>Outstream loop fix.</strong> <code>data-loop</code> is a content-video setting and is now ignored for outstream in the engine, and omitted from generated outstream tags by the dashboard. Fixes a report where an outstream tag carrying <code>data-loop="true"</code> made the ad flash for a split second and then disappear (the loop attribute restarted the ad creative in the shared video element, colliding with the <code>ALL_ADS_COMPLETED</code> collapse).</div>
+    </li>
+    <li>
       <div class="ver">v2.4.0</div>
       <div class="desc"><strong>Sticky / floating instream player.</strong> New <code>data-sticky="true"</code> attribute (and a "Sticky / Floating Player" toggle in Player Behaviour, off by default). When an instream player scrolls out of view it floats to the bottom-right corner and keeps playing — with a &times; to dismiss — then snaps back inline on scroll-up. The original layout space is preserved and the live IMA ad creative is resized to fit the floating frame. Instream only (outstream already auto-collapses). Lifts viewability + completed-view rates.</div>
     </li>
@@ -474,9 +478,9 @@
 </section>
 
 <footer>
-  Bidding Player Ad Ops Console &bull; v2.4.0 &bull; Internal documentation<br>
+  Bidding Player Ad Ops Console &bull; v2.4.1 &bull; Internal documentation<br>
   Repo: <code>github.com/aryanvani-projects/bidding-player</code> &bull;
-  Engine: <code>cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.0/engine/player.js</code>
+  Engine: <code>cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.1/engine/player.js</code>
 </footer>
 
 </main>
