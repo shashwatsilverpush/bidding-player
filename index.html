@@ -990,14 +990,14 @@
       <h1>Production Tag Generator</h1>
       <p>Configure the auction, then generate a copy-paste embed tag for the publisher.</p>
     </div>
-    <div class="badge">Engine v2.4.3 &bull; Prebid.js v11.11.0</div>
+    <div class="badge">Engine v2.5.0 &bull; Prebid.js v11.11.0</div>
   </header>
 <section class="adops-section" id="adopsSection">
   <div class="adops-body">
     <!-- Release version is pinned to the latest immutable tag. The selector
          was removed from the UI; power users can still override the resolved
          CDN URLs directly in the Hosting & CDN panel below. -->
-    <input type="hidden" id="adopsVersion" value="v2.4.3" />
+    <input type="hidden" id="adopsVersion" value="v2.5.0" />
 
     <!-- ── AD SERVING ── -->
     <div class="adops-subhead">Ad Serving</div>
@@ -1014,6 +1014,14 @@
           <option value="outstream">Outstream (in-article — no content video, viewable autoplay)</option>
         </select>
         <span class="field-info">Instream needs a content video; outstream is self-contained and autoplays on scroll.</span>
+      </div>
+      <div class="adops-field full">
+        <label>Engine Delivery<span class="info-icon" tabindex="0" role="button" aria-label="Engine delivery help">i<span class="info-bubble"><strong>Auto-update</strong> emits a tiny loader tag that loads the latest <em>stable</em> engine from the release channel — the publisher never re-issues the tag when we ship an update, and we can roll back instantly. <strong>Pinned</strong> hard-codes <code>@v{VERSION}</code> (immutable) — use when a publisher requires a frozen build.</span></span></label>
+        <select id="adopsChannel" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font);font-size:13px;padding:9px 12px;outline:none;">
+          <option value="auto" selected>Auto-update — track latest stable (recommended)</option>
+          <option value="pinned">Pinned — freeze at this exact version</option>
+        </select>
+        <span class="field-info">Auto-update tags pick up new engine releases automatically; pinned tags never change.</span>
       </div>
       <div class="adops-field full" id="videoUrlField">
         <label>Video Content URL</label>
@@ -1076,12 +1084,12 @@
         <div class="adops-grid">
           <div class="adops-field full" data-required="true">
             <label>Universal Hosted Engine Script URL<span class="req-star">*</span><span class="info-icon" tabindex="0" role="button" aria-label="Engine URL help">i<span class="info-bubble">Auto-derived from the pinned release version. Override only if you know what you are doing.</span></span></label>
-            <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.3/engine/player.js" />
+            <input type="text" id="adopsEngineCdnUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.5.0/engine/player.js" />
             <span class="field-info">Auto-filled — pinned to the latest release.</span>
           </div>
           <div class="adops-field full" data-required="true">
             <label>Prebid.js Hosted Library URL<span class="req-star">*</span><span class="info-icon" tabindex="0" role="button" aria-label="Prebid URL help">i<span class="info-bubble">Pick the bundle from <code>prebid/</code> that contains the bidders you tick above. <a href="adops-guide.html#prebid-bundles" target="_blank" rel="noopener">How to build a new bundle ↗</a></span></span></label>
-            <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.3/prebid/prebid.js" />
+            <input type="text" id="adopsPrebidUrl" value="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.5.0/prebid/prebid.js" />
             <span class="field-info">Must include every bidder you ticked above.</span>
           </div>
           <div class="adops-field">
@@ -1983,6 +1991,7 @@ updateSandboxBadge();
     return {
       engineUrl:   get('adopsEngineCdnUrl'),
       placement:   document.getElementById('adopsPlacement').value,
+      channel:     document.getElementById('adopsChannel').value,
       sticky:      document.getElementById('tglSticky').classList.contains('on'),
       videoUrl:    get('adopsVideoUrl'),
       adTagUrl:    get('adopsAdTagUrl'),
@@ -2016,9 +2025,23 @@ updateSandboxBadge();
     const biddersJson = JSON.stringify(v.bidders);
     const safeJson = biddersJson.replace(/</g, '\\u003c').replace(/'/g, '&#39;');
 
+    // Engine delivery. "auto" emits the auto-updating loader (engine version
+    // resolved at runtime from the release channel); "pinned" hard-codes the
+    // exact @vX.Y.Z engine URL. For auto, data-prebid-url carries a __VER__
+    // token the loader replaces with the resolved version so the bundle tracks
+    // the engine. The loader itself rides the major-version range so it too
+    // updates without re-issuing the tag.
+    const isAuto = v.channel !== 'pinned';
+    const srcUrl = isAuto ? jsdelivrUrl('2', 'engine/loader.js') : v.engineUrl;
+    let prebidOut = v.prebidUrl;
+    if (isAuto) {
+      const m = v.prebidUrl.match(/bidding-player@[^/]+\/(.+)$/);
+      prebidOut = m ? jsdelivrUrl('__VER__', m[1]) : v.prebidUrl;
+    }
+
     const lines = [
       '',
-      '<script src="' + escJs(v.engineUrl) + '"',
+      '<script src="' + escJs(srcUrl) + '"',
       '        id="adtech-player-core"',
       "        data-bidders='" + safeJson + "'",
       '        data-tag="' + escJs(v.adTagUrl) + '"',
@@ -2046,7 +2069,7 @@ updateSandboxBadge();
       '        data-vpaid="' + v.vpaid + '"',
       '        data-div-id="' + escJs(v.divId) + '"',
       '        data-cache="' + escJs(v.cacheUrl) + '"',
-      '        data-prebid-url="' + escJs(v.prebidUrl) + '"',
+      '        data-prebid-url="' + escJs(prebidOut) + '"',
       '        async><\/script>'
     );
     return lines.join('\n');

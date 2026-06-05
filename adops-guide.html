@@ -184,7 +184,7 @@
   <h1>Ad Ops Dashboard Guide</h1>
   <p class="lead">Internal playbook for operating the Bidding Player platform — how to use the dashboard, how to onboard new publishers, and how to extend the system with new SSPs.</p>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <span class="pill accent">v2.4.3</span>
+    <span class="pill accent">v2.5.0</span>
     <span class="pill">Multi-bidder</span>
     <span class="pill">Internal docs</span>
   </div>
@@ -395,7 +395,9 @@
     <li>Land changes on <code>main</code>. Bump <code>VERSION</code> file (the CI version-drift check enforces consistency between <code>VERSION</code> and embedded jsDelivr URLs).</li>
     <li>Tag the release: <code>git tag v2.X.Y &amp;&amp; git push --tags</code>.</li>
     <li>Update the dashboard's default version field if appropriate (in <code>index.html</code>, the <code>adopsVersion</code> input).</li>
-    <li>Existing publishers on older tags are unaffected — jsDelivr serves immutable bytes per tag. Coordinate version bumps with each publisher individually.</li>
+    <li><strong>Promote to the auto-update channel:</strong> set <code>stable</code> in <code>engine/channel.json</code> to the new version, commit, then <strong>purge</strong> <code>https://purge.jsdelivr.net/gh/aryanvani-projects/bidding-player@main/engine/channel.json</code> (and <code>@2/engine/loader.js</code>) so auto-update tags pick it up within minutes.</li>
+    <li><strong>Rollback</strong> (if a release misbehaves): set <code>channel.json</code> <code>stable</code> back to the previous version, commit, purge — every auto-update publisher reverts. <strong>Canary:</strong> set <code>canary</code> + <code>canaryPct</code> (0–100) to roll a release to a sticky % of viewers first.</li>
+    <li><em>Pinned</em> publishers on older tags are unaffected — jsDelivr serves immutable bytes per tag.</li>
   </ol>
 
   <div class="callout">
@@ -431,6 +433,10 @@
 <section id="changelog">
   <h2>Changelog</h2>
   <ul class="changelog">
+    <li>
+      <div class="ver">v2.5.0</div>
+      <div class="desc"><strong>Auto-updating engine tag.</strong> New "Engine Delivery" choice in the tag generator: <strong>Auto-update</strong> (default) emits a tiny loader that loads the latest <em>stable</em> engine from a release channel (<code>engine/channel.json</code>), so publishers never re-issue the tag when we ship an update; <strong>Pinned</strong> keeps the old frozen <code>@vX.Y.Z</code> behavior. Rollback = set <code>channel.json</code> <code>stable</code> back + purge; canary = <code>canary</code> + <code>canaryPct</code>.</div>
+    </li>
     <li>
       <div class="ver">v2.4.3</div>
       <div class="desc"><strong>Outstream unmute control.</strong> Outstream ads autoplay muted, so the player now shows a tap-for-sound mute/unmute toggle (bottom-left) while the ad plays. IMA's own controls (ad label, countdown, clickthrough, skip) are unchanged — the toggle is an overlay for the one control IMA doesn't provide generically.</div>
@@ -487,9 +493,9 @@
 </section>
 
 <footer>
-  Bidding Player Ad Ops Console &bull; v2.4.3 &bull; Internal documentation<br>
+  Bidding Player Ad Ops Console &bull; v2.5.0 &bull; Internal documentation<br>
   Repo: <code>github.com/aryanvani-projects/bidding-player</code> &bull;
-  Engine: <code>cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.4.3/engine/player.js</code>
+  Engine: <code>cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.5.0/engine/player.js</code>
 </footer>
 
 </main>

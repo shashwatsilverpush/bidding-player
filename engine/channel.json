@@ -1,0 +1,6 @@
+{
+  "stable": "2.5.0",
+  "canary": "2.5.0",
+  "canaryPct": 0,
+  "_comment": "Release channel pointer for the auto-updating loader. 'stable' = the engine version all auto-update tags load. To roll back, set 'stable' to a previous version and purge the @main channel.json on jsDelivr. To canary a release, set 'canary' to the new version and 'canaryPct' to the % of loads (0-100) that should get it."
+}

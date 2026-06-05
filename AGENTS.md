@@ -22,7 +22,7 @@ The dashboard (`index.html`) lets AdOps generate production tags, run sandbox si
 
 ## 2. Current Version
 
-**VERSION:** `2.4.3`  
+**VERSION:** `2.5.0`  
 All `@vX.Y.Z` CDN references in `index.html` and `demo/publisher-test.html` **must** match this value.
 The `version-check.yml` CI workflow enforces this — it will fail the build if they drift.
 
@@ -239,7 +239,12 @@ Final log line: `Final hb_pb value: $X.XX`
 
 ## 10. Release History
 
-### v2.4.3 (current)
+### v2.5.0 (current)
+- **Auto-updating engine tag (loader + channel manifest)** — new `engine/loader.js` + `engine/channel.json`. Publishers can embed the loader instead of pinning an engine version; it fetches the channel manifest, resolves the engine version (stable, with optional sticky canary % rollout), and injects the pinned `@v{version}/engine/player.js` — copying through all `data-*` and substituting a `__VER__` token (so `data-prebid-url` tracks the engine). Falls back to a baked-in known-good version (`2.4.3`) if the manifest is unreachable (1.5 s timeout). Engine unchanged — it already self-discovers via `document.currentScript || getElementById("adtech-player-core")`, so the injected script resolves correctly (loader frees its own id first).
+- **Dashboard "Engine Delivery" selector** — Auto-update (default; emits the loader tag, `src=@2/engine/loader.js`, `data-prebid-url=@__VER__/…`) vs Pinned (emits the exact `@vX.Y.Z` engine URL, the old behavior).
+- **Rollback/canary:** edit `channel.json` `stable` (rollback) or `canary`+`canaryPct` (canary), commit, then **purge `@main/engine/channel.json` (+ `@2/engine/loader.js`) on jsDelivr**. The loader rides the `@2` range so it auto-updates within the major version without re-issuing tags.
+
+### v2.4.3
 - **Outstream unmute control** — outstream autoplays muted, so the engine now overlays a custom mute/unmute (sound) toggle bottom-left while the ad plays (shown on `CONTENT_PAUSE_REQUESTED`, hidden on complete/error). Tap toggles `adsManager.setVolume()` + `videoEl.muted` and swaps the speaker icon; the button sits above the IMA ad container (`z-index` max) and `stopPropagation`s so it doesn't fire the ad clickthrough. IMA's own controls are untouched — we still pass no restrictive `AdsRenderingSettings`, so all creative-supported IMA UI (ad label, countdown, clickthrough, skip) stays on; we only add the sound toggle IMA doesn't provide.
 
 ### v2.4.2
@@ -290,14 +295,13 @@ Final log line: `Final hb_pb value: $X.XX`
 
 Priority order as of v2.4.0:
 
-> **Shipped:** Floor price controls + GAM Key-Value reference (v2.2.0); Outstream video support (v2.3.0); Sticky / floating instream player (v2.4.0).
+> **Shipped:** Floor price controls + GAM Key-Value reference (v2.2.0); Outstream video support (v2.3.0); Sticky / floating instream player (v2.4.0); Auto-updating engine tag — loader + channel manifest (v2.5.0).
 
 ### Near-term (next sprint)
 | # | Feature | Why |
 |---|---|---|
 | 1 | **Sandbox: Real Bid Request mode** | Fire real `pbjs.requestBids()` from sandbox; show actual response times + live CPMs |
 | 2 | **Per-bidder floor override** | Floor min/max are global today; AdOps may want a per-SSP floor |
-| 3 | **Auto-updating engine tag (publisher-side)** | Let a publisher's tag pick up the latest engine without re-issuing it. Cleanest path: jsDelivr semver-range URL (`bidding-player@2/engine/player.js` → latest 2.x, or `@2.4` → latest 2.4.x) instead of a pinned `@vX.Y.Z`. **Trade-off:** range URLs are mutable + cached ~12–24h (vs ~5-min immutable tags), so a bad release auto-propagates to all publishers — needs a rollback/canary story before adopting. Avoid `@main` (mutable, ~12h cache, no review gate). Possible safer variant: a thin pinned loader that reads `VERSION` and injects the matching engine. |
 
 ### Medium-term
 | # | Feature | Why |
@@ -359,4 +363,4 @@ The bundle is built via GitHub Actions (`build-prebid-bundle.yml`, manual dispat
 
 ---
 
-*Last updated: v2.4.3 — 2026-06-03*
+*Last updated: v2.5.0 — 2026-06-03*
