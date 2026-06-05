@@ -1598,7 +1598,7 @@ async function runSandbox() {
   // reads as intentional, not broken.
   if ($('bidSource') && $('bidSource').value === 'real') {
     disposePlayer();
-    $('videoContainer').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:13px;line-height:1.6;text-align:center;padding:24px;">Real bid request mode runs the <strong style="color:var(--text);">auction only</strong> — no creative is played here.<br>Live bidder status, CPM, and response times are in the <strong style="color:var(--text);">Console Log</strong> below.</div>';
+    $('videoContainer').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;padding:24px;box-sizing:border-box;"><div style="color:var(--text-muted);font-size:13px;line-height:1.65;text-align:center;max-width:460px;">Real bid request mode runs the <strong style="color:var(--text);">auction only</strong> — no creative is played here. Live bidder status, CPM, and response times are in the <strong style="color:var(--text);">Console Log</strong> below.</div></div>';
     $('playerCard').style.display = 'block';
     try { await runRealBidRequest({ bidders, pbTimeout, prebidCache }); }
     catch (e) { logRaw('Real bid request failed: ' + escHtml(e && e.message), 'err', 'phase'); }
@@ -1794,6 +1794,10 @@ async function runSandbox() {
     const adContainer = document.createElement('div'); adContainer.id = 'adContainer'; videoContainer.appendChild(adContainer);
     const adc    = new google.ima.AdDisplayContainer(adContainer, videoEl);
     const loader = new google.ima.AdsLoader(adc);
+    // Parity with the production engine: allow (insecure) VPAID so VPAID
+    // sample/creatives render instead of hanging on a black frame then
+    // falling through to content.
+    try { google.ima.settings.setVpaidMode(google.ima.ImaSdkSettings.VpaidMode.INSECURE); } catch (_) {}
 
     function logAdError(scope, e) {
       let msg = 'unknown';
