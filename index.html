@@ -935,6 +935,12 @@
     <table>
       <thead><tr><th>Field</th><th>Value</th></tr></thead>
       <tbody>
+        <tr><td class="label-cell">Bid Source<div class="hint">Simulated = mock CPM. Real = live SSP auction.</div></td><td class="input-cell">
+          <select id="bidSource" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font);font-size:13px;padding:8px 10px;outline:none;">
+            <option value="simulated" selected>Simulated — mock CPM, full IMA playback</option>
+            <option value="real">Real bid request — fire live pbjs.requestBids()</option>
+          </select>
+        </td></tr>
         <tr><td class="label-cell">Content URL <span class="req">*</span></td><td class="input-cell"><input type="text" id="contentUrl" value="https://vjs.zencdn.net/v/oceans.mp4" /></td></tr>
         <tr><td class="label-cell">GAM Base Tag <span class="req">*</span></td><td class="input-cell"><textarea id="gamTag">https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator=</textarea></td></tr>
         <tr><td class="label-cell">Prebid Timeout</td><td class="input-cell"><input type="number" id="prebidTimeout" value="1200" /></td></tr>
@@ -1464,6 +1470,103 @@ function disposePlayer() { if (currentPlayer) { try { currentPlayer.dispose(); }
 function createVideoEl() { const v = document.createElement('video'); v.id = 'adPlayer'; v.className = 'video-js vjs-default-skin vjs-big-play-centered'; v.setAttribute('playsinline', ''); v.setAttribute('controls', ''); $('videoContainer').appendChild(v); return v; }
 function showBidInfo(items) { $('bidInfo').innerHTML = items.map(([k,v]) => `<div class="pill">${k}: <span class="val">${v}</span></div>`).join(''); }
 
+// ─── Real bid request mode ──────────────────────────────────────────
+// Fires an actual pbjs.requestBids() against the live SSP endpoints so QA
+// can see real response times, real CPMs, adapter firing, and errors —
+// instead of the simulated mock-CPM path. Prebid.js is loaded on demand
+// (the dashboard doesn't ship it otherwise).
+const SANDBOX_PREBID_URL = 'https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@2/prebid/prebid.js';
+let _prebidLoading = null;
+function loadPrebidOnce() {
+  if (window.pbjs && typeof window.pbjs.requestBids === 'function') return Promise.resolve();
+  if (_prebidLoading) return _prebidLoading;
+  window.pbjs = window.pbjs || { que: [] };
+  _prebidLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = SANDBOX_PREBID_URL; s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Prebid.js failed to load from ' + SANDBOX_PREBID_URL));
+    document.head.appendChild(s);
+  });
+  return _prebidLoading;
+}
+
+function renderRealResults(results, bidders, totalMs, code) {
+  phase(4, 'Bid responses (live)');
+  const rows = bidders.map(b => {
+    const r = results[b.bidder] || { status: 'no response' };
+    const badge = r.status === 'bid' ? '<span style="color:var(--success);font-weight:700;">BID</span>'
+      : r.status === 'timeout' ? '<span style="color:var(--warning);font-weight:700;">TIMEOUT</span>'
+      : r.status === 'error' ? '<span style="color:var(--danger);font-weight:700;">ERROR</span>'
+      : '<span style="color:var(--text-dim);font-weight:700;">NO-BID</span>';
+    return '<tr><td style="padding:4px 10px;">' + escHtml(b.bidder) + '</td><td style="padding:4px 10px;">' + badge +
+      '</td><td style="padding:4px 10px;">' + (r.cpm != null ? '$' + (+r.cpm).toFixed(2) : '—') +
+      '</td><td style="padding:4px 10px;">' + (r.ms != null ? r.ms + ' ms' : '—') + '</td></tr>';
+  }).join('');
+  logRaw('<table style="width:100%;border-collapse:collapse;font-size:12px;margin:6px 0;background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden;">' +
+    '<thead><tr><th style="text-align:left;padding:5px 10px;color:var(--text-muted);background:var(--surface2);">Bidder</th><th style="text-align:left;padding:5px 10px;color:var(--text-muted);background:var(--surface2);">Status</th><th style="text-align:left;padding:5px 10px;color:var(--text-muted);background:var(--surface2);">CPM</th><th style="text-align:left;padding:5px 10px;color:var(--text-muted);background:var(--surface2);">Response</th></tr></thead><tbody>' +
+    rows + '</tbody></table>', 'info', 'phase');
+
+  let targeting = {};
+  try { targeting = pbjs.getAdserverTargetingForAdUnitCode(code) || {}; } catch (e) {}
+  phase(5, 'Winner targeting keys (hb_*)');
+  const keys = Object.keys(targeting);
+  if (keys.length) keys.forEach((k, i) => kv(k, String(targeting[k]), i === keys.length - 1));
+  else kv('Result', 'No bids won — no hb_* targeting (expected when there is no demand)', true);
+
+  phase(6, 'Auction complete · ' + (totalMs / 1000).toFixed(2) + 's total');
+  logRaw('<span style="color:var(--warning);font-weight:700;">Note —</span> live requests originate from this dashboard\'s domain, which is usually <strong>not allowlisted</strong> at the SSPs, so <strong>no-bid is expected here</strong>. Response times, adapter firing, param validity, and errors are still real. Run from an allowlisted publisher page to see live CPMs.', 'info', 'phase');
+}
+
+async function runRealBidRequest(cfg) {
+  const { bidders, pbTimeout, prebidCache } = cfg;
+  phase(1, 'Real bid request — configuration');
+  kv('Mode', 'LIVE — pbjs.requestBids() to real SSP endpoints');
+  kv('Bidders under test', bidders.map(b => b.bidder).join(', '));
+  kv('Bidder timeout', pbTimeout + ' ms', true);
+
+  phase(2, 'Loading Prebid.js');
+  try { await loadPrebidOnce(); kv('Prebid.js', 'loaded ✓', true); }
+  catch (e) { logRaw('Prebid load failed: ' + escHtml(e.message), 'err', 'phase'); return; }
+
+  const code = 'atp-sandbox-' + Date.now();
+  const adUnit = {
+    code: code,
+    mediaTypes: { video: { context: 'instream', playerSize: [[640, 360]], mimes: ['video/mp4', 'video/webm'], protocols: [2, 3, 5, 6], api: [1, 2], playbackmethod: [2], linearity: 1 } },
+    bids: bidders.map(b => ({ bidder: b.bidder, params: b.params }))
+  };
+  const results = {}; bidders.forEach(b => { results[b.bidder] = { status: 'pending' }; });
+  const startedAt = performance.now();
+
+  return new Promise(resolve => {
+    window.pbjs.que.push(function () {
+      try {
+        const buckets = []; for (let i = 0; i <= 30; i++) buckets.push({ min: (i * 0.1).toFixed(2), max: ((i + 1) * 0.1).toFixed(2), increment: 0.1 });
+        pbjs.setConfig({
+          bidderTimeout: pbTimeout, cache: { url: prebidCache }, priceGranularity: { buckets: buckets }, enableSendAllBids: true,
+          consentManagement: { gdpr: { cmpApi: 'static', consentData: { getTCData: { tcString: '', gdprApplies: false } } }, usp: { cmpApi: 'iab', timeout: 100 } }
+        });
+      } catch (e) {}
+      try { pbjs.onEvent('bidResponse', bid => { results[bid.bidderCode] = { status: 'bid', cpm: bid.cpm, ms: bid.timeToRespond }; }); } catch (e) {}
+      try { pbjs.onEvent('noBid', bid => { const c = bid.bidder || bid.bidderCode; if (c && (!results[c] || results[c].status === 'pending')) results[c] = { status: 'no-bid' }; }); } catch (e) {}
+      try { pbjs.onEvent('bidTimeout', arr => (arr || []).forEach(b => { const c = b.bidder || b.bidderCode; if (c) results[c] = { status: 'timeout' }; })); } catch (e) {}
+      try { pbjs.onEvent('bidderError', ev => { const c = ev && ev.bidderRequest && ev.bidderRequest.bidderCode; if (c) results[c] = { status: 'error' }; }); } catch (e) {}
+
+      phase(3, 'Firing pbjs.requestBids() → live SSPs');
+      bidders.forEach((b, i) => kv(b.bidder, 'params ' + escHtml(JSON.stringify(b.params)), i === bidders.length - 1));
+
+      let settled = false;
+      const finish = () => { if (settled) return; settled = true; renderRealResults(results, bidders, Math.round(performance.now() - startedAt), code); resolve(); };
+      // Safety net in case bidsBackHandler never fires.
+      const guard = setTimeout(finish, pbTimeout + 4000);
+      pbjs.requestBids({
+        adUnits: [adUnit], timeout: pbTimeout,
+        bidsBackHandler: function () { clearTimeout(guard); finish(); }
+      });
+    });
+  });
+}
+
 async function runSandbox() {
   clearStatus();
   const v = validate();
@@ -1485,6 +1588,16 @@ async function runSandbox() {
   // Bidder picker was already validated in validate(); read it back here.
   const bidders = v.picker.bidders;
   const bidderMeta = id => BIDDER_CATALOG.find(c => c.id === id) || {};
+
+  // Real bid request mode: fire a live pbjs.requestBids() and stop (no IMA
+  // playback path — this mode is for auction QA, not creative rendering).
+  if ($('bidSource') && $('bidSource').value === 'real') {
+    try { await runRealBidRequest({ bidders, pbTimeout, prebidCache }); }
+    catch (e) { logRaw('Real bid request failed: ' + escHtml(e && e.message), 'err', 'phase'); }
+    $('runBtn').disabled = false; $('btnSpinner').style.display = 'none';
+    setStatus('Live bid request complete — see the console log.', 'success');
+    return;
+  }
 
   const auctionId       = uuid4();
   const bidderRequestId = shortId(16);

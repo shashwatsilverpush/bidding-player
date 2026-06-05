@@ -236,7 +236,11 @@
 <!-- ════════════════════════════════════════════════════════════════ -->
 <section id="sandbox">
   <h2>Sandbox testing</h2>
-  <p>The <strong>Sandbox Testing Suite</strong> tab (left tab on the dashboard) is a self-contained auction simulator. It does not call real bidders — it lets you inject a mock CPM and verify the full GAM stitch + IMA playback path end-to-end.</p>
+  <p>The <strong>Sandbox Testing Suite</strong> tab has two modes, set by the <strong>Bid Source</strong> selector in Auction Configuration:</p>
+  <ul>
+    <li><strong>Simulated</strong> (default) — inject a mock CPM and verify the full GAM stitch + IMA playback path end-to-end. Does not call real bidders.</li>
+    <li><strong>Real bid request</strong> — fires a live <code>pbjs.requestBids()</code> against the ticked SSPs and reports each bidder's real <strong>status</strong> (bid / no-bid / timeout / error), <strong>CPM</strong>, and <strong>response time</strong>. Use it to QA adapter wiring + params and measure SSP latency. <em>Caveat:</em> requests come from the dashboard's domain, which is usually not allowlisted, so <strong>no-bid is expected</strong> here — run from an allowlisted publisher page to see live CPMs. The timings, adapter firing, and errors are real regardless.</li>
+  </ul>
 
   <h4>When to use it</h4>
   <ul>
@@ -433,6 +437,10 @@
 <section id="changelog">
   <h2>Changelog</h2>
   <ul class="changelog">
+    <li>
+      <div class="ver">Dashboard</div>
+      <div class="desc"><strong>Sandbox real bid request mode.</strong> A "Bid Source" selector in the Sandbox: <em>Simulated</em> (mock CPM, default) or <em>Real bid request</em> — fires a live <code>pbjs.requestBids()</code> and shows each SSP's real status, CPM, and response time. Dashboard-only (no engine change). Expect no-bid from the dashboard origin; run from an allowlisted page for live CPMs.</div>
+    </li>
     <li>
       <div class="ver">v2.5.0</div>
       <div class="desc"><strong>Auto-updating engine tag.</strong> New "Engine Delivery" choice in the tag generator: <strong>Auto-update</strong> (default) emits a tiny loader that loads the latest <em>stable</em> engine from a release channel (<code>engine/channel.json</code>), so publishers never re-issue the tag when we ship an update; <strong>Pinned</strong> keeps the old frozen <code>@vX.Y.Z</code> behavior. Rollback = set <code>channel.json</code> <code>stable</code> back + purge; canary = <code>canary</code> + <code>canaryPct</code>.</div>

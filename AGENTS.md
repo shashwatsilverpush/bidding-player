@@ -243,6 +243,7 @@ Final log line: `Final hb_pb value: $X.XX`
 - **Auto-updating engine tag (loader + channel manifest)** — new `engine/loader.js` + `engine/channel.json`. Publishers can embed the loader instead of pinning an engine version; it fetches the channel manifest, resolves the engine version (stable, with optional sticky canary % rollout), and injects the pinned `@v{version}/engine/player.js` — copying through all `data-*` and substituting a `__VER__` token (so `data-prebid-url` tracks the engine). Falls back to a baked-in known-good version (`2.4.3`) if the manifest is unreachable (1.5 s timeout). Engine unchanged — it already self-discovers via `document.currentScript || getElementById("adtech-player-core")`, so the injected script resolves correctly (loader frees its own id first).
 - **Dashboard "Engine Delivery" selector** — Auto-update (default; emits the loader tag, `src=@2/engine/loader.js`, `data-prebid-url=@__VER__/…`) vs Pinned (emits the exact `@vX.Y.Z` engine URL, the old behavior).
 - **Rollback/canary:** edit `channel.json` `stable` (rollback) or `canary`+`canaryPct` (canary), commit, then **purge `@main/engine/channel.json` (+ `@2/engine/loader.js`) on jsDelivr**. The loader rides the `@2` range so it auto-updates within the major version without re-issuing tags.
+- **Dashboard (no engine change): Sandbox real bid request mode** — a "Bid Source" selector in the Sandbox Auction Configuration. *Simulated* (default) keeps the mock-CPM + IMA playback path; *Real* loads Prebid.js on demand (`@2/prebid/prebid.js`) and fires a live `pbjs.requestBids()` against the ticked SSPs, capturing real per-bidder status (bid/no-bid/timeout/error), CPM, and response time via `pbjs.onEvent`. Note: requests originate from the dashboard origin (usually not allowlisted), so no-bid is expected — timings/adapter-firing/errors are still real. Code: `runRealBidRequest()` / `loadPrebidOnce()` in the sandbox script.
 
 ### v2.4.3
 - **Outstream unmute control** — outstream autoplays muted, so the engine now overlays a custom mute/unmute (sound) toggle bottom-left while the ad plays (shown on `CONTENT_PAUSE_REQUESTED`, hidden on complete/error). Tap toggles `adsManager.setVolume()` + `videoEl.muted` and swaps the speaker icon; the button sits above the IMA ad container (`z-index` max) and `stopPropagation`s so it doesn't fire the ad clickthrough. IMA's own controls are untouched — we still pass no restrictive `AdsRenderingSettings`, so all creative-supported IMA UI (ad label, countdown, clickthrough, skip) stays on; we only add the sound toggle IMA doesn't provide.
@@ -295,12 +296,11 @@ Final log line: `Final hb_pb value: $X.XX`
 
 Priority order as of v2.4.0:
 
-> **Shipped:** Floor price controls + GAM Key-Value reference (v2.2.0); Outstream video support (v2.3.0); Sticky / floating instream player (v2.4.0); Auto-updating engine tag — loader + channel manifest (v2.5.0).
+> **Shipped:** Floor price controls + GAM Key-Value reference (v2.2.0); Outstream video support (v2.3.0); Sticky / floating instream player (v2.4.0); Auto-updating engine tag — loader + channel manifest (v2.5.0); Sandbox real bid request mode (dashboard, on the v2.5.0 line — no engine change).
 
 ### Near-term (next sprint)
 | # | Feature | Why |
 |---|---|---|
-| 1 | **Sandbox: Real Bid Request mode** | Fire real `pbjs.requestBids()` from sandbox; show actual response times + live CPMs |
 | 2 | **Per-bidder floor override** | Floor min/max are global today; AdOps may want a per-SSP floor |
 
 ### Medium-term
