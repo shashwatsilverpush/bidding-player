@@ -3,12 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Comparos Premium Publisher Platform</title>
-  
+  <title>Comparos — Video Player Demo</title>
   <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 
   <style>
-    /* Publisher Base Layout Styling */
+    * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background-color: #0b0c10;
@@ -22,8 +21,8 @@
       max-width: 800px;
       width: 100%;
       background: #1f2833;
-      margin: 40px 20px;
-      padding: 40px;
+      margin: 32px 16px;
+      padding: 36px;
       border-radius: 12px;
       box-shadow: 0 20px 40px rgba(0,0,0,0.5);
       border: 1px solid #45a29e;
@@ -37,28 +36,27 @@
     }
     h1 {
       color: #ffffff;
-      margin-top: 10px;
-      font-size: 32px;
+      margin: 10px 0 0;
+      font-size: 30px;
       font-weight: 600;
+      line-height: 1.25;
     }
     .article-text {
       font-size: 16px;
       line-height: 1.8;
       color: #eaeded;
-      margin-bottom: 30px;
+      margin-bottom: 28px;
     }
 
-    /* Ad overlay visibility is fully managed by the engine via inline styles
-       on the ad container (z-index + pointer-events). No CSS shield needed —
-       the engine sets z-index:-1; pointer-events:none between ads and flips
-       to z-index:10; pointer-events:auto on CONTENT_PAUSE_REQUESTED. */
-
+    /* The player is responsive (data-fluid="true") — it fills the wrapper
+       width and keeps a 16:9 ratio, so it scales cleanly on mobile. Ad
+       overlay visibility is managed by the engine via inline styles. */
     .video-placement-wrapper {
       background: #000000;
       padding: 10px;
       border-radius: 8px;
-      border: 1px solid #1f2833;
-      margin: 35px 0;
+      border: 1px solid #0b0c10;
+      margin: 30px 0;
     }
     .ad-banner-notice {
       text-align: center;
@@ -71,25 +69,35 @@
     code {
       background: #0b0c10;
       color: #66fcf1;
-      padding: 4px 8px;
+      padding: 3px 7px;
       border-radius: 4px;
       font-family: monospace;
+      font-size: 0.92em;
+      word-break: break-word;
+    }
+
+    /* ─── Mobile ─────────────────────────────────────── */
+    @media (max-width: 600px) {
+      .site-container { margin: 0; padding: 20px 16px; border-radius: 0; border-left: none; border-right: none; }
+      h1 { font-size: 23px; }
+      .article-text { font-size: 15px; line-height: 1.7; }
+      .video-placement-wrapper { padding: 6px; margin: 22px 0; }
     }
   </style>
 </head>
 <body>
 
   <div class="site-container">
-    <div class="meta-category">AdTech Integration Testing</div>
-    <h1>Premium Publisher Video Sandbox</h1>
-    
+    <div class="meta-category">Comparos · Video</div>
+    <h1>Header-bidding video player — live demo</h1>
+
     <p class="article-text">
-      This page layout simulates a live enterprise publisher integration frame. The video player container underneath handles real-time header bidding auctions via custom wrapper logic.
+      This page shows the Comparos video player running on a sample article. The unit below runs a real-time header-bidding auction and plays the winning ad, then the content video. It is fully responsive, so it scales to phones and tablets as well as desktop.
     </p>
 
     <div class="video-placement-wrapper">
-      <div class="ad-banner-notice">Sponsored Premium Video Stream</div>
-      
+      <div class="ad-banner-notice">Sponsored Video</div>
+
       <script src="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.5.0/engine/player.js"
               id="adtech-player-core"
               data-bidders='[{"bidder":"limelightDigital","params":{"host":"ads-jbi003.rtba.bidsxchange.com","publisherId":"649658371","adUnitId":972556929,"adUnitType":"video"}}]'
@@ -110,7 +118,7 @@
       </div>
 
     <p class="article-text">
-      To observe full system auction telemetry parameters and key-value targeting mutations, load this page inside your browser with the debugging flag active: <code>?debug=true</code>.
+      The player autoplays muted (required for autoplay on mobile browsers) and plays inline. To see auction telemetry in the browser console, open this page with <code>?debug=true</code> appended to the URL.
     </p>
   </div>
 
