@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Comparos — Video Player Demo</title>
+  <title>Comparos — Instream Video Player Demo</title>
   <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 
   <style>
@@ -27,56 +27,17 @@
       box-shadow: 0 20px 40px rgba(0,0,0,0.5);
       border: 1px solid #45a29e;
     }
-    .meta-category {
-      color: #66fcf1;
-      text-transform: uppercase;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 2px;
-    }
-    h1 {
-      color: #ffffff;
-      margin: 10px 0 0;
-      font-size: 30px;
-      font-weight: 600;
-      line-height: 1.25;
-    }
-    .article-text {
-      font-size: 16px;
-      line-height: 1.8;
-      color: #eaeded;
-      margin-bottom: 28px;
-    }
+    .meta-category { color: #66fcf1; text-transform: uppercase; font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+    h1 { color: #fff; margin: 10px 0 0; font-size: 30px; font-weight: 600; line-height: 1.25; }
+    .article-text { font-size: 16px; line-height: 1.8; color: #eaeded; margin-bottom: 28px; }
+    .tip { background: rgba(102,252,241,0.08); border-left: 3px solid #66fcf1; border-radius: 0 6px 6px 0; padding: 12px 14px; font-size: 14px; line-height: 1.6; color: #eaeded; margin: 0 0 28px; }
 
-    /* The player is responsive (data-fluid="true") — it fills the wrapper
-       width and keeps a 16:9 ratio, so it scales cleanly on mobile. Ad
-       overlay visibility is managed by the engine via inline styles. */
-    .video-placement-wrapper {
-      background: #000000;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid #0b0c10;
-      margin: 30px 0;
-    }
-    .ad-banner-notice {
-      text-align: center;
-      font-size: 11px;
-      color: #45a29e;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 8px;
-    }
-    code {
-      background: #0b0c10;
-      color: #66fcf1;
-      padding: 3px 7px;
-      border-radius: 4px;
-      font-family: monospace;
-      font-size: 0.92em;
-      word-break: break-word;
-    }
+    /* The player is responsive (data-fluid="true") and, with data-sticky,
+       floats to a screen corner when scrolled out of view. */
+    .video-placement-wrapper { background: #000; padding: 10px; border-radius: 8px; border: 1px solid #0b0c10; margin: 30px 0; }
+    .ad-banner-notice { text-align: center; font-size: 11px; color: #45a29e; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    code { background: #0b0c10; color: #66fcf1; padding: 3px 7px; border-radius: 4px; font-family: monospace; font-size: 0.92em; word-break: break-word; }
 
-    /* ─── Mobile ─────────────────────────────────────── */
     @media (max-width: 600px) {
       .site-container { margin: 0; padding: 20px 16px; border-radius: 0; border-left: none; border-right: none; }
       h1 { font-size: 23px; }
@@ -89,11 +50,15 @@
 
   <div class="site-container">
     <div class="meta-category">Comparos · Video</div>
-    <h1>Header-bidding video player — live demo</h1>
+    <h1>Instream header-bidding player — live demo</h1>
 
     <p class="article-text">
-      This page shows the Comparos video player running on a sample article. The unit below runs a real-time header-bidding auction and plays the winning ad, then the content video. It is fully responsive, so it scales to phones and tablets as well as desktop.
+      This page shows the Comparos instream video player on a sample article. It runs a real-time header-bidding auction, plays the winning ad as a pre-roll, then the content video. It is fully responsive and works on phones, tablets, and desktop.
     </p>
+
+    <div class="tip">
+      <strong>Try the sticky player:</strong> let the video start, then <strong>scroll down</strong> — the player shrinks and docks to the bottom-right corner so it keeps playing while you read. Scroll back up and it returns inline; tap the <strong>✕</strong> to dismiss it.
+    </div>
 
     <div class="video-placement-wrapper">
       <div class="ad-banner-notice">Sponsored Video</div>
@@ -109,6 +74,7 @@
               data-muted="true"
               data-fluid="true"
               data-loop="false"
+              data-sticky="true"
               data-preload="metadata"
               data-vpaid="insecure"
               data-div-id="comparos-video-placement"
@@ -118,7 +84,19 @@
       </div>
 
     <p class="article-text">
-      The player autoplays muted (required for autoplay on mobile browsers) and plays inline. To see auction telemetry in the browser console, open this page with <code>?debug=true</code> appended to the URL.
+      The player autoplays muted (required for autoplay on mobile browsers) and plays inline. As you keep reading, the sticky behaviour keeps the impression on screen — which lifts viewability and completed-view rates, the metrics that drive video CPMs.
+    </p>
+    <p class="article-text">
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+    </p>
+    <p class="article-text">
+      Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.
+    </p>
+    <p class="article-text">
+      Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit.
+    </p>
+    <p class="article-text">
+      To see auction telemetry in the browser console, open this page with <code>?debug=true</code> appended to the URL.
     </p>
   </div>
 

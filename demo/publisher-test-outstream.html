@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comparos — Outstream Video Player Demo</title>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #0b0c10;
+      color: #c5c6c7;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+    }
+    .site-container {
+      max-width: 800px;
+      width: 100%;
+      background: #1f2833;
+      margin: 32px 16px;
+      padding: 36px;
+      border-radius: 12px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      border: 1px solid #45a29e;
+    }
+    .meta-category { color: #66fcf1; text-transform: uppercase; font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+    h1 { color: #fff; margin: 10px 0 0; font-size: 30px; font-weight: 600; line-height: 1.25; }
+    .article-text { font-size: 16px; line-height: 1.8; color: #eaeded; margin-bottom: 28px; }
+    .tip { background: rgba(102,252,241,0.08); border-left: 3px solid #66fcf1; border-radius: 0 6px 6px 0; padding: 12px 14px; font-size: 14px; line-height: 1.6; color: #eaeded; margin: 0 0 28px; }
+
+    /* Outstream: no content video. The slot below stays collapsed until it
+       scrolls ≥50% into view, then autoplays muted and collapses when done. */
+    .ad-banner-notice { font-size: 11px; color: #45a29e; text-transform: uppercase; letter-spacing: 1px; margin: 30px 0 8px; }
+    code { background: #0b0c10; color: #66fcf1; padding: 3px 7px; border-radius: 4px; font-family: monospace; font-size: 0.92em; word-break: break-word; }
+
+    @media (max-width: 600px) {
+      .site-container { margin: 0; padding: 20px 16px; border-radius: 0; border-left: none; border-right: none; }
+      h1 { font-size: 23px; }
+      .article-text { font-size: 15px; line-height: 1.7; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="site-container">
+    <div class="meta-category">Comparos · Video</div>
+    <h1>Outstream (in-article) player — live demo</h1>
+
+    <p class="article-text">
+      This page shows the Comparos <strong>outstream</strong> unit — built for articles with no video of their own. There is no content video here; the ad slot below stays collapsed until it scrolls into view, then autoplays muted and collapses again when the ad finishes.
+    </p>
+
+    <div class="tip">
+      <strong>Scroll down</strong> to the "Sponsored video" slot. As it enters the screen the unit expands and plays muted; tap the speaker control for sound. When the ad ends, the slot collapses and the article closes back up. Fully responsive on mobile and desktop.
+    </div>
+
+    <p class="article-text">
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+    </p>
+    <p class="article-text">
+      Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+    </p>
+
+    <div class="ad-banner-notice">Sponsored video</div>
+    <script src="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.5.0/engine/player.js"
+            id="adtech-player-core"
+            data-bidders='[{"bidder":"limelightDigital","params":{"host":"ads-jbi003.rtba.bidsxchange.com","publisherId":"649658371","adUnitId":972556929,"adUnitType":"video"}}]'
+            data-tag="https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator="
+            data-timeout="1200"
+            data-bias="0.10"
+            data-placement="outstream"
+            data-autoplay="true"
+            data-muted="true"
+            data-fluid="true"
+            data-preload="metadata"
+            data-vpaid="insecure"
+            data-div-id="comparos-video-placement"
+            data-cache="https://prebid.adnxs.com/pbc/v1/cache"
+            data-prebid-url="https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.5.0/prebid/prebid.js"
+            async></script>
+
+    <p class="article-text">
+      Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur.
+    </p>
+    <p class="article-text">
+      Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem.
+    </p>
+    <p class="article-text">
+      To see auction telemetry in the browser console, open this page with <code>?debug=true</code> appended to the URL. Note: the ad starts only once the slot is at least half on screen.
+    </p>
+  </div>
+
+</body>
+</html>
