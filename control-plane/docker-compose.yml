@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: bp
+      POSTGRES_PASSWORD: bp
+      POSTGRES_DB: control_plane
+    ports:
+      # Host 55432 -> container 5432 to avoid clashing with a locally-installed
+      # Postgres on 5432. Inside the compose network the api still uses db:5432.
+      - "55432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bp -d control_plane"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Inside the compose network the DB host is "db", not localhost.
+      DATABASE_URL: postgresql+asyncpg://bp:bp@db:5432/control_plane
+      JWT_SECRET: dev-secret-change-me
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin
+      PUBLIC_BASE_URL: http://localhost:8000
+      CONSENT_MODE: anonymize
+      ADMIN_CORS_ORIGINS: "*"
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:

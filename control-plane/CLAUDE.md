@@ -1,0 +1,137 @@
+# CLAUDE.md — Control Plane Project Memory
+
+> **Read this first before making changes.** This file is the authoritative
+> context for AI agents (Claude Code) continuing this project. Update it whenever
+> you finish a phase or change architecture. It replaces scrolling chat history.
+
+---
+
+## 1. What this repo is
+
+The **control plane** (backend) for *Bidding Player*, a video header-bidding
+player. The player itself (engine `player.js`, `loader.js`, Prebid bundle,
+in-browser tag generator) lives in a **separate repo**,
+`aryanvani-projects/bidding-player`, and is **not** in this repo. Don't try to
+build or modify the engine here — engine-side changes are written up as a spec in
+`docs/engine-instrumentation.md` for that team to apply.
+
+This repo delivers three things (Phases 0–1):
+1. Store publishers + demand config (tenant hierarchy + demand catalog).
+2. Serve runtime config by placement id (`GET /v1/config/{id}`).
+3. Ingest telemetry (`POST /e`) into Postgres.
+
+## 2. Stack & conventions
+
+- **Python 3.12**, **FastAPI** + **uvicorn**, **Pydantic v2** for all I/O schemas.
+- **PostgreSQL 15**, **SQLAlchemy 2.0 async** (typed `Mapped[...]` models) +
+  **asyncpg**, **Alembic** migrations. **Migrations are the schema source of
+  truth — never `create_all` in app code** (tests do it only for fixture speed).
+- **Auth:** single internal admin, `POST /auth/login` → JWT (PyJWT), bearer on
+  admin routes. Passwords via `passlib[bcrypt]`.
+- **Env-only config** via `pydantic-settings` (`app/settings.py`); secrets never
+  committed; see `.env.example`.
+- **Lint/type:** `ruff` (lint+format) and `mypy` must stay green. Run
+  `ruff check . && mypy app && pytest` before committing.
+- IDs are opaque strings: `<prefix>_<random>` via `app.db.gen_id` (`acc_`, `pub_`,
+  `site_`, `au_`, `plc_`, `dp_`, `pd_`, `evt_`).
+
+## 3. Layout
+
+```
+app/
+  main.py            # app + per-route CORS middleware + router wiring + /health
+  settings.py        # pydantic-settings (env)
+  db.py              # async engine/session, Base, gen_id(), utcnow()
+  models/            # SQLAlchemy: tenancy.py, demand.py, events.py
+  schemas/           # Pydantic: config.py (PlacementConfig/RuntimeConfig), admin.py, events.py
+  auth/              # security.py (hash/jwt), deps.py (require_admin)
+  routers/           # auth, admin_publishers, admin_demand, config, collector, stats
+  services/          # config_assembly.py, ingest.py, seed.py (DEMAND_PARTNERS constant)
+migrations/          # alembic (async env.py); versions/ holds schema + seed
+tests/               # pytest + httpx.AsyncClient; conftest bootstraps schema+seed
+docs/                # event-schema.md, engine-instrumentation.md (Workstream B)
+```
+
+## 4. Data model (see `app/models/`)
+
+`Account → Publisher → Site → AdUnit → Placement`.
+`DemandPartner` (catalog, seeded with the 6 SSPs) and `PublisherDemand`
+(per-publisher enablement + params + floor, `UNIQUE(publisher_id, demand_partner_id)`).
+`Event` (append-only telemetry; flat + typed + `props JSONB`; promoted win cols
+`cpm_raw`/`cpm_biased`/`hb_pb`/`bidder`).
+
+Bootstrap account id is fixed: `acc_root` (`app/services/seed.py`). Publisher
+creation defaults to it.
+
+## 5. The two runtime contracts (keep stable under `/v1/`)
+
+- **Config:** `GET /v1/config/{placement_id}` → `RuntimeConfig`. Assembles
+  placement config + enabled `PublisherDemand` bidders. Precedence:
+  publisher_demand defines the set + default params/floor; `config.enabledBidders`
+  restricts; `config.bidderOverrides` merges on top (placement wins). 404 if
+  unknown/inactive/paused-publisher. Sets `Cache-Control: public, max-age=300`.
+- **Collector:** `POST /e` → always `204`. Validates a discriminated-union
+  envelope (`app/schemas/events.py`), drops unknown accounts / invalid events
+  silently, dedups on `eventId`, enriches (ts_server, UA, ip_country stub),
+  applies the consent rule, promotes win CPMs. Tolerates `text/plain` bodies.
+
+## 6. Critical domain facts (don't regress)
+
+- **Raw vs biased CPM:** the engine adds a floor bias and inflates the `hb_pb`
+  sent to GAM. `auction_win` MUST carry both `cpmRaw` and `cpmBiased`; they are
+  stored in separate columns. Never collapse them.
+- **`bias` is a string** ("0.00" = explicit zero) because the engine treats
+  empty/absent as its 0.10 default.
+- **Fail safe:** config endpoint is cacheable + the engine has a fallback; nothing
+  here should assume the control plane is always up from the browser's side.
+- **The 6 demand partners** mirror the engine's `BIDDER_CATALOG`. The canonical
+  list is `app/services/seed.py::DEMAND_PARTNERS`; the seed migration inlines the
+  same rows (keep in sync if you add a partner).
+
+## 7. How to run / test
+
+```bash
+docker compose up --build         # Postgres + API + migrations
+pytest                            # needs Postgres (docker compose up -d db)
+ruff check . && ruff format --check . && mypy app
+alembic revision --autogenerate -m "msg"   # after model changes
+alembic upgrade head
+```
+
+CI (`.github/workflows/ci.yml`) runs ruff + mypy + pytest against a Postgres
+service, and separately runs `alembic upgrade head` on a fresh DB to validate
+migrations.
+
+## 8. Phase 2+ backlog (not built yet — pick up here)
+
+Priority order:
+1. **GAM reporting join** — pull GAM Ad Manager API delivery/revenue and reconcile
+   with client-side `auction_win`/`impression` so eCPM is real, not bid-side only.
+   This is the single most valuable next step for "increase yield."
+2. **Columnar mirror** — stream `events` to ClickHouse/BigQuery (the table is
+   already shaped for a 1:1 copy) once volume or query needs grow.
+3. **Reporting UI / API** — per-publisher/partner/ad-unit dashboards over events.
+4. **Onboarding flow + live verification** — detect the tag is live, ads.txt has
+   our seller line, GAM line items exist. (See gap analysis: verification is the
+   hard, valuable part.)
+5. **GAM line-item setup wizard** — automate price-priority line items +
+   `hb_pb`/`hb_bidder` creatives via the GAM API.
+6. **Self-serve + publisher logins** — the model is already tenant-shaped; add
+   real accounts, roles, and per-tenant auth.
+7. **Per-bidder floors / per-placement demand tuning** — schema already supports
+   `PublisherDemand.floor` and `config.bidderOverrides`; expose in UI.
+8. **Dynamic Prebid bundles** — per-publisher adapter sets instead of the
+   monolithic bundle.
+9. **ads.txt / sellers.json / schain + identity modules** — supply-chain plumbing
+   the engine/wrapper needs for demand to buy.
+
+## 9. Gotchas
+
+- Set env vars **before** importing the app in tests — `get_settings()` is
+  `lru_cache`d (`tests/conftest.py` does this at module top).
+- CORS is a **custom per-path middleware** in `main.py` (public routes `*`, admin
+  routes allowlisted) because one global `CORSMiddleware` can't express both.
+- The collector returns 204 even on drop (unknown account / bad event) so it never
+  leaks which accounts exist and never blocks the page.
+- Alembic `env.py` is async and pulls `DATABASE_URL` from settings — don't rely on
+  `sqlalchemy.url` in `alembic.ini`.

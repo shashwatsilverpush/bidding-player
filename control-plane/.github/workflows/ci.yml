@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-type-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: bp
+          POSTGRES_PASSWORD: bp
+          POSTGRES_DB: control_plane
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bp -d control_plane"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql+asyncpg://bp:bp@localhost:5432/control_plane
+      JWT_SECRET: ci-secret
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin
+      PUBLIC_BASE_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check .
+      - name: Format check
+        run: ruff format --check .
+      - name: Type check
+        run: mypy app
+      - name: Validate migrations on a fresh DB
+        run: alembic upgrade head
+      - name: Tests
+        run: pytest
