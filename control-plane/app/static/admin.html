@@ -14,77 +14,55 @@
   header h1{font-size:15px;margin:0;font-weight:650;} .tag{font-size:11px;color:var(--muted);
     border:1px solid var(--line);padding:2px 8px;border-radius:20px;} .spacer{flex:1;}
   nav{display:flex;gap:4px;padding:0 14px;background:#12162a;border-bottom:1px solid var(--line);
-    position:sticky;top:49px;z-index:9;flex-wrap:wrap;}
-  nav button{background:none;border:none;color:var(--muted);padding:12px 14px;font:inherit;cursor:pointer;
-    border-bottom:2px solid transparent;}
+    position:sticky;top:49px;z-index:9;}
+  nav button{background:none;border:none;color:var(--muted);padding:12px 14px;font:inherit;cursor:pointer;border-bottom:2px solid transparent;}
   nav button.active{color:var(--ink);border-bottom-color:var(--accent);}
-  nav button:disabled{opacity:.4;cursor:not-allowed;}
-  .ctx{display:flex;align-items:center;gap:10px;padding:8px 20px;background:#0c0f1e;border-bottom:1px solid var(--line);
-    font-size:12px;color:var(--muted);flex-wrap:wrap;}
-  .ctx select{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 8px;font:inherit;}
-  .ctx .chip{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 9px;color:var(--ink);}
-  .wrap{max-width:1180px;margin:0 auto;padding:20px;}
+  .crumbs{padding:9px 20px;background:#0c0f1e;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);}
+  .crumbs a{color:var(--accent);cursor:pointer;text-decoration:none;} .crumbs b{color:var(--ink);}
+  .wrap{max-width:1120px;margin:0 auto;padding:20px;}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:16px;}
   .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 12px;}
   label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;}
-  input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);
-    border-radius:8px;padding:9px 10px;font:inherit;}
-  textarea{font-family:ui-monospace,Menlo,monospace;font-size:12px;}
-  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);}
-  button.btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 14px;font:inherit;
-    font-weight:600;cursor:pointer;margin-top:12px;} button.btn:hover{filter:brightness(1.08);}
-  button.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);}
-  button.small{padding:5px 10px;font-size:12px;margin-top:0;}
-  button.danger{background:transparent;border:1px solid var(--bad);color:var(--bad);}
+  input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px 10px;font:inherit;}
+  textarea{font-family:ui-monospace,Menlo,monospace;font-size:12px;} input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);}
+  button.btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer;margin-top:12px;}
+  button.btn:hover{filter:brightness(1.08);} button.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);}
+  button.small{padding:5px 10px;font-size:12px;margin-top:0;} button.danger{background:transparent;border:1px solid var(--bad);color:var(--bad);}
   .row{display:flex;gap:10px;flex-wrap:wrap;} .row>*{flex:1;min-width:120px;}
-  ul.list{list-style:none;margin:0;padding:0;} ul.list li{padding:9px 10px;border:1px solid var(--line);
-    border-radius:8px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;}
-  ul.list li:hover{border-color:var(--accent);} ul.list li.sel{border-color:var(--accent);background:var(--panel2);}
+  ul.list{list-style:none;margin:0;padding:0;} ul.list li{padding:11px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;
+    cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;} ul.list li:hover{border-color:var(--accent);background:var(--panel2);}
   .id{font-size:11px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;}
-  .pill{font-size:10px;padding:2px 7px;border-radius:20px;border:1px solid var(--line);color:var(--muted);}
-  .pill.on{color:var(--good);border-color:var(--good);}
-  pre{background:#0a0d1a;border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;
-    font:12px/1.5 ui-monospace,Menlo,monospace;color:#cfe3ff;max-height:360px;white-space:pre-wrap;word-break:break-all;}
-  .muted{color:var(--muted);font-size:12px;} .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-  @media(max-width:820px){.grid2{grid-template-columns:1fr;}}
+  .pill{font-size:10px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--muted);white-space:nowrap;}
+  .pill.on{color:var(--good);border-color:var(--good);} .pill.warn{color:var(--warn);border-color:var(--warn);} .pill.bad{color:var(--bad);border-color:var(--bad);}
+  pre{background:#0a0d1a;border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,monospace;
+    color:#cfe3ff;max-height:360px;white-space:pre-wrap;word-break:break-all;}
+  .muted{color:var(--muted);font-size:12px;} .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;} @media(max-width:820px){.grid2{grid-template-columns:1fr;}}
   fieldset{border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0 0;} legend{font-size:11px;color:var(--muted);padding:0 6px;}
-  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel2);border:1px solid var(--line);padding:12px 16px;
-    border-radius:8px;max-width:380px;box-shadow:0 8px 30px rgba(0,0,0,.5);font-size:13px;z-index:50;}
-  .toast.err{border-color:var(--bad);} .toast.ok{border-color:var(--good);}
-  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;}
-  .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px;}
-  .kpi .v{font-size:22px;font-weight:700;} .kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
-  .kpi .s{font-size:11px;color:var(--muted);margin-top:2px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;} th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);}
-  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;}
+  .subtabs{display:flex;gap:4px;margin-bottom:14px;flex-wrap:wrap;} .subtabs button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    padding:7px 13px;border-radius:8px;font:inherit;cursor:pointer;} .subtabs button.active{color:var(--ink);border-color:var(--accent);}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel2);border:1px solid var(--line);padding:12px 16px;border-radius:8px;
+    max-width:380px;box-shadow:0 8px 30px rgba(0,0,0,.5);font-size:13px;z-index:50;} .toast.err{border-color:var(--bad);} .toast.ok{border-color:var(--good);}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;} .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .kpi .v{font-size:22px;font-weight:700;} .kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;} .kpi .s{font-size:11px;color:var(--muted);margin-top:2px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;} th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);} th{color:var(--muted);font-size:11px;text-transform:uppercase;}
   .bar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;} .bar>i{display:block;height:100%;background:var(--accent);}
-  .funnel div{margin-bottom:8px;} .funnel .flabel{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;}
+  .funnel .flabel{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;} .funnel>div{margin-bottom:8px;}
   .spark{display:flex;align-items:flex-end;gap:2px;height:80px;} .spark i{flex:1;background:var(--accent);border-radius:2px 2px 0 0;min-height:2px;}
   .hide{display:none;} code{font-family:ui-monospace,Menlo,monospace;background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12px;}
+  .check{display:flex;gap:8px;align-items:flex-start;margin:6px 0;font-size:13px;} .check .ic{flex:0 0 auto;}
+  .empty{color:var(--muted);padding:20px;text-align:center;border:1px dashed var(--line);border-radius:8px;}
 </style>
 </head>
 <body>
-<header>
-  <h1>Bidding Player</h1><span class="tag">Control Plane</span>
-  <div class="spacer"></div>
-  <span class="muted" id="who"></span>
-  <button class="ghost small hide" id="logoutBtn" style="margin:0">Log out</button>
-</header>
-<nav id="nav" class="hide">
-  <button data-tab="publishers" class="active">Publishers</button>
-  <button data-tab="properties">Properties</button>
-  <button data-tab="demand">Demand</button>
-  <button data-tab="tag">Player Tag</button>
-  <button data-tab="gam">GAM</button>
-  <button data-tab="analytics">Analytics</button>
+<header><h1>Bidding Player</h1><span class="tag">Control Plane</span><div class="spacer"></div>
+  <span class="muted" id="who"></span><button class="ghost small hide" id="logoutBtn" style="margin:0">Log out</button></header>
+<nav class="hide" id="nav">
+  <button data-top="publishers" class="active">Publishers</button>
+  <button data-top="demand">Demand Partners</button>
 </nav>
-<div class="ctx hide" id="ctx">
-  <span>Publisher:</span><select id="ctxPub"></select>
-  <span class="chip" id="ctxPlc">no placement selected</span>
-</div>
+<div class="crumbs hide" id="crumbs"></div>
 
 <div class="wrap">
-  <!-- LOGIN -->
   <div class="card hide" id="loginCard" style="max-width:380px;margin:60px auto;">
     <h2>Sign in</h2>
     <label>Username</label><input id="lUser" value="admin" />
@@ -92,305 +70,246 @@
     <button class="btn" id="loginBtn" style="width:100%">Sign in</button>
     <p class="muted" id="loginMsg"></p>
   </div>
-
-  <!-- PUBLISHERS -->
-  <section class="tabpane hide" data-pane="publishers">
-    <div class="grid2">
-      <div class="card"><h2>Publishers</h2><ul class="list" id="pubList"></ul></div>
-      <div class="card"><h2>New publisher</h2>
-        <label>Name</label><input id="pName" placeholder="Acme Media" />
-        <label>GAM network code</label><input id="pGam" placeholder="21775744923" />
-        <button class="btn" id="pAdd">Add publisher</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- PROPERTIES -->
-  <section class="tabpane hide" data-pane="properties">
-    <div class="grid2">
-      <div class="card"><h2>Sites</h2><ul class="list" id="siteList"></ul>
-        <fieldset><legend>New site</legend>
-          <label>Domain</label><input id="sDomain" placeholder="acme.example" />
-          <button class="btn" id="sAdd">Add site</button></fieldset>
-      </div>
-      <div class="card"><h2>Ad units</h2><ul class="list" id="auList"></ul>
-        <fieldset><legend>New ad unit</legend>
-          <label>GAM ad unit path</label><input id="aPath" placeholder="/21775744923/acme/video" />
-          <label>Format</label><select id="aFormat"><option>video</option><option>banner</option></select>
-          <button class="btn" id="aAdd">Add ad unit</button></fieldset>
-      </div>
-    </div>
-    <div class="card"><h2>Placements</h2><ul class="list" id="plcList"></ul>
-      <fieldset><legend>New placement</legend>
-        <div class="row"><div><label>Name</label><input id="cName" placeholder="Homepage instream" /></div>
-          <div><label>Placement</label><select id="cPlacement"><option>instream</option><option>outstream</option></select></div>
-          <div><label>Engine delivery</label><select id="cChannel"><option value="auto">auto-update</option><option value="pinned">pinned</option></select></div>
-        </div>
-        <button class="btn" id="cAdd">Add placement</button></fieldset>
-    </div>
-  </section>
-
-  <!-- DEMAND -->
-  <section class="tabpane hide" data-pane="demand">
-    <div class="card"><h2>Demand partners <span class="muted" id="demandFor"></span></h2>
-      <p class="muted">Enable SSPs for this publisher and enter their credentials. Enabled partners flow into every placement's generated tag and runtime config.</p>
-      <div id="demandList"></div>
-    </div>
-  </section>
-
-  <!-- PLAYER TAG -->
-  <section class="tabpane hide" data-pane="tag">
-    <div class="grid2">
-      <div class="card"><h2>Player behaviour</h2>
-        <div class="row"><div><label>Engine delivery</label><select id="tChannel"><option value="auto">auto-update (loader)</option><option value="pinned">pinned version</option></select></div>
-          <div><label>Content video URL (instream)</label><input id="tVideo" /></div></div>
-        <div class="row"><div><label>Mount div id</label><input id="tDiv" placeholder="bp-video-slot" /></div>
-          <div><label>Preload</label><select id="tPreload"><option>metadata</option><option>auto</option><option>none</option></select></div>
-          <div><label>VPAID</label><select id="tVpaid"><option>insecure</option><option>secure</option><option>disabled</option></select></div></div>
-        <div class="row" style="margin-top:10px">
-          <label style="flex:0 0 auto"><input type="checkbox" id="tAutoplay" style="width:auto" checked> autoplay</label>
-          <label style="flex:0 0 auto"><input type="checkbox" id="tMuted" style="width:auto" checked> muted</label>
-          <label style="flex:0 0 auto"><input type="checkbox" id="tFluid" style="width:auto" checked> fluid</label>
-          <label style="flex:0 0 auto"><input type="checkbox" id="tLoop" style="width:auto"> loop</label>
-          <label style="flex:0 0 auto"><input type="checkbox" id="tSticky" style="width:auto"> sticky</label>
-        </div>
-        <button class="btn" id="tSave">Save & generate</button>
-      </div>
-      <div class="card"><h2>Embed tag <span class="muted">(share with the publisher)</span></h2>
-        <p class="muted" id="tHint">Configure and save on the left, then copy this into the publisher's page.</p>
-        <textarea id="tOut" rows="16" readonly></textarea>
-        <button class="btn" id="tCopy">Copy tag</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- GAM -->
-  <section class="tabpane hide" data-pane="gam">
-    <div class="grid2">
-      <div class="card"><h2>GAM ad serving</h2>
-        <label>GAM VAST tag URL <span class="muted">(data-tag)</span></label>
-        <textarea id="gTag" rows="4" placeholder="https://pubads.g.doubleclick.net/gampad/ads?iu=/.../&sz=640x480&...&output=vast&..."></textarea>
-        <label>Prebid cache URL</label><input id="gCache" placeholder="https://prebid.adnxs.com/pbc/v1/cache" />
-        <fieldset><legend>Auction management</legend>
-          <div class="row"><div><label>Timeout (ms)</label><input id="gTimeout" value="1200" /></div>
-            <div><label>Floor bias ($)</label><input id="gBias" value="0.10" /></div></div>
-          <div class="row"><div><label>Floor min ($, optional)</label><input id="gFloorMin" placeholder="none" /></div>
-            <div><label>Floor max ($, optional)</label><input id="gFloorMax" placeholder="none" /></div></div>
-        </fieldset>
-        <button class="btn" id="gSave">Save GAM config</button>
-      </div>
-      <div class="card"><h2>Key-values passed to GAM</h2>
-        <p class="muted">The engine stitches these into the GAM tag's <code>cust_params</code>. Set up matching key-value targeting + line items in Google Ad Manager.</p>
-        <table><thead><tr><th>Key</th><th>Meaning</th></tr></thead><tbody>
-          <tr><td><code>hb_pb</code></td><td>Winning price bucket (after floor bias) — drives price-priority line items</td></tr>
-          <tr><td><code>hb_bidder</code></td><td>Winning SSP code</td></tr>
-          <tr><td><code>hb_pb_&lt;bidder&gt;</code></td><td>Per-bidder price (send-all-bids)</td></tr>
-          <tr><td><code>hb_bidder_&lt;bidder&gt;</code></td><td>Per-bidder code (send-all-bids)</td></tr>
-        </tbody></table>
-        <p class="muted" style="margin-top:12px">Fallback: when Prebid returns no demand, the engine calls GAM with <code>hb_pb=0.00</code> &amp; <code>hb_bidder=none</code> so your house line item serves. <b>Line items/creatives are configured in GAM itself</b> (GAM API automation is a later phase).</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ANALYTICS -->
-  <section class="tabpane hide" data-pane="analytics">
-    <div class="card"><h2>Analytics <span class="muted" id="anFor"></span></h2>
-      <div class="row" style="align-items:flex-end">
-        <div style="flex:0 0 auto"><label>Range</label><select id="anRange"><option value="7">Last 7 days</option><option value="1">Last 24h</option><option value="30">Last 30 days</option><option value="0">All time</option></select></div>
-        <div style="flex:0 0 auto"><button class="ghost small" id="anRefresh" style="margin:0">Refresh</button></div>
-        <div class="spacer"></div>
-        <div style="flex:0 0 auto"><label>Demo data (dev)</label>
-          <div style="display:flex;gap:6px"><input id="anSeedN" value="300" style="width:90px" title="sessions"/>
-          <button class="ghost small" id="anSeed" style="margin:0">Generate</button></div></div>
-      </div>
-    </div>
-    <div class="card"><h2>Overview</h2><div class="kpis" id="anKpis"></div></div>
-    <div class="grid2">
-      <div class="card"><h2>Funnel</h2><div class="funnel" id="anFunnel"></div></div>
-      <div class="card"><h2>Wins over time</h2><div class="spark" id="anSpark"></div><p class="muted" id="anSparkLbl"></p></div>
-    </div>
-    <div class="card"><h2>Per-bidder performance</h2><div id="anBidders"></div></div>
-    <div class="grid2">
-      <div class="card"><h2>hb_pb distribution (price buckets to GAM)</h2><div id="anHbpb"></div></div>
-      <div class="card"><h2>Winning bidder (hb_bidder)</h2><div id="anWinner"></div></div>
-    </div>
-  </section>
+  <div id="main"></div>
 </div>
 
 <script>
-let TOKEN = localStorage.getItem("cp_token") || "";
-const S = { pubs:[], pub:null, site:null, au:null, plc:null };
-const $ = s => document.querySelector(s);
-const $$ = s => [...document.querySelectorAll(s)];
-function toast(m,k="ok"){const t=document.createElement("div");t.className="toast "+k;t.textContent=m;
-  document.body.appendChild(t);setTimeout(()=>t.remove(),3400);}
+let TOKEN=localStorage.getItem("cp_token")||"";
+const S={top:"publishers",pub:null,sub:"properties",site:null,au:null,plc:null,plcTab:"tag",_demand:[]};
+const $=s=>document.querySelector(s);
+function toast(m,k="ok"){const t=document.createElement("div");t.className="toast "+k;t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),3400);}
 function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-
-async function api(path,{method="GET",body=null,auth=true}={}){
-  const h={"Content-Type":"application/json"}; if(auth&&TOKEN)h["Authorization"]="Bearer "+TOKEN;
-  const r=await fetch(path,{method,headers:h,body:body?JSON.stringify(body):null});
-  if(r.status===401){logout();throw new Error("Session expired");}
-  const txt=await r.text(); const data=txt?JSON.parse(txt):null;
-  if(!r.ok){const d=data&&data.detail;throw new Error(typeof d==="string"?d:JSON.stringify(d||data));}
-  return data;
-}
+async function api(path,{method="GET",body=null,auth=true}={}){const h={"Content-Type":"application/json"};if(auth&&TOKEN)h.Authorization="Bearer "+TOKEN;
+  const r=await fetch(path,{method,headers:h,body:body?JSON.stringify(body):null});if(r.status===401){logout();throw new Error("Session expired");}
+  const t=await r.text();const d=t?JSON.parse(t):null;if(!r.ok){const e=d&&d.detail;throw new Error(typeof e==="string"?e:JSON.stringify(e||d));}return d;}
 
 // ---- auth ----
-function showLogin(){$("#loginCard").classList.remove("hide");$("#nav").classList.add("hide");
-  $("#ctx").classList.add("hide");$$(".tabpane").forEach(p=>p.classList.add("hide"));
-  $("#logoutBtn").classList.add("hide");$("#who").textContent="";}
-function showApp(){$("#loginCard").classList.add("hide");$("#nav").classList.remove("hide");
-  $("#ctx").classList.remove("hide");$("#logoutBtn").classList.remove("hide");$("#who").textContent="admin";
-  loadPubs().then(()=>switchTab("publishers"));}
+function showLogin(){$("#loginCard").classList.remove("hide");$("#nav").classList.add("hide");$("#crumbs").classList.add("hide");
+  $("#main").innerHTML="";$("#logoutBtn").classList.add("hide");$("#who").textContent="";}
+function showApp(){$("#loginCard").classList.add("hide");$("#nav").classList.remove("hide");$("#logoutBtn").classList.remove("hide");
+  $("#who").textContent="admin";go({top:"publishers",pub:null,site:null,au:null,plc:null});}
 function logout(){TOKEN="";localStorage.removeItem("cp_token");showLogin();}
-$("#loginBtn").onclick=async()=>{try{const d=await api("/auth/login",{method:"POST",auth:false,
-  body:{username:$("#lUser").value,password:$("#lPass").value}});TOKEN=d.access_token;
-  localStorage.setItem("cp_token",TOKEN);showApp();}catch(e){$("#loginMsg").textContent=e.message;}};
+$("#loginBtn").onclick=async()=>{try{const d=await api("/auth/login",{method:"POST",auth:false,body:{username:$("#lUser").value,password:$("#lPass").value}});
+  TOKEN=d.access_token;localStorage.setItem("cp_token",TOKEN);showApp();}catch(e){$("#loginMsg").textContent=e.message;}};
 $("#logoutBtn").onclick=logout;
+document.querySelectorAll("#nav button").forEach(b=>b.onclick=()=>go({top:b.dataset.top,pub:b.dataset.top==="publishers"?S.pub:null,site:null,au:null,plc:null}));
 
-// ---- tabs ----
-function switchTab(name){
-  $$("#nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===name));
-  $$(".tabpane").forEach(p=>p.classList.toggle("hide",p.dataset.pane!==name));
-  if(name==="properties") loadSites();
-  if(name==="demand") loadDemand();
-  if(name==="tag") loadTagForm();
-  if(name==="gam") loadGamForm();
-  if(name==="analytics") loadAnalytics();
-}
-$$("#nav button").forEach(b=>b.onclick=()=>{ if(needsPlacement(b.dataset.tab)&&!S.plc) return toast("Select a placement in Properties first","err");
-  if(needsPub(b.dataset.tab)&&!S.pub) return toast("Select a publisher first","err"); switchTab(b.dataset.tab); });
-function needsPub(t){return ["properties","demand","tag","gam","analytics"].includes(t);}
-function needsPlacement(t){return ["tag","gam"].includes(t);}
+// ---- router ----
+function go(patch){Object.assign(S,patch);render().catch(e=>toast(e.message,"err"));}
+document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("active"));
+function setNav(){document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("active",b.dataset.top===S.top));}
+function crumb(parts){$("#crumbs").classList.remove("hide");
+  $("#crumbs").innerHTML=parts.map((p,i)=>i===parts.length-1?`<b>${esc(p.t)}</b>`:`<a data-i="${i}">${esc(p.t)}</a>`).join(" / ");
+  [...$("#crumbs").querySelectorAll("a")].forEach(a=>a.onclick=()=>parts[+a.dataset.i].go());}
 
-// ---- context bar ----
-$("#ctxPub").onchange=()=>{const p=S.pubs.find(x=>x.id===$("#ctxPub").value);selectPub(p);};
-function renderCtx(){
-  $("#ctxPub").innerHTML=S.pubs.map(p=>`<option value="${p.id}" ${S.pub&&S.pub.id===p.id?"selected":""}>${esc(p.name)}</option>`).join("");
-  $("#ctxPlc").textContent = S.plc ? `Placement: ${S.plc.name}` : "no placement selected";
+async function render(){setNav();const m=$("#main");
+  if(S.top==="demand"){crumb([{t:"Demand Partners"}]);return renderDemandCatalog(m);}
+  if(!S.pub){crumb([{t:"Publishers"}]);return renderPublishers(m);}
+  if(S.plc) return renderPlacement(m);
+  if(S.au) return renderAdUnit(m);
+  if(S.site) return renderSite(m);
+  return renderPublisher(m);
 }
 
-// ---- publishers ----
-async function loadPubs(){S.pubs=await api("/v1/admin/publishers");
-  $("#pubList").innerHTML=""; S.pubs.forEach(p=>{const li=document.createElement("li");
-    li.className=S.pub&&S.pub.id===p.id?"sel":"";
-    li.innerHTML=`<span>${esc(p.name)} <span class="pill ${p.status==='active'?'on':''}">${p.status}</span></span><span class="id">${p.id}</span>`;
-    li.onclick=()=>{selectPub(p);toast("Selected "+p.name);};$("#pubList").appendChild(li);});
-  if(!S.pub && S.pubs.length) S.pub=S.pubs[0];
-  renderCtx();}
-$("#pAdd").onclick=async()=>{const name=$("#pName").value.trim();if(!name)return toast("Name required","err");
-  try{const p=await api("/v1/admin/publishers",{method:"POST",body:{name,gam_network_code:$("#pGam").value.trim()||null}});
-  $("#pName").value="";$("#pGam").value="";await loadPubs();selectPub(p);toast("Publisher created");}catch(e){toast(e.message,"err");}};
-function selectPub(p){S.pub=p;S.site=null;S.au=null;S.plc=null;$("#demandFor").textContent="· "+p.name;renderCtx();
-  loadPubs();}
+// ---- publishers list ----
+async function renderPublishers(m){const pubs=await api("/v1/admin/publishers");
+  m.innerHTML=`<div class="card"><h2>Publishers</h2><ul class="list" id="pl"></ul></div>
+    <div class="card"><h2>New publisher</h2><div class="row"><div><label>Name</label><input id="pName" placeholder="Acme Media"/></div>
+    <div><label>GAM network code</label><input id="pGam" placeholder="21775744923"/></div></div><button class="btn" id="pAdd">Add publisher</button></div>`;
+  const ul=$("#pl");if(!pubs.length)ul.innerHTML='<div class="empty">No publishers yet — add one below.</div>';
+  pubs.forEach(p=>{const li=document.createElement("li");
+    li.innerHTML=`<span>${esc(p.name)} <span class="pill ${p.status==='active'?'on':''}">${p.status}</span></span><span class="id">${p.id} ›</span>`;
+    li.onclick=()=>go({pub:p,sub:"properties",site:null,au:null,plc:null});ul.appendChild(li);});
+  $("#pAdd").onclick=async()=>{const name=$("#pName").value.trim();if(!name)return toast("Name required","err");
+    try{const p=await api("/v1/admin/publishers",{method:"POST",body:{name,gam_network_code:$("#pGam").value.trim()||null}});toast("Created");go({pub:p,sub:"properties"});}catch(e){toast(e.message,"err");}};}
 
-// ---- properties ----
-async function loadSites(){if(!S.pub)return;const sites=await api(`/v1/admin/publishers/${S.pub.id}/sites`);
-  fillList("#siteList",sites,s=>esc(s.domain),s=>{S.site=s;S.au=null;S.plc=null;renderCtx();loadSites();loadAdUnits();},S.site);
-  if(S.site) loadAdUnits(); else {$("#auList").innerHTML='<li class="muted" style="cursor:default">select a site</li>';$("#plcList").innerHTML="";}}
-$("#sAdd").onclick=async()=>{if(!S.pub)return toast("Pick a publisher","err");const d=$("#sDomain").value.trim();if(!d)return toast("Domain required","err");
-  try{const s=await api(`/v1/admin/publishers/${S.pub.id}/sites`,{method:"POST",body:{domain:d}});$("#sDomain").value="";S.site=s;await loadSites();toast("Site created");}catch(e){toast(e.message,"err");}};
-async function loadAdUnits(){if(!S.site)return;const aus=await api(`/v1/admin/sites/${S.site.id}/ad-units`);
-  fillList("#auList",aus,a=>`${esc(a.gam_ad_unit_path)} <span class="pill">${a.format}</span>`,a=>{S.au=a;S.plc=null;renderCtx();loadAdUnits();loadPlacements();},S.au);
-  if(S.au) loadPlacements(); else $("#plcList").innerHTML='<li class="muted" style="cursor:default">select an ad unit</li>';}
-$("#aAdd").onclick=async()=>{if(!S.site)return toast("Pick a site","err");const p=$("#aPath").value.trim();if(!p)return toast("Path required","err");
-  try{const a=await api(`/v1/admin/sites/${S.site.id}/ad-units`,{method:"POST",body:{gam_ad_unit_path:p,format:$("#aFormat").value}});$("#aPath").value="";S.au=a;await loadAdUnits();toast("Ad unit created");}catch(e){toast(e.message,"err");}};
-async function loadPlacements(){if(!S.au)return;const plcs=await api(`/v1/admin/ad-units/${S.au.id}/placements`);
-  fillList("#plcList",plcs,p=>`${esc(p.name)} <span class="pill ${p.active?'on':''}">${p.config.placement}</span>`,p=>{S.plc=p;renderCtx();loadPlacements();toast("Placement selected — Tag/GAM/Analytics now available");},S.plc);}
-$("#cAdd").onclick=async()=>{if(!S.au)return toast("Pick an ad unit","err");const name=$("#cName").value.trim();if(!name)return toast("Name required","err");
-  const cfg={placement:$("#cPlacement").value,timeout:1200,bias:"0.10"};if(cfg.placement==="instream")cfg.video="https://vjs.zencdn.net/v/oceans.mp4";
-  try{const p=await api(`/v1/admin/ad-units/${S.au.id}/placements`,{method:"POST",body:{name,engine_channel:$("#cChannel").value,config:cfg,active:true}});
-  $("#cName").value="";S.plc=p;await loadPlacements();toast("Placement created");}catch(e){toast(e.message,"err");}};
+// ---- publisher detail ----
+async function renderPublisher(m){const p=S.pub;
+  crumb([{t:"Publishers",go:()=>go({pub:null})},{t:p.name}]);
+  m.innerHTML=`<div class="card"><h2>${esc(p.name)}</h2>
+    <div class="subtabs">${["properties","demand","overview"].map(s=>`<button data-s="${s}" class="${S.sub===s?'active':''}">${s[0].toUpperCase()+s.slice(1)}</button>`).join("")}</div>
+    <div id="sub"></div></div>`;
+  m.querySelectorAll("[data-s]").forEach(b=>b.onclick=()=>go({sub:b.dataset.s,site:null,au:null,plc:null}));
+  if(S.sub==="properties")await subProperties($("#sub"));
+  else if(S.sub==="demand")await subDemand($("#sub"));
+  else await subOverview($("#sub"));}
 
-// ---- demand ----
-async function loadDemand(){if(!S.pub)return;$("#demandFor").textContent="· "+S.pub.name;
-  const [cat,en]=await Promise.all([api("/v1/admin/demand-partners"),api(`/v1/admin/publishers/${S.pub.id}/demand`)]);
-  const by={};en.forEach(e=>by[e.demand_partner_code]=e);const box=$("#demandList");box.innerHTML="";
-  cat.forEach(dp=>{const e=by[dp.code];const div=document.createElement("div");div.className="card";div.style.marginBottom="10px";
-    const inputs=dp.required_params.map(k=>`<div><label>${k}</label><input data-k="${k}" value="${e?esc(e.params[k]??""):""}"/></div>`).join("");
-    div.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><b>${esc(dp.label)}</b>
-      <span class="pill ${e&&e.enabled?'on':''}">${e&&e.enabled?'enabled':'off'}</span></div>
-      <div class="row">${inputs}<div><label>Floor ($, optional)</label><input data-floor value="${e&&e.floor!=null?e.floor:''}"/></div></div>
-      <button class="btn small" data-save>${e?'Update':'Enable'}</button>${e?'<button class="danger small" data-rm style="margin-left:8px">Disable</button>':''}`;
-    div.querySelector("[data-save]").onclick=async()=>{const params={};div.querySelectorAll("input[data-k]").forEach(i=>{if(i.value!=="")params[i.dataset.k]=i.value;});
-      const f=div.querySelector("[data-floor]").value.trim();
-      try{await api(`/v1/admin/publishers/${S.pub.id}/demand/${dp.code}`,{method:"PUT",body:{params,floor:f?parseFloat(f):null,enabled:true}});toast(dp.label+" saved");loadDemand();}catch(x){toast(x.message,"err");}};
-    const rm=div.querySelector("[data-rm]");if(rm)rm.onclick=async()=>{try{await api(`/v1/admin/publishers/${S.pub.id}/demand/${dp.code}`,{method:"DELETE"});toast(dp.label+" disabled");loadDemand();}catch(x){toast(x.message,"err");}};
-    box.appendChild(div);});}
+async function subOverview(el){const sites=await api(`/v1/admin/publishers/${S.pub.id}/sites`);
+  const dem=await api(`/v1/admin/publishers/${S.pub.id}/demand`);const on=dem.filter(d=>d.enabled).length;
+  el.innerHTML=`<div class="kpis">
+    <div class="kpi"><div class="l">Sites</div><div class="v">${sites.length}</div></div>
+    <div class="kpi"><div class="l">Enabled demand</div><div class="v">${on}</div><div class="s">of ${dem.length} configured</div></div>
+    <div class="kpi"><div class="l">GAM network</div><div class="v" style="font-size:16px">${esc(S.pub.gam_network_code||"—")}</div></div>
+    <div class="kpi"><div class="l">Status</div><div class="v" style="font-size:16px">${esc(S.pub.status)}</div></div></div>
+    <p class="muted" style="margin-top:12px">Use <b>Properties</b> to add sites → ad units → placements, and <b>Demand</b> to enable SSPs.</p>`;}
 
-// ---- placement config helpers ----
+async function subProperties(el){const sites=await api(`/v1/admin/publishers/${S.pub.id}/sites`);
+  el.innerHTML=`<ul class="list" id="sl"></ul>
+    <fieldset><legend>New site</legend><div class="row"><div><label>Domain</label><input id="sDom" placeholder="acme.example"/></div></div><button class="btn" id="sAdd">Add site</button></fieldset>`;
+  const ul=$("#sl");if(!sites.length)ul.innerHTML='<div class="empty">No sites yet.</div>';
+  sites.forEach(s=>{const li=document.createElement("li");li.innerHTML=`<span>🌐 ${esc(s.domain)}</span><span class="id">${s.id} ›</span>`;
+    li.onclick=()=>go({site:s,au:null,plc:null});ul.appendChild(li);});
+  $("#sAdd").onclick=async()=>{const d=$("#sDom").value.trim();if(!d)return toast("Domain required","err");
+    try{const s=await api(`/v1/admin/publishers/${S.pub.id}/sites`,{method:"POST",body:{domain:d}});toast("Site added");go({site:s});}catch(e){toast(e.message,"err");}};}
+
+async function renderSite(m){crumb([{t:"Publishers",go:()=>go({pub:null})},{t:S.pub.name,go:()=>go({site:null,au:null,plc:null,sub:"properties"})},{t:S.site.domain}]);
+  const aus=await api(`/v1/admin/sites/${S.site.id}/ad-units`);
+  m.innerHTML=`<div class="card"><h2>Ad units · ${esc(S.site.domain)}</h2><ul class="list" id="al"></ul>
+    <fieldset><legend>New ad unit</legend><label>GAM ad unit path</label><input id="aPath" placeholder="/21775744923/acme/video"/>
+    <label>Format</label><select id="aFmt"><option>video</option><option>banner</option></select><button class="btn" id="aAdd">Add ad unit</button></fieldset></div>`;
+  const ul=$("#al");if(!aus.length)ul.innerHTML='<div class="empty">No ad units yet.</div>';
+  aus.forEach(a=>{const li=document.createElement("li");li.innerHTML=`<span>📐 ${esc(a.gam_ad_unit_path)} <span class="pill">${a.format}</span></span><span class="id">${a.id} ›</span>`;
+    li.onclick=()=>go({au:a,plc:null});ul.appendChild(li);});
+  $("#aAdd").onclick=async()=>{const p=$("#aPath").value.trim();if(!p)return toast("Path required","err");
+    try{const a=await api(`/v1/admin/sites/${S.site.id}/ad-units`,{method:"POST",body:{gam_ad_unit_path:p,format:$("#aFmt").value}});toast("Ad unit added");go({au:a});}catch(e){toast(e.message,"err");}};}
+
+async function renderAdUnit(m){crumb([{t:"Publishers",go:()=>go({pub:null})},{t:S.pub.name,go:()=>go({site:null,au:null,plc:null,sub:"properties"})},
+    {t:S.site.domain,go:()=>go({au:null,plc:null})},{t:S.au.gam_ad_unit_path}]);
+  const [plcs,dem]=await Promise.all([api(`/v1/admin/ad-units/${S.au.id}/placements`),api(`/v1/admin/publishers/${S.pub.id}/demand`)]);
+  S._demand=dem;const demandOn=dem.filter(d=>d.enabled).length;
+  m.innerHTML=`<div class="card"><h2>Placements · ${esc(S.au.gam_ad_unit_path)}</h2><ul class="list" id="ql"></ul>
+    <fieldset><legend>New placement</legend><div class="row"><div><label>Name</label><input id="cName" placeholder="Homepage instream"/></div>
+    <div><label>Type</label><select id="cType"><option>instream</option><option>outstream</option></select></div>
+    <div><label>Engine delivery</label><select id="cCh"><option value="auto">auto-update</option><option value="pinned">pinned</option></select></div></div>
+    <button class="btn" id="cAdd">Add placement</button></fieldset></div>`;
+  const ul=$("#ql");if(!plcs.length)ul.innerHTML='<div class="empty">No placements yet.</div>';
+  plcs.forEach(p=>{const st=readiness(p,demandOn);const li=document.createElement("li");
+    li.innerHTML=`<span>▶ ${esc(p.name)} <span class="pill">${p.config.placement}</span></span><span><span class="pill ${st.cls}">${st.label}</span> <span class="id">›</span></span>`;
+    li.onclick=()=>go({plc:p,plcTab:"tag"});ul.appendChild(li);});
+  $("#cAdd").onclick=async()=>{const name=$("#cName").value.trim();if(!name)return toast("Name required","err");
+    const cfg={placement:$("#cType").value,timeout:1200,bias:"0.10"};if(cfg.placement==="instream")cfg.video="https://vjs.zencdn.net/v/oceans.mp4";
+    try{const p=await api(`/v1/admin/ad-units/${S.au.id}/placements`,{method:"POST",body:{name,engine_channel:$("#cCh").value,config:cfg,active:true}});toast("Placement created");go({plc:p,plcTab:"tag"});}catch(e){toast(e.message,"err");}};}
+
+function readiness(p,demandOn){const c=p.config;const miss=[];if(!c.adTag)miss.push("GAM tag");if(!demandOn)miss.push("demand");
+  if(c.placement==="instream"&&!c.video)miss.push("video");
+  return miss.length?{cls:"warn",label:"needs "+miss.join(", ")}:{cls:"on",label:"ready"};}
+
+// ---- placement detail ----
+async function renderPlacement(m){const p=S.plc;
+  crumb([{t:"Publishers",go:()=>go({pub:null})},{t:S.pub.name,go:()=>go({site:null,au:null,plc:null,sub:"properties"})},
+    {t:S.site.domain,go:()=>go({au:null,plc:null})},{t:S.au.gam_ad_unit_path,go:()=>go({plc:null})},{t:p.name}]);
+  m.innerHTML=`<div class="card"><h2>${esc(p.name)} <span class="pill">${p.config.placement}</span></h2>
+    <div class="subtabs">${[["tag","Player Tag"],["gam","GAM"],["analytics","Analytics"]].map(([k,l])=>`<button data-t="${k}" class="${S.plcTab===k?'active':''}">${l}</button>`).join("")}</div>
+    <div id="pt"></div></div>`;
+  m.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>go({plcTab:b.dataset.t}));
+  if(S.plcTab==="tag")await paneTag($("#pt"));else if(S.plcTab==="gam")await paneGam($("#pt"));else await paneAnalytics($("#pt"));}
+
 async function getPlc(){return api(`/v1/admin/placements/${S.plc.id}`);}
-async function patchCfg(partial){const cur=await getPlc();const cfg={...cur.config,...partial};
-  const upd=await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{config:cfg}});S.plc=upd;return upd;}
 
-// ---- player tag ----
-async function loadTagForm(){if(!S.plc)return;const p=await getPlc();const c=p.config;
-  $("#tChannel").value=p.engine_channel==="auto"?"auto":"pinned";
-  $("#tVideo").value=c.video||"";$("#tDiv").value=c.divId||"";$("#tPreload").value=c.preload||"metadata";$("#tVpaid").value=c.vpaid||"insecure";
-  $("#tAutoplay").checked=c.autoplay!==false;$("#tMuted").checked=c.muted!==false;$("#tFluid").checked=c.fluid!==false;$("#tLoop").checked=!!c.loop;$("#tSticky").checked=!!c.sticky;
-  generateTag();}
-$("#tSave").onclick=async()=>{if(!S.plc)return;try{
-  await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{engine_channel:$("#tChannel").value,
-    config:{...(await getPlc()).config,video:$("#tVideo").value.trim()||null,divId:$("#tDiv").value.trim()||null,
-      preload:$("#tPreload").value,vpaid:$("#tVpaid").value,autoplay:$("#tAutoplay").checked,muted:$("#tMuted").checked,
-      fluid:$("#tFluid").checked,loop:$("#tLoop").checked,sticky:$("#tSticky").checked}}});
-  toast("Saved");generateTag();}catch(e){toast(e.message,"err");}};
-async function generateTag(){const d=await api(`/v1/admin/placements/${S.plc.id}/embed`);$("#tOut").value=d.tag;
-  $("#tHint").innerHTML=`Channel: <b>${d.channel}</b> · ${d.config.bidders.length} bidder(s). Paste into the publisher page.`;}
-$("#tCopy").onclick=()=>{navigator.clipboard.writeText($("#tOut").value);toast("Tag copied");};
+async function paneTag(el){const p=await getPlc();const c=p.config;
+  el.innerHTML=`<div class="grid2"><div>
+      <div class="row"><div><label>Engine delivery</label><select id="tCh"><option value="auto">auto-update (loader)</option><option value="pinned">pinned</option></select></div>
+      <div><label>Content video URL (instream)</label><input id="tVid"/></div></div>
+      <div class="row"><div><label>Mount div id</label><input id="tDiv" placeholder="bp-video-slot"/></div>
+      <div><label>Preload</label><select id="tPre"><option>metadata</option><option>auto</option><option>none</option></select></div>
+      <div><label>VPAID</label><select id="tVp"><option>insecure</option><option>secure</option><option>disabled</option></select></div></div>
+      <div class="row" style="margin-top:8px">
+      <label style="flex:0 0 auto"><input type="checkbox" id="tAp" style="width:auto"> autoplay</label>
+      <label style="flex:0 0 auto"><input type="checkbox" id="tMu" style="width:auto"> muted</label>
+      <label style="flex:0 0 auto"><input type="checkbox" id="tFl" style="width:auto"> fluid</label>
+      <label style="flex:0 0 auto"><input type="checkbox" id="tLo" style="width:auto"> loop</label>
+      <label style="flex:0 0 auto"><input type="checkbox" id="tSt" style="width:auto"> sticky</label></div>
+      <button class="btn" id="tSave">Save & regenerate</button></div>
+    <div><label>Embed tag <span class="muted">(share with publisher)</span></label>
+      <textarea id="tOut" rows="15" readonly></textarea>
+      <div style="display:flex;gap:8px"><button class="btn" id="tCopy">Copy tag</button>
+      <button class="btn ghost" id="tCheck">✓ Preflight check</button></div>
+      <div id="tChecks"></div></div></div>`;
+  $("#tCh").value=p.engine_channel==="auto"?"auto":"pinned";$("#tVid").value=c.video||"";$("#tDiv").value=c.divId||"";
+  $("#tPre").value=c.preload||"metadata";$("#tVp").value=c.vpaid||"insecure";
+  $("#tAp").checked=c.autoplay!==false;$("#tMu").checked=c.muted!==false;$("#tFl").checked=c.fluid!==false;$("#tLo").checked=!!c.loop;$("#tSt").checked=!!c.sticky;
+  await genTag();
+  $("#tSave").onclick=async()=>{try{const cur=(await getPlc()).config;
+    await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{engine_channel:$("#tCh").value,
+      config:{...cur,video:$("#tVid").value.trim()||null,divId:$("#tDiv").value.trim()||null,preload:$("#tPre").value,vpaid:$("#tVp").value,
+        autoplay:$("#tAp").checked,muted:$("#tMu").checked,fluid:$("#tFl").checked,loop:$("#tLo").checked,sticky:$("#tSt").checked}}});
+    toast("Saved");await genTag();}catch(e){toast(e.message,"err");}};
+  $("#tCopy").onclick=()=>{navigator.clipboard.writeText($("#tOut").value);toast("Copied");};
+  $("#tCheck").onclick=preflight;}
 
-// ---- gam ----
-async function loadGamForm(){if(!S.plc)return;const c=(await getPlc()).config;
-  $("#gTag").value=c.adTag||"";$("#gCache").value=c.cacheUrl||"";$("#gTimeout").value=c.timeout??1200;$("#gBias").value=c.bias??"0.10";
-  $("#gFloorMin").value=c.floorMin??"";$("#gFloorMax").value=c.floorMax??"";}
-$("#gSave").onclick=async()=>{if(!S.plc)return;const fmin=$("#gFloorMin").value.trim(),fmax=$("#gFloorMax").value.trim();
-  try{await patchCfg({adTag:$("#gTag").value.trim()||null,cacheUrl:$("#gCache").value.trim()||null,
-    timeout:parseInt($("#gTimeout").value||"1200",10),bias:($("#gBias").value||"0.00"),
-    floorMin:fmin?parseFloat(fmin):null,floorMax:fmax?parseFloat(fmax):null});toast("GAM config saved");}catch(e){toast(e.message,"err");}};
+async function genTag(){const d=await api(`/v1/admin/placements/${S.plc.id}/embed`);$("#tOut").value=d.tag;window._cfg=d.config;}
+async function preflight(){const cfg=window._cfg||(await api(`/v1/admin/placements/${S.plc.id}/embed`)).config;const c=cfg;const out=[];
+  const ok=(b,m)=>out.push({b,m});
+  ok(!!c.adTag,"GAM VAST tag (data-tag) is set");
+  ok(/^https?:\/\//.test(c.adTag||""),"GAM tag is a valid URL");
+  ok(c.bidders.length>0,`At least one demand partner enabled (${c.bidders.length})`);
+  if(c.placement==="instream")ok(!!c.video,"Instream content video URL is set");
+  ok(!!c.divId,"Mount div id present");
+  ok(!!c.prebidUrl,"Prebid bundle URL present");
+  const pass=out.filter(x=>x.b).length;
+  $("#tChecks").innerHTML=`<div class="card" style="margin-top:12px"><h2>Preflight — ${pass}/${out.length} passed</h2>`+
+    out.map(x=>`<div class="check"><span class="ic">${x.b?'✅':'⚠️'}</span><span>${x.m}</span></div>`).join("")+
+    `<p class="muted" style="margin-top:8px">A live in-browser test (Prebid request → response → GAM request → impression) is coming next — aligned to your existing debugger.</p></div>`;}
 
-// ---- analytics ----
-function rangeParams(){const d=parseInt($("#anRange").value,10);if(!d)return"";const from=new Date(Date.now()-d*864e5).toISOString();return`&from=${encodeURIComponent(from)}`;}
-async function loadAnalytics(){if(!S.plc){$("#anFor").textContent="— select a placement in Properties";return;}
-  $("#anFor").textContent="· "+S.plc.name;const pid=S.plc.id;const rp=rangeParams();
-  try{
-    const sum=await api(`/v1/admin/analytics/summary?placement_id=${pid}${rp}`);renderKpis(sum);renderFunnel(sum);
-    const ts=await api(`/v1/admin/analytics/timeseries?placement_id=${pid}&bucket=day${rp}`);renderSpark(ts);
-    const bd=await api(`/v1/admin/analytics/bidders?placement_id=${pid}${rp}`);renderBidders(bd);
-    const kv=await api(`/v1/admin/analytics/key-values?placement_id=${pid}${rp}`);renderKV(kv);
-  }catch(e){toast(e.message,"err");}}
-$("#anRefresh").onclick=loadAnalytics;$("#anRange").onchange=loadAnalytics;
-$("#anSeed").onclick=async()=>{if(!S.plc)return toast("Select a placement","err");const n=parseInt($("#anSeedN").value||"300",10);
-  try{const r=await api("/v1/admin/analytics/dev/seed",{method:"POST",body:{placement_id:S.plc.id,sessions:n}});
-  toast(`Seeded ${r.total} events`);loadAnalytics();}catch(e){toast(e.message,"err");}};
-function money(v){return v==null?"—":"$"+Number(v).toFixed(2);}
-function pct(v){return v==null?"—":(v*100).toFixed(1)+"%";}
-function renderKpis(s){$("#anKpis").innerHTML=[
-  ["Player loads",s.loads,""],["Bid requests",s.requests,""],
-  ["Win rate",pct(s.winRate),`${s.wins} wins`],["Fill rate",pct(s.fillRate),`${s.impressions} imps`],
-  ["Avg eCPM (raw)",money(s.avgCpmRaw),"actual bid"],["Avg eCPM (biased)",money(s.avgCpmBiased),s.biasUpliftPct!=null?`+${s.biasUpliftPct}% to GAM`:""],
-  ["Completes",s.completes,pct(s.completeRate)],["No-demand / errors",s.noDemand+s.errors,""],
-].map(([l,v,sub])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v??"—"}</div><div class="s">${sub||""}</div></div>`).join("");}
-function renderFunnel(s){const steps=[["Load",s.loads],["Bid request",s.requests],["Win",s.wins],["Impression",s.impressions],["Complete",s.completes]];
-  const max=Math.max(1,...steps.map(x=>x[1]));$("#anFunnel").innerHTML=steps.map(([l,v])=>
-    `<div><div class="flabel"><span>${l}</span><span>${v}</span></div><div class="bar"><i style="width:${(v/max*100).toFixed(1)}%"></i></div></div>`).join("");}
-function renderSpark(ts){const wins=ts.filter(r=>r.event==="auction_win");const map={};wins.forEach(r=>map[r.ts.slice(0,10)]=r.count);
-  const days=Object.keys(map).sort();const max=Math.max(1,...days.map(d=>map[d]));
-  $("#anSpark").innerHTML=days.map(d=>`<i style="height:${(map[d]/max*100).toFixed(0)}%" title="${d}: ${map[d]}"></i>`).join("")||'<span class="muted">no data</span>';
-  $("#anSparkLbl").textContent=days.length?`${days[0]} → ${days[days.length-1]}`:"";}
-function renderBidders(rows){if(!rows.length){$("#anBidders").innerHTML='<p class="muted">no bid data yet — generate demo data or wait for traffic</p>';return;}
-  $("#anBidders").innerHTML=`<table><thead><tr><th>Bidder</th><th>Bids</th><th>No-bid</th><th>Timeout</th><th>Error</th><th>Avg CPM</th><th>Avg latency</th><th>Wins</th></tr></thead><tbody>`+
-    rows.map(r=>`<tr><td><b>${esc(r.bidder)}</b></td><td>${r.bid}</td><td>${r['no-bid']}</td><td>${r.timeout}</td><td>${r.error}</td><td>${money(r.avgCpm)}</td><td>${r.avgLatencyMs!=null?r.avgLatencyMs+' ms':'—'}</td><td>${r.wins}</td></tr>`).join("")+`</tbody></table>`;}
-function renderKV(kv){const bars=arr=>{const max=Math.max(1,...arr.map(x=>x.count));return arr.map(x=>
-    `<div><div class="flabel"><span>${esc(x.value)}</span><span>${x.count}</span></div><div class="bar"><i style="width:${(x.count/max*100).toFixed(1)}%"></i></div></div>`).join("")||'<p class="muted">no data</p>';};
-  $("#anHbpb").innerHTML=`<div class="funnel">${bars(kv.hb_pb)}</div>`;$("#anWinner").innerHTML=`<div class="funnel">${bars(kv.hb_bidder)}</div>`;}
+async function paneGam(el){const c=(await getPlc()).config;
+  el.innerHTML=`<div class="grid2"><div>
+    <label>GAM VAST tag URL <span class="muted">(data-tag)</span></label><textarea id="gTag" rows="4" placeholder="https://pubads.g.doubleclick.net/gampad/ads?iu=/.../&output=vast&..."></textarea>
+    <label>Prebid cache URL</label><input id="gCache"/>
+    <fieldset><legend>Auction management</legend><div class="row"><div><label>Timeout (ms)</label><input id="gTo"/></div><div><label>Floor bias ($)</label><input id="gBias"/></div></div>
+    <div class="row"><div><label>Floor min ($)</label><input id="gFmin" placeholder="none"/></div><div><label>Floor max ($)</label><input id="gFmax" placeholder="none"/></div></div></fieldset>
+    <button class="btn" id="gSave">Save GAM config</button></div>
+    <div><label>Key-values passed to GAM</label>
+    <table><thead><tr><th>Key</th><th>Meaning</th></tr></thead><tbody>
+    <tr><td><code>hb_pb</code></td><td>Winning price bucket (post-bias)</td></tr><tr><td><code>hb_bidder</code></td><td>Winning SSP</td></tr>
+    <tr><td><code>hb_pb_&lt;bidder&gt;</code></td><td>Per-bidder price (send-all-bids)</td></tr><tr><td><code>hb_bidder_&lt;bidder&gt;</code></td><td>Per-bidder code</td></tr></tbody></table>
+    <p class="muted" style="margin-top:10px">No-demand fallback calls GAM with <code>hb_pb=0.00</code>. Line items/creatives are set up in GAM itself (GAM-API automation is a later phase).</p></div></div>`;
+  $("#gTag").value=c.adTag||"";$("#gCache").value=c.cacheUrl||"";$("#gTo").value=c.timeout??1200;$("#gBias").value=c.bias??"0.10";$("#gFmin").value=c.floorMin??"";$("#gFmax").value=c.floorMax??"";
+  $("#gSave").onclick=async()=>{const cur=(await getPlc()).config;const fmin=$("#gFmin").value.trim(),fmax=$("#gFmax").value.trim();
+    try{await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{config:{...cur,adTag:$("#gTag").value.trim()||null,cacheUrl:$("#gCache").value.trim()||null,
+      timeout:parseInt($("#gTo").value||"1200",10),bias:($("#gBias").value||"0.00"),floorMin:fmin?parseFloat(fmin):null,floorMax:fmax?parseFloat(fmax):null}}});toast("GAM config saved");}catch(e){toast(e.message,"err");}};}
 
-// ---- shared ----
-function fillList(sel,items,label,onClick,cur){const ul=$(sel);ul.innerHTML="";
-  if(!items.length){ul.innerHTML='<li class="muted" style="cursor:default">none yet</li>';return;}
-  items.forEach(it=>{const li=document.createElement("li");li.className=cur&&cur.id===it.id?"sel":"";
-    li.innerHTML=`<span>${label(it)}</span><span class="id">${it.id}</span>`;li.onclick=()=>onClick(it);ul.appendChild(li);});}
+async function paneAnalytics(el){const pid=S.plc.id;
+  el.innerHTML=`<div class="row" style="align-items:flex-end"><div style="flex:0 0 auto"><label>Range</label>
+    <select id="anR"><option value="7">Last 7 days</option><option value="1">Last 24h</option><option value="30">Last 30 days</option><option value="0">All time</option></select></div>
+    <div style="flex:0 0 auto"><button class="ghost small" id="anRef" style="margin:0">Refresh</button></div><div class="spacer"></div>
+    <div style="flex:0 0 auto"><label>Demo data (dev)</label><div style="display:flex;gap:6px"><input id="anN" value="300" style="width:90px"/><button class="ghost small" id="anSeed" style="margin:0">Generate</button></div></div></div>
+    <div id="anBody" style="margin-top:14px"></div>`;
+  const load=async()=>{const rp=(()=>{const d=parseInt($("#anR").value,10);return d?`&from=${encodeURIComponent(new Date(Date.now()-d*864e5).toISOString())}`:"";})();
+    const [s,ts,bd,kv]=await Promise.all([api(`/v1/admin/analytics/summary?placement_id=${pid}${rp}`),api(`/v1/admin/analytics/timeseries?placement_id=${pid}&bucket=day${rp}`),
+      api(`/v1/admin/analytics/bidders?placement_id=${pid}${rp}`),api(`/v1/admin/analytics/key-values?placement_id=${pid}${rp}`)]);
+    const money=v=>v==null?"—":"$"+Number(v).toFixed(2),pct=v=>v==null?"—":(v*100).toFixed(1)+"%";
+    const kpis=[["Player loads",s.loads,""],["Bid requests",s.requests,""],["Win rate",pct(s.winRate),`${s.wins} wins`],["Fill rate",pct(s.fillRate),`${s.impressions} imps`],
+      ["eCPM raw",money(s.avgCpmRaw),"actual bid"],["eCPM biased",money(s.avgCpmBiased),s.biasUpliftPct!=null?`+${s.biasUpliftPct}% to GAM`:""],["Completes",s.completes,pct(s.completeRate)],["No-demand/errors",s.noDemand+s.errors,""]];
+    const steps=[["Load",s.loads],["Bid request",s.requests],["Win",s.wins],["Impression",s.impressions],["Complete",s.completes]];const fmax=Math.max(1,...steps.map(x=>x[1]));
+    const wins={};ts.filter(r=>r.event==="auction_win").forEach(r=>wins[r.ts.slice(0,10)]=r.count);const days=Object.keys(wins).sort();const smax=Math.max(1,...days.map(d=>wins[d]));
+    const bars=arr=>{const mx=Math.max(1,...arr.map(x=>x.count));return arr.map(x=>`<div><div class="flabel"><span>${esc(x.value)}</span><span>${x.count}</span></div><div class="bar"><i style="width:${(x.count/mx*100).toFixed(1)}%"></i></div></div>`).join("")||'<p class="muted">no data</p>';};
+    $("#anBody").innerHTML=`<div class="card"><h2>Overview</h2><div class="kpis">${kpis.map(([l,v,sub])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v??"—"}</div><div class="s">${sub||""}</div></div>`).join("")}</div></div>
+      <div class="grid2"><div class="card"><h2>Funnel</h2><div class="funnel">${steps.map(([l,v])=>`<div><div class="flabel"><span>${l}</span><span>${v}</span></div><div class="bar"><i style="width:${(v/fmax*100).toFixed(1)}%"></i></div></div>`).join("")}</div></div>
+      <div class="card"><h2>Wins over time</h2><div class="spark">${days.map(d=>`<i style="height:${(wins[d]/smax*100).toFixed(0)}%" title="${d}: ${wins[d]}"></i>`).join("")||'<span class="muted">no data</span>'}</div></div></div>
+      <div class="card"><h2>Per-bidder performance</h2>${bd.length?`<table><thead><tr><th>Bidder</th><th>Bids</th><th>No-bid</th><th>Timeout</th><th>Error</th><th>Avg CPM</th><th>Latency</th><th>Wins</th></tr></thead><tbody>`+
+        bd.map(r=>`<tr><td><b>${esc(r.bidder)}</b></td><td>${r.bid}</td><td>${r['no-bid']}</td><td>${r.timeout}</td><td>${r.error}</td><td>${money(r.avgCpm)}</td><td>${r.avgLatencyMs!=null?r.avgLatencyMs+' ms':'—'}</td><td>${r.wins}</td></tr>`).join("")+`</tbody></table>`:'<p class="muted">no bid data yet — generate demo data or wait for traffic</p>'}</div>
+      <div class="grid2"><div class="card"><h2>hb_pb buckets → GAM</h2><div class="funnel">${bars(kv.hb_pb)}</div></div><div class="card"><h2>Winning bidder</h2><div class="funnel">${bars(kv.hb_bidder)}</div></div></div>`;};
+  $("#anRef").onclick=load;$("#anR").onchange=load;
+  $("#anSeed").onclick=async()=>{try{const r=await api("/v1/admin/analytics/dev/seed",{method:"POST",body:{placement_id:pid,sessions:parseInt($("#anN").value||"300",10)}});toast(`Seeded ${r.total} events`);load();}catch(e){toast(e.message,"err");}};
+  await load();}
 
-if(TOKEN) showApp(); else showLogin();
+// ---- publisher demand (subtab) ----
+async function subDemand(el){const [cat,en]=await Promise.all([api("/v1/admin/demand-partners"),api(`/v1/admin/publishers/${S.pub.id}/demand`)]);
+  const by={};en.forEach(e=>by[e.demand_partner_code]=e);el.innerHTML="";
+  cat.forEach(dp=>{const e=by[dp.code];const d=document.createElement("div");d.className="card";d.style.marginBottom="10px";
+    const inputs=dp.required_params.map(k=>`<div><label>${k}</label><input data-k="${k}" value="${e?esc(e.params[k]??""):""}"/></div>`).join("");
+    d.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><b>${esc(dp.label)}</b><span class="pill ${e&&e.enabled?'on':''}">${e&&e.enabled?'enabled':'off'}</span></div>
+      <div class="row">${inputs}<div><label>Floor ($)</label><input data-floor value="${e&&e.floor!=null?e.floor:''}"/></div></div>
+      <button class="btn small" data-save>${e?'Update':'Enable'}</button>${e?'<button class="danger small" data-rm style="margin-left:8px">Disable</button>':''}`;
+    d.querySelector("[data-save]").onclick=async()=>{const params={};d.querySelectorAll("input[data-k]").forEach(i=>{if(i.value!=="")params[i.dataset.k]=i.value;});const f=d.querySelector("[data-floor]").value.trim();
+      try{await api(`/v1/admin/publishers/${S.pub.id}/demand/${dp.code}`,{method:"PUT",body:{params,floor:f?parseFloat(f):null,enabled:true}});toast(dp.label+" saved");subDemand(el);}catch(x){toast(x.message,"err");}};
+    const rm=d.querySelector("[data-rm]");if(rm)rm.onclick=async()=>{try{await api(`/v1/admin/publishers/${S.pub.id}/demand/${dp.code}`,{method:"DELETE"});toast(dp.label+" disabled");subDemand(el);}catch(x){toast(x.message,"err");}};
+    el.appendChild(d);});}
+
+// ---- demand catalog (top-level) ----
+async function renderDemandCatalog(m){const cat=await api("/v1/admin/demand-partners");
+  m.innerHTML=`<div class="card"><h2>Demand partner catalog</h2><p class="muted">The SSPs available platform-wide. Enable them per publisher inside a publisher's <b>Demand</b> tab.</p>
+    <table><thead><tr><th>Code</th><th>Label</th><th>Adapter</th><th>Required params</th></tr></thead><tbody>
+    ${cat.map(d=>`<tr><td><code>${esc(d.code)}</code></td><td>${esc(d.label)}</td><td class="muted">${esc(d.adapter_module)}</td><td class="muted">${d.required_params.join(", ")}</td></tr>`).join("")}</tbody></table></div>
+    <div class="card"><h2>Add partner to catalog</h2><div class="row"><div><label>Code</label><input id="dCode" placeholder="mynewssp"/></div>
+    <div><label>Label</label><input id="dLabel" placeholder="My New SSP"/></div><div><label>Adapter module</label><input id="dMod" placeholder="mynewsspBidAdapter"/></div></div>
+    <label>Required params (comma-separated)</label><input id="dParams" placeholder="placementId, siteId"/>
+    <button class="btn" id="dAdd">Add to catalog</button><p class="muted" style="margin-top:8px">Note: the Prebid bundle served to publishers must also include this adapter, or it won't bid.</p></div>`;
+  $("#dAdd").onclick=async()=>{const code=$("#dCode").value.trim();if(!code)return toast("Code required","err");
+    try{await api("/v1/admin/demand-partners",{method:"POST",body:{code,label:$("#dLabel").value.trim()||code,adapter_module:$("#dMod").value.trim()||code+"BidAdapter",
+      required_params:$("#dParams").value.split(",").map(s=>s.trim()).filter(Boolean)}});toast("Added");renderDemandCatalog(m);}catch(e){toast(e.message,"err");}};}
+
+if(TOKEN)showApp();else showLogin();
 </script>
 </body>
 </html>
