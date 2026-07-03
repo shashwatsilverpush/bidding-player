@@ -1,5 +1,10 @@
 """Placement engine config (stored in ``placement.config_json``) and the assembled
-runtime config returned by ``GET /v1/config/{placement_id}``."""
+runtime config returned by ``GET /v1/config/{placement_id}``.
+
+The field set mirrors the ``data-*`` attributes the engine reads and that the
+existing tag generator (`index.html::buildEngineFile`) emits, so a tag built from
+this config is byte-compatible with the engine.
+"""
 
 from __future__ import annotations
 
@@ -25,10 +30,24 @@ class PlacementConfig(BaseModel):
     bias: str = "0.00"
     floorMin: float | None = None
     floorMax: float | None = None
-    video: str | None = None
+
+    # --- GAM / ad serving ---
+    adTag: str | None = None  # GAM VAST tag URL -> data-tag
+    cacheUrl: str | None = None  # Prebid cache endpoint -> data-cache
+    prebidUrl: str | None = None  # Prebid bundle URL -> data-prebid-url
+    divId: str | None = None  # mount div id -> data-div-id
+
+    # --- player behavior ---
+    video: str | None = None  # instream content video -> data-video
     sticky: bool = False
+    autoplay: bool = True
+    muted: bool = True
+    fluid: bool = True
+    loop: bool = False
+    preload: str = "metadata"
+    vpaid: str = "insecure"
+
     sampleRate: float | None = Field(default=None, ge=0.0, le=1.0)
-    prebidUrl: str | None = None
 
     # optional per-placement demand tuning
     enabledBidders: list[str] | None = None
@@ -58,8 +77,17 @@ class RuntimeConfig(BaseModel):
     bias: str
     floorMin: float | None
     floorMax: float | None
+    adTag: str | None
     video: str | None
     sticky: bool
+    autoplay: bool
+    muted: bool
+    fluid: bool
+    loop: bool
+    preload: str
+    vpaid: str
+    divId: str
+    cacheUrl: str
     bidders: list[Bidder]
     prebidUrl: str
     beaconUrl: str

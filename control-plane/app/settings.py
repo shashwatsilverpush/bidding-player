@@ -28,6 +28,16 @@ class Settings(BaseSettings):
     )
     default_sample_rate: float = 1.0
 
+    # Engine tag generation (mirrors index.html buildEngineFile). The engine CDN
+    # artifact currently lives under aryanvani-projects; override if it moves.
+    engine_repo: str = "aryanvani-projects/bidding-player"
+    default_engine_version: str = "v2.5.0"
+    default_cache_url: str = "https://prebid.adnxs.com/pbc/v1/cache"
+    default_div_id: str = "bp-video-slot"
+
+    # Dev-only endpoints (demo-data seeder). Disable in production.
+    allow_dev_endpoints: bool = True
+
     # Consent policy: "anonymize" | "drop"
     consent_mode: str = "anonymize"
 

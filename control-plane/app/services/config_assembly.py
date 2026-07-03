@@ -19,10 +19,21 @@ class PlacementNotFound(Exception):
     pass
 
 
-async def assemble_config(session: AsyncSession, placement_id: str) -> RuntimeConfig:
+async def assemble_config(
+    session: AsyncSession, placement_id: str, *, require_active: bool = True
+) -> RuntimeConfig:
+    """Assemble runtime config for a placement.
+
+    ``require_active`` gates the public endpoint (inactive/paused -> 404). Admin
+    tag generation passes ``require_active=False`` so a tag can be produced for a
+    freshly created or paused placement.
+    """
+    where = [Placement.id == placement_id]
+    if require_active:
+        where.append(Placement.active.is_(True))
     stmt = (
         select(Placement)
-        .where(Placement.id == placement_id, Placement.active.is_(True))
+        .where(*where)
         .options(
             selectinload(Placement.ad_unit).selectinload(AdUnit.site).selectinload(Site.publisher)
         )
@@ -34,7 +45,7 @@ async def assemble_config(session: AsyncSession, placement_id: str) -> RuntimeCo
     ad_unit = placement.ad_unit
     site = ad_unit.site
     publisher: Publisher = site.publisher
-    if publisher.status != "active":
+    if require_active and publisher.status != "active":
         raise PlacementNotFound(placement_id)
 
     cfg = PlacementConfig.model_validate(placement.config_json or {})
@@ -48,8 +59,17 @@ async def assemble_config(session: AsyncSession, placement_id: str) -> RuntimeCo
         bias=cfg.bias,
         floorMin=cfg.floorMin,
         floorMax=cfg.floorMax,
+        adTag=cfg.adTag,
         video=cfg.video,
         sticky=cfg.sticky,
+        autoplay=cfg.autoplay,
+        muted=cfg.muted,
+        fluid=cfg.fluid,
+        loop=cfg.loop,
+        preload=cfg.preload,
+        vpaid=cfg.vpaid,
+        divId=cfg.divId or settings.default_div_id,
+        cacheUrl=cfg.cacheUrl or settings.default_cache_url,
         bidders=bidders,
         prebidUrl=cfg.prebidUrl or settings.default_prebid_url,
         beaconUrl=settings.beacon_url,

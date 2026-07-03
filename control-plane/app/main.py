@@ -1,30 +1,37 @@
-"""FastAPI application: router wiring, CORS, health."""
+"""FastAPI application: router wiring, CORS, static admin UI, health."""
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
+
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import FileResponse, RedirectResponse
 
 from app.routers import (
     admin_demand,
     admin_publishers,
+    analytics,
     auth,
     collector,
     config,
     stats,
+    tags,
 )
 from app.settings import get_settings
-from fastapi import FastAPI, Request, Response
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger("control_plane")
 
+_STATIC_DIR = Path(__file__).parent / "static"
+
 app = FastAPI(
     title="Bidding Player — Control Plane",
     version="0.1.0",
     description=(
-        "Stores publishers/demand, serves runtime config by placement id, and ingests "
-        "player telemetry. Phases 0–1."
+        "Stores publishers/demand, serves runtime config by placement id, ingests "
+        "player telemetry, generates embed tags, and reports analytics."
     ),
 )
 
@@ -70,6 +77,17 @@ async def cors(request: Request, call_next):  # type: ignore[no-untyped-def]
     return resp
 
 
+@app.get("/", include_in_schema=False)
+async def root() -> RedirectResponse:
+    """Send humans to the admin dashboard."""
+    return RedirectResponse(url="/admin")
+
+
+@app.get("/admin", include_in_schema=False)
+async def admin_ui() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "admin.html")
+
+
 @app.get("/health", tags=["meta"])
 async def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -78,6 +96,8 @@ async def health() -> dict[str, str]:
 app.include_router(auth.router)
 app.include_router(admin_publishers.router)
 app.include_router(admin_demand.router)
+app.include_router(tags.router)
+app.include_router(analytics.router)
 app.include_router(stats.router)
 app.include_router(config.router)
 app.include_router(collector.router)

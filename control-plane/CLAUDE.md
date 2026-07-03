@@ -8,17 +8,28 @@
 
 ## 1. What this repo is
 
-The **control plane** (backend) for *Bidding Player*, a video header-bidding
-player. The player itself (engine `player.js`, `loader.js`, Prebid bundle,
-in-browser tag generator) lives in a **separate repo**,
-`aryanvani-projects/bidding-player`, and is **not** in this repo. Don't try to
-build or modify the engine here — engine-side changes are written up as a spec in
-`docs/engine-instrumentation.md` for that team to apply.
+The **control plane** (backend + admin dashboard) for *Bidding Player*, a video
+header-bidding player. **Monorepo layout:** the engine (`player.js`, `loader.js`,
+Prebid bundle, the original in-browser tag generator `index.html`) lives at the
+**repo root**; this backend lives under **`control-plane/`**. The engine is served
+to publishers via jsDelivr from the repo root, so its paths are unchanged.
+**Don't modify the engine from here** — engine-side changes are written up as a
+spec in `docs/engine-instrumentation.md` to be applied to the root `player.js`.
 
-This repo delivers three things (Phases 0–1):
+This backend delivers:
 1. Store publishers + demand config (tenant hierarchy + demand catalog).
 2. Serve runtime config by placement id (`GET /v1/config/{id}`).
 3. Ingest telemetry (`POST /e`) into Postgres.
+4. Generate the publisher embed `<script>` from DB config (`.../embed`) — a
+   server-side port of the root `index.html::buildEngineFile`.
+5. Analytics read APIs (`/v1/admin/analytics/*`) + a dev demo-data seeder.
+6. A single-page **admin dashboard** at `/admin` (`app/static/admin.html`):
+   Publishers · Properties · Demand · Player Tag · GAM · Analytics.
+
+> **Engine wiring status:** the engine is NOT yet instrumented, so analytics
+> populate only via the dev seeder (`POST /v1/admin/analytics/dev/seed`) or once
+> `docs/engine-instrumentation.md` is applied. Generated tags are "baked" and work
+> with the current engine today.
 
 ## 2. Stack & conventions
 
@@ -39,14 +50,15 @@ This repo delivers three things (Phases 0–1):
 
 ```
 app/
-  main.py            # app + per-route CORS middleware + router wiring + /health
+  main.py            # app + per-route CORS + router wiring + / -> /admin + /admin (static) + /health
   settings.py        # pydantic-settings (env)
   db.py              # async engine/session, Base, gen_id(), utcnow()
+  static/admin.html  # single-page admin dashboard (6 tabs)
   models/            # SQLAlchemy: tenancy.py, demand.py, events.py
   schemas/           # Pydantic: config.py (PlacementConfig/RuntimeConfig), admin.py, events.py
   auth/              # security.py (hash/jwt), deps.py (require_admin)
-  routers/           # auth, admin_publishers, admin_demand, config, collector, stats
-  services/          # config_assembly.py, ingest.py, seed.py (DEMAND_PARTNERS constant)
+  routers/           # auth, admin_publishers, admin_demand, tags, analytics, config, collector, stats
+  services/          # config_assembly, ingest, embed (buildEngineFile port), analytics, demo, seed
 migrations/          # alembic (async env.py); versions/ holds schema + seed
 tests/               # pytest + httpx.AsyncClient; conftest bootstraps schema+seed
 docs/                # event-schema.md, engine-instrumentation.md (Workstream B)

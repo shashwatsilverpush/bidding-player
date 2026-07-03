@@ -7,7 +7,6 @@ import secrets
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 
-from app.settings import get_settings
 from sqlalchemy import DateTime, String, func
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -16,6 +15,8 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
+
+from app.settings import get_settings
 
 _settings = get_settings()
 

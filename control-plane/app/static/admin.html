@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bidding Player — Control Plane</title>
+<style>
+  :root{--bg:#0f1220;--panel:#161b2e;--panel2:#1f2540;--line:#2c3557;--ink:#e8ecff;
+    --muted:#98a2c8;--accent:#6c8cff;--good:#4fd1a1;--warn:#ffd166;--bad:#ff6b6b;--r:10px;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  header{display:flex;align-items:center;gap:12px;padding:12px 20px;background:linear-gradient(90deg,#141830,#1b2344);
+    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10;}
+  header h1{font-size:15px;margin:0;font-weight:650;} .tag{font-size:11px;color:var(--muted);
+    border:1px solid var(--line);padding:2px 8px;border-radius:20px;} .spacer{flex:1;}
+  nav{display:flex;gap:4px;padding:0 14px;background:#12162a;border-bottom:1px solid var(--line);
+    position:sticky;top:49px;z-index:9;flex-wrap:wrap;}
+  nav button{background:none;border:none;color:var(--muted);padding:12px 14px;font:inherit;cursor:pointer;
+    border-bottom:2px solid transparent;}
+  nav button.active{color:var(--ink);border-bottom-color:var(--accent);}
+  nav button:disabled{opacity:.4;cursor:not-allowed;}
+  .ctx{display:flex;align-items:center;gap:10px;padding:8px 20px;background:#0c0f1e;border-bottom:1px solid var(--line);
+    font-size:12px;color:var(--muted);flex-wrap:wrap;}
+  .ctx select{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 8px;font:inherit;}
+  .ctx .chip{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 9px;color:var(--ink);}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:16px;}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 12px;}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;}
+  input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:9px 10px;font:inherit;}
+  textarea{font-family:ui-monospace,Menlo,monospace;font-size:12px;}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);}
+  button.btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 14px;font:inherit;
+    font-weight:600;cursor:pointer;margin-top:12px;} button.btn:hover{filter:brightness(1.08);}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);}
+  button.small{padding:5px 10px;font-size:12px;margin-top:0;}
+  button.danger{background:transparent;border:1px solid var(--bad);color:var(--bad);}
+  .row{display:flex;gap:10px;flex-wrap:wrap;} .row>*{flex:1;min-width:120px;}
+  ul.list{list-style:none;margin:0;padding:0;} ul.list li{padding:9px 10px;border:1px solid var(--line);
+    border-radius:8px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  ul.list li:hover{border-color:var(--accent);} ul.list li.sel{border-color:var(--accent);background:var(--panel2);}
+  .id{font-size:11px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;}
+  .pill{font-size:10px;padding:2px 7px;border-radius:20px;border:1px solid var(--line);color:var(--muted);}
+  .pill.on{color:var(--good);border-color:var(--good);}
+  pre{background:#0a0d1a;border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;
+    font:12px/1.5 ui-monospace,Menlo,monospace;color:#cfe3ff;max-height:360px;white-space:pre-wrap;word-break:break-all;}
+  .muted{color:var(--muted);font-size:12px;} .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:820px){.grid2{grid-template-columns:1fr;}}
+  fieldset{border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0 0;} legend{font-size:11px;color:var(--muted);padding:0 6px;}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel2);border:1px solid var(--line);padding:12px 16px;
+    border-radius:8px;max-width:380px;box-shadow:0 8px 30px rgba(0,0,0,.5);font-size:13px;z-index:50;}
+  .toast.err{border-color:var(--bad);} .toast.ok{border-color:var(--good);}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;}
+  .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .kpi .v{font-size:22px;font-weight:700;} .kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+  .kpi .s{font-size:11px;color:var(--muted);margin-top:2px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;} th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;}
+  .bar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;} .bar>i{display:block;height:100%;background:var(--accent);}
+  .funnel div{margin-bottom:8px;} .funnel .flabel{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;}
+  .spark{display:flex;align-items:flex-end;gap:2px;height:80px;} .spark i{flex:1;background:var(--accent);border-radius:2px 2px 0 0;min-height:2px;}
+  .hide{display:none;} code{font-family:ui-monospace,Menlo,monospace;background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Bidding Player</h1><span class="tag">Control Plane</span>
+  <div class="spacer"></div>
+  <span class="muted" id="who"></span>
+  <button class="ghost small hide" id="logoutBtn" style="margin:0">Log out</button>
+</header>
+<nav id="nav" class="hide">
+  <button data-tab="publishers" class="active">Publishers</button>
+  <button data-tab="properties">Properties</button>
+  <button data-tab="demand">Demand</button>
+  <button data-tab="tag">Player Tag</button>
+  <button data-tab="gam">GAM</button>
+  <button data-tab="analytics">Analytics</button>
+</nav>
+<div class="ctx hide" id="ctx">
+  <span>Publisher:</span><select id="ctxPub"></select>
+  <span class="chip" id="ctxPlc">no placement selected</span>
+</div>
+
+<div class="wrap">
+  <!-- LOGIN -->
+  <div class="card hide" id="loginCard" style="max-width:380px;margin:60px auto;">
+    <h2>Sign in</h2>
+    <label>Username</label><input id="lUser" value="admin" />
+    <label>Password</label><input id="lPass" type="password" value="admin" />
+    <button class="btn" id="loginBtn" style="width:100%">Sign in</button>
+    <p class="muted" id="loginMsg"></p>
+  </div>
+
+  <!-- PUBLISHERS -->
+  <section class="tabpane hide" data-pane="publishers">
+    <div class="grid2">
+      <div class="card"><h2>Publishers</h2><ul class="list" id="pubList"></ul></div>
+      <div class="card"><h2>New publisher</h2>
+        <label>Name</label><input id="pName" placeholder="Acme Media" />
+        <label>GAM network code</label><input id="pGam" placeholder="21775744923" />
+        <button class="btn" id="pAdd">Add publisher</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROPERTIES -->
+  <section class="tabpane hide" data-pane="properties">
+    <div class="grid2">
+      <div class="card"><h2>Sites</h2><ul class="list" id="siteList"></ul>
+        <fieldset><legend>New site</legend>
+          <label>Domain</label><input id="sDomain" placeholder="acme.example" />
+          <button class="btn" id="sAdd">Add site</button></fieldset>
+      </div>
+      <div class="card"><h2>Ad units</h2><ul class="list" id="auList"></ul>
+        <fieldset><legend>New ad unit</legend>
+          <label>GAM ad unit path</label><input id="aPath" placeholder="/21775744923/acme/video" />
+          <label>Format</label><select id="aFormat"><option>video</option><option>banner</option></select>
+          <button class="btn" id="aAdd">Add ad unit</button></fieldset>
+      </div>
+    </div>
+    <div class="card"><h2>Placements</h2><ul class="list" id="plcList"></ul>
+      <fieldset><legend>New placement</legend>
+        <div class="row"><div><label>Name</label><input id="cName" placeholder="Homepage instream" /></div>
+          <div><label>Placement</label><select id="cPlacement"><option>instream</option><option>outstream</option></select></div>
+          <div><label>Engine delivery</label><select id="cChannel"><option value="auto">auto-update</option><option value="pinned">pinned</option></select></div>
+        </div>
+        <button class="btn" id="cAdd">Add placement</button></fieldset>
+    </div>
+  </section>
+
+  <!-- DEMAND -->
+  <section class="tabpane hide" data-pane="demand">
+    <div class="card"><h2>Demand partners <span class="muted" id="demandFor"></span></h2>
+      <p class="muted">Enable SSPs for this publisher and enter their credentials. Enabled partners flow into every placement's generated tag and runtime config.</p>
+      <div id="demandList"></div>
+    </div>
+  </section>
+
+  <!-- PLAYER TAG -->
+  <section class="tabpane hide" data-pane="tag">
+    <div class="grid2">
+      <div class="card"><h2>Player behaviour</h2>
+        <div class="row"><div><label>Engine delivery</label><select id="tChannel"><option value="auto">auto-update (loader)</option><option value="pinned">pinned version</option></select></div>
+          <div><label>Content video URL (instream)</label><input id="tVideo" /></div></div>
+        <div class="row"><div><label>Mount div id</label><input id="tDiv" placeholder="bp-video-slot" /></div>
+          <div><label>Preload</label><select id="tPreload"><option>metadata</option><option>auto</option><option>none</option></select></div>
+          <div><label>VPAID</label><select id="tVpaid"><option>insecure</option><option>secure</option><option>disabled</option></select></div></div>
+        <div class="row" style="margin-top:10px">
+          <label style="flex:0 0 auto"><input type="checkbox" id="tAutoplay" style="width:auto" checked> autoplay</label>
+          <label style="flex:0 0 auto"><input type="checkbox" id="tMuted" style="width:auto" checked> muted</label>
+          <label style="flex:0 0 auto"><input type="checkbox" id="tFluid" style="width:auto" checked> fluid</label>
+          <label style="flex:0 0 auto"><input type="checkbox" id="tLoop" style="width:auto"> loop</label>
+          <label style="flex:0 0 auto"><input type="checkbox" id="tSticky" style="width:auto"> sticky</label>
+        </div>
+        <button class="btn" id="tSave">Save & generate</button>
+      </div>
+      <div class="card"><h2>Embed tag <span class="muted">(share with the publisher)</span></h2>
+        <p class="muted" id="tHint">Configure and save on the left, then copy this into the publisher's page.</p>
+        <textarea id="tOut" rows="16" readonly></textarea>
+        <button class="btn" id="tCopy">Copy tag</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- GAM -->
+  <section class="tabpane hide" data-pane="gam">
+    <div class="grid2">
+      <div class="card"><h2>GAM ad serving</h2>
+        <label>GAM VAST tag URL <span class="muted">(data-tag)</span></label>
+        <textarea id="gTag" rows="4" placeholder="https://pubads.g.doubleclick.net/gampad/ads?iu=/.../&sz=640x480&...&output=vast&..."></textarea>
+        <label>Prebid cache URL</label><input id="gCache" placeholder="https://prebid.adnxs.com/pbc/v1/cache" />
+        <fieldset><legend>Auction management</legend>
+          <div class="row"><div><label>Timeout (ms)</label><input id="gTimeout" value="1200" /></div>
+            <div><label>Floor bias ($)</label><input id="gBias" value="0.10" /></div></div>
+          <div class="row"><div><label>Floor min ($, optional)</label><input id="gFloorMin" placeholder="none" /></div>
+            <div><label>Floor max ($, optional)</label><input id="gFloorMax" placeholder="none" /></div></div>
+        </fieldset>
+        <button class="btn" id="gSave">Save GAM config</button>
+      </div>
+      <div class="card"><h2>Key-values passed to GAM</h2>
+        <p class="muted">The engine stitches these into the GAM tag's <code>cust_params</code>. Set up matching key-value targeting + line items in Google Ad Manager.</p>
+        <table><thead><tr><th>Key</th><th>Meaning</th></tr></thead><tbody>
+          <tr><td><code>hb_pb</code></td><td>Winning price bucket (after floor bias) — drives price-priority line items</td></tr>
+          <tr><td><code>hb_bidder</code></td><td>Winning SSP code</td></tr>
+          <tr><td><code>hb_pb_&lt;bidder&gt;</code></td><td>Per-bidder price (send-all-bids)</td></tr>
+          <tr><td><code>hb_bidder_&lt;bidder&gt;</code></td><td>Per-bidder code (send-all-bids)</td></tr>
+        </tbody></table>
+        <p class="muted" style="margin-top:12px">Fallback: when Prebid returns no demand, the engine calls GAM with <code>hb_pb=0.00</code> &amp; <code>hb_bidder=none</code> so your house line item serves. <b>Line items/creatives are configured in GAM itself</b> (GAM API automation is a later phase).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ANALYTICS -->
+  <section class="tabpane hide" data-pane="analytics">
+    <div class="card"><h2>Analytics <span class="muted" id="anFor"></span></h2>
+      <div class="row" style="align-items:flex-end">
+        <div style="flex:0 0 auto"><label>Range</label><select id="anRange"><option value="7">Last 7 days</option><option value="1">Last 24h</option><option value="30">Last 30 days</option><option value="0">All time</option></select></div>
+        <div style="flex:0 0 auto"><button class="ghost small" id="anRefresh" style="margin:0">Refresh</button></div>
+        <div class="spacer"></div>
+        <div style="flex:0 0 auto"><label>Demo data (dev)</label>
+          <div style="display:flex;gap:6px"><input id="anSeedN" value="300" style="width:90px" title="sessions"/>
+          <button class="ghost small" id="anSeed" style="margin:0">Generate</button></div></div>
+      </div>
+    </div>
+    <div class="card"><h2>Overview</h2><div class="kpis" id="anKpis"></div></div>
+    <div class="grid2">
+      <div class="card"><h2>Funnel</h2><div class="funnel" id="anFunnel"></div></div>
+      <div class="card"><h2>Wins over time</h2><div class="spark" id="anSpark"></div><p class="muted" id="anSparkLbl"></p></div>
+    </div>
+    <div class="card"><h2>Per-bidder performance</h2><div id="anBidders"></div></div>
+    <div class="grid2">
+      <div class="card"><h2>hb_pb distribution (price buckets to GAM)</h2><div id="anHbpb"></div></div>
+      <div class="card"><h2>Winning bidder (hb_bidder)</h2><div id="anWinner"></div></div>
+    </div>
+  </section>
+</div>
+
+<script>
+let TOKEN = localStorage.getItem("cp_token") || "";
+const S = { pubs:[], pub:null, site:null, au:null, plc:null };
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+function toast(m,k="ok"){const t=document.createElement("div");t.className="toast "+k;t.textContent=m;
+  document.body.appendChild(t);setTimeout(()=>t.remove(),3400);}
+function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+async function api(path,{method="GET",body=null,auth=true}={}){
+  const h={"Content-Type":"application/json"}; if(auth&&TOKEN)h["Authorization"]="Bearer "+TOKEN;
+  const r=await fetch(path,{method,headers:h,body:body?JSON.stringify(body):null});
+  if(r.status===401){logout();throw new Error("Session expired");}
+  const txt=await r.text(); const data=txt?JSON.parse(txt):null;
+  if(!r.ok){const d=data&&data.detail;throw new Error(typeof d==="string"?d:JSON.stringify(d||data));}
+  return data;
+}
+
+// ---- auth ----
+function showLogin(){$("#loginCard").classList.remove("hide");$("#nav").classList.add("hide");
+  $("#ctx").classList.add("hide");$$(".tabpane").forEach(p=>p.classList.add("hide"));
+  $("#logoutBtn").classList.add("hide");$("#who").textContent="";}
+function showApp(){$("#loginCard").classList.add("hide");$("#nav").classList.remove("hide");
+  $("#ctx").classList.remove("hide");$("#logoutBtn").classList.remove("hide");$("#who").textContent="admin";
+  loadPubs().then(()=>switchTab("publishers"));}
+function logout(){TOKEN="";localStorage.removeItem("cp_token");showLogin();}
+$("#loginBtn").onclick=async()=>{try{const d=await api("/auth/login",{method:"POST",auth:false,
+  body:{username:$("#lUser").value,password:$("#lPass").value}});TOKEN=d.access_token;
+  localStorage.setItem("cp_token",TOKEN);showApp();}catch(e){$("#loginMsg").textContent=e.message;}};
+$("#logoutBtn").onclick=logout;
+
+// ---- tabs ----
+function switchTab(name){
+  $$("#nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===name));
+  $$(".tabpane").forEach(p=>p.classList.toggle("hide",p.dataset.pane!==name));
+  if(name==="properties") loadSites();
+  if(name==="demand") loadDemand();
+  if(name==="tag") loadTagForm();
+  if(name==="gam") loadGamForm();
+  if(name==="analytics") loadAnalytics();
+}
+$$("#nav button").forEach(b=>b.onclick=()=>{ if(needsPlacement(b.dataset.tab)&&!S.plc) return toast("Select a placement in Properties first","err");
+  if(needsPub(b.dataset.tab)&&!S.pub) return toast("Select a publisher first","err"); switchTab(b.dataset.tab); });
+function needsPub(t){return ["properties","demand","tag","gam","analytics"].includes(t);}
+function needsPlacement(t){return ["tag","gam"].includes(t);}
+
+// ---- context bar ----
+$("#ctxPub").onchange=()=>{const p=S.pubs.find(x=>x.id===$("#ctxPub").value);selectPub(p);};
+function renderCtx(){
+  $("#ctxPub").innerHTML=S.pubs.map(p=>`<option value="${p.id}" ${S.pub&&S.pub.id===p.id?"selected":""}>${esc(p.name)}</option>`).join("");
+  $("#ctxPlc").textContent = S.plc ? `Placement: ${S.plc.name}` : "no placement selected";
+}
+
+// ---- publishers ----
+async function loadPubs(){S.pubs=await api("/v1/admin/publishers");
+  $("#pubList").innerHTML=""; S.pubs.forEach(p=>{const li=document.createElement("li");
+    li.className=S.pub&&S.pub.id===p.id?"sel":"";
+    li.innerHTML=`<span>${esc(p.name)} <span class="pill ${p.status==='active'?'on':''}">${p.status}</span></span><span class="id">${p.id}</span>`;
+    li.onclick=()=>{selectPub(p);toast("Selected "+p.name);};$("#pubList").appendChild(li);});
+  if(!S.pub && S.pubs.length) S.pub=S.pubs[0];
+  renderCtx();}
+$("#pAdd").onclick=async()=>{const name=$("#pName").value.trim();if(!name)return toast("Name required","err");
+  try{const p=await api("/v1/admin/publishers",{method:"POST",body:{name,gam_network_code:$("#pGam").value.trim()||null}});
+  $("#pName").value="";$("#pGam").value="";await loadPubs();selectPub(p);toast("Publisher created");}catch(e){toast(e.message,"err");}};
+function selectPub(p){S.pub=p;S.site=null;S.au=null;S.plc=null;$("#demandFor").textContent="· "+p.name;renderCtx();
+  loadPubs();}
+
+// ---- properties ----
+async function loadSites(){if(!S.pub)return;const sites=await api(`/v1/admin/publishers/${S.pub.id}/sites`);
+  fillList("#siteList",sites,s=>esc(s.domain),s=>{S.site=s;S.au=null;S.plc=null;renderCtx();loadSites();loadAdUnits();},S.site);
+  if(S.site) loadAdUnits(); else {$("#auList").innerHTML='<li class="muted" style="cursor:default">select a site</li>';$("#plcList").innerHTML="";}}
+$("#sAdd").onclick=async()=>{if(!S.pub)return toast("Pick a publisher","err");const d=$("#sDomain").value.trim();if(!d)return toast("Domain required","err");
+  try{const s=await api(`/v1/admin/publishers/${S.pub.id}/sites`,{method:"POST",body:{domain:d}});$("#sDomain").value="";S.site=s;await loadSites();toast("Site created");}catch(e){toast(e.message,"err");}};
+async function loadAdUnits(){if(!S.site)return;const aus=await api(`/v1/admin/sites/${S.site.id}/ad-units`);
+  fillList("#auList",aus,a=>`${esc(a.gam_ad_unit_path)} <span class="pill">${a.format}</span>`,a=>{S.au=a;S.plc=null;renderCtx();loadAdUnits();loadPlacements();},S.au);
+  if(S.au) loadPlacements(); else $("#plcList").innerHTML='<li class="muted" style="cursor:default">select an ad unit</li>';}
+$("#aAdd").onclick=async()=>{if(!S.site)return toast("Pick a site","err");const p=$("#aPath").value.trim();if(!p)return toast("Path required","err");
+  try{const a=await api(`/v1/admin/sites/${S.site.id}/ad-units`,{method:"POST",body:{gam_ad_unit_path:p,format:$("#aFormat").value}});$("#aPath").value="";S.au=a;await loadAdUnits();toast("Ad unit created");}catch(e){toast(e.message,"err");}};
+async function loadPlacements(){if(!S.au)return;const plcs=await api(`/v1/admin/ad-units/${S.au.id}/placements`);
+  fillList("#plcList",plcs,p=>`${esc(p.name)} <span class="pill ${p.active?'on':''}">${p.config.placement}</span>`,p=>{S.plc=p;renderCtx();loadPlacements();toast("Placement selected — Tag/GAM/Analytics now available");},S.plc);}
+$("#cAdd").onclick=async()=>{if(!S.au)return toast("Pick an ad unit","err");const name=$("#cName").value.trim();if(!name)return toast("Name required","err");
+  const cfg={placement:$("#cPlacement").value,timeout:1200,bias:"0.10"};if(cfg.placement==="instream")cfg.video="https://vjs.zencdn.net/v/oceans.mp4";
+  try{const p=await api(`/v1/admin/ad-units/${S.au.id}/placements`,{method:"POST",body:{name,engine_channel:$("#cChannel").value,config:cfg,active:true}});
+  $("#cName").value="";S.plc=p;await loadPlacements();toast("Placement created");}catch(e){toast(e.message,"err");}};
+
+// ---- demand ----
+async function loadDemand(){if(!S.pub)return;$("#demandFor").textContent="· "+S.pub.name;
+  const [cat,en]=await Promise.all([api("/v1/admin/demand-partners"),api(`/v1/admin/publishers/${S.pub.id}/demand`)]);
+  const by={};en.forEach(e=>by[e.demand_partner_code]=e);const box=$("#demandList");box.innerHTML="";
+  cat.forEach(dp=>{const e=by[dp.code];const div=document.createElement("div");div.className="card";div.style.marginBottom="10px";
+    const inputs=dp.required_params.map(k=>`<div><label>${k}</label><input data-k="${k}" value="${e?esc(e.params[k]??""):""}"/></div>`).join("");
+    div.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><b>${esc(dp.label)}</b>
+      <span class="pill ${e&&e.enabled?'on':''}">${e&&e.enabled?'enabled':'off'}</span></div>
+      <div class="row">${inputs}<div><label>Floor ($, optional)</label><input data-floor value="${e&&e.floor!=null?e.floor:''}"/></div></div>
+      <button class="btn small" data-save>${e?'Update':'Enable'}</button>${e?'<button class="danger small" data-rm style="margin-left:8px">Disable</button>':''}`;
+    div.querySelector("[data-save]").onclick=async()=>{const params={};div.querySelectorAll("input[data-k]").forEach(i=>{if(i.value!=="")params[i.dataset.k]=i.value;});
+      const f=div.querySelector("[data-floor]").value.trim();
+      try{await api(`/v1/admin/publishers/${S.pub.id}/demand/${dp.code}`,{method:"PUT",body:{params,floor:f?parseFloat(f):null,enabled:true}});toast(dp.label+" saved");loadDemand();}catch(x){toast(x.message,"err");}};
+    const rm=div.querySelector("[data-rm]");if(rm)rm.onclick=async()=>{try{await api(`/v1/admin/publishers/${S.pub.id}/demand/${dp.code}`,{method:"DELETE"});toast(dp.label+" disabled");loadDemand();}catch(x){toast(x.message,"err");}};
+    box.appendChild(div);});}
+
+// ---- placement config helpers ----
+async function getPlc(){return api(`/v1/admin/placements/${S.plc.id}`);}
+async function patchCfg(partial){const cur=await getPlc();const cfg={...cur.config,...partial};
+  const upd=await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{config:cfg}});S.plc=upd;return upd;}
+
+// ---- player tag ----
+async function loadTagForm(){if(!S.plc)return;const p=await getPlc();const c=p.config;
+  $("#tChannel").value=p.engine_channel==="auto"?"auto":"pinned";
+  $("#tVideo").value=c.video||"";$("#tDiv").value=c.divId||"";$("#tPreload").value=c.preload||"metadata";$("#tVpaid").value=c.vpaid||"insecure";
+  $("#tAutoplay").checked=c.autoplay!==false;$("#tMuted").checked=c.muted!==false;$("#tFluid").checked=c.fluid!==false;$("#tLoop").checked=!!c.loop;$("#tSticky").checked=!!c.sticky;
+  generateTag();}
+$("#tSave").onclick=async()=>{if(!S.plc)return;try{
+  await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{engine_channel:$("#tChannel").value,
+    config:{...(await getPlc()).config,video:$("#tVideo").value.trim()||null,divId:$("#tDiv").value.trim()||null,
+      preload:$("#tPreload").value,vpaid:$("#tVpaid").value,autoplay:$("#tAutoplay").checked,muted:$("#tMuted").checked,
+      fluid:$("#tFluid").checked,loop:$("#tLoop").checked,sticky:$("#tSticky").checked}}});
+  toast("Saved");generateTag();}catch(e){toast(e.message,"err");}};
+async function generateTag(){const d=await api(`/v1/admin/placements/${S.plc.id}/embed`);$("#tOut").value=d.tag;
+  $("#tHint").innerHTML=`Channel: <b>${d.channel}</b> · ${d.config.bidders.length} bidder(s). Paste into the publisher page.`;}
+$("#tCopy").onclick=()=>{navigator.clipboard.writeText($("#tOut").value);toast("Tag copied");};
+
+// ---- gam ----
+async function loadGamForm(){if(!S.plc)return;const c=(await getPlc()).config;
+  $("#gTag").value=c.adTag||"";$("#gCache").value=c.cacheUrl||"";$("#gTimeout").value=c.timeout??1200;$("#gBias").value=c.bias??"0.10";
+  $("#gFloorMin").value=c.floorMin??"";$("#gFloorMax").value=c.floorMax??"";}
+$("#gSave").onclick=async()=>{if(!S.plc)return;const fmin=$("#gFloorMin").value.trim(),fmax=$("#gFloorMax").value.trim();
+  try{await patchCfg({adTag:$("#gTag").value.trim()||null,cacheUrl:$("#gCache").value.trim()||null,
+    timeout:parseInt($("#gTimeout").value||"1200",10),bias:($("#gBias").value||"0.00"),
+    floorMin:fmin?parseFloat(fmin):null,floorMax:fmax?parseFloat(fmax):null});toast("GAM config saved");}catch(e){toast(e.message,"err");}};
+
+// ---- analytics ----
+function rangeParams(){const d=parseInt($("#anRange").value,10);if(!d)return"";const from=new Date(Date.now()-d*864e5).toISOString();return`&from=${encodeURIComponent(from)}`;}
+async function loadAnalytics(){if(!S.plc){$("#anFor").textContent="— select a placement in Properties";return;}
+  $("#anFor").textContent="· "+S.plc.name;const pid=S.plc.id;const rp=rangeParams();
+  try{
+    const sum=await api(`/v1/admin/analytics/summary?placement_id=${pid}${rp}`);renderKpis(sum);renderFunnel(sum);
+    const ts=await api(`/v1/admin/analytics/timeseries?placement_id=${pid}&bucket=day${rp}`);renderSpark(ts);
+    const bd=await api(`/v1/admin/analytics/bidders?placement_id=${pid}${rp}`);renderBidders(bd);
+    const kv=await api(`/v1/admin/analytics/key-values?placement_id=${pid}${rp}`);renderKV(kv);
+  }catch(e){toast(e.message,"err");}}
+$("#anRefresh").onclick=loadAnalytics;$("#anRange").onchange=loadAnalytics;
+$("#anSeed").onclick=async()=>{if(!S.plc)return toast("Select a placement","err");const n=parseInt($("#anSeedN").value||"300",10);
+  try{const r=await api("/v1/admin/analytics/dev/seed",{method:"POST",body:{placement_id:S.plc.id,sessions:n}});
+  toast(`Seeded ${r.total} events`);loadAnalytics();}catch(e){toast(e.message,"err");}};
+function money(v){return v==null?"—":"$"+Number(v).toFixed(2);}
+function pct(v){return v==null?"—":(v*100).toFixed(1)+"%";}
+function renderKpis(s){$("#anKpis").innerHTML=[
+  ["Player loads",s.loads,""],["Bid requests",s.requests,""],
+  ["Win rate",pct(s.winRate),`${s.wins} wins`],["Fill rate",pct(s.fillRate),`${s.impressions} imps`],
+  ["Avg eCPM (raw)",money(s.avgCpmRaw),"actual bid"],["Avg eCPM (biased)",money(s.avgCpmBiased),s.biasUpliftPct!=null?`+${s.biasUpliftPct}% to GAM`:""],
+  ["Completes",s.completes,pct(s.completeRate)],["No-demand / errors",s.noDemand+s.errors,""],
+].map(([l,v,sub])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v??"—"}</div><div class="s">${sub||""}</div></div>`).join("");}
+function renderFunnel(s){const steps=[["Load",s.loads],["Bid request",s.requests],["Win",s.wins],["Impression",s.impressions],["Complete",s.completes]];
+  const max=Math.max(1,...steps.map(x=>x[1]));$("#anFunnel").innerHTML=steps.map(([l,v])=>
+    `<div><div class="flabel"><span>${l}</span><span>${v}</span></div><div class="bar"><i style="width:${(v/max*100).toFixed(1)}%"></i></div></div>`).join("");}
+function renderSpark(ts){const wins=ts.filter(r=>r.event==="auction_win");const map={};wins.forEach(r=>map[r.ts.slice(0,10)]=r.count);
+  const days=Object.keys(map).sort();const max=Math.max(1,...days.map(d=>map[d]));
+  $("#anSpark").innerHTML=days.map(d=>`<i style="height:${(map[d]/max*100).toFixed(0)}%" title="${d}: ${map[d]}"></i>`).join("")||'<span class="muted">no data</span>';
+  $("#anSparkLbl").textContent=days.length?`${days[0]} → ${days[days.length-1]}`:"";}
+function renderBidders(rows){if(!rows.length){$("#anBidders").innerHTML='<p class="muted">no bid data yet — generate demo data or wait for traffic</p>';return;}
+  $("#anBidders").innerHTML=`<table><thead><tr><th>Bidder</th><th>Bids</th><th>No-bid</th><th>Timeout</th><th>Error</th><th>Avg CPM</th><th>Avg latency</th><th>Wins</th></tr></thead><tbody>`+
+    rows.map(r=>`<tr><td><b>${esc(r.bidder)}</b></td><td>${r.bid}</td><td>${r['no-bid']}</td><td>${r.timeout}</td><td>${r.error}</td><td>${money(r.avgCpm)}</td><td>${r.avgLatencyMs!=null?r.avgLatencyMs+' ms':'—'}</td><td>${r.wins}</td></tr>`).join("")+`</tbody></table>`;}
+function renderKV(kv){const bars=arr=>{const max=Math.max(1,...arr.map(x=>x.count));return arr.map(x=>
+    `<div><div class="flabel"><span>${esc(x.value)}</span><span>${x.count}</span></div><div class="bar"><i style="width:${(x.count/max*100).toFixed(1)}%"></i></div></div>`).join("")||'<p class="muted">no data</p>';};
+  $("#anHbpb").innerHTML=`<div class="funnel">${bars(kv.hb_pb)}</div>`;$("#anWinner").innerHTML=`<div class="funnel">${bars(kv.hb_bidder)}</div>`;}
+
+// ---- shared ----
+function fillList(sel,items,label,onClick,cur){const ul=$(sel);ul.innerHTML="";
+  if(!items.length){ul.innerHTML='<li class="muted" style="cursor:default">none yet</li>';return;}
+  items.forEach(it=>{const li=document.createElement("li");li.className=cur&&cur.id===it.id?"sel":"";
+    li.innerHTML=`<span>${label(it)}</span><span class="id">${it.id}</span>`;li.onclick=()=>onClick(it);ul.appendChild(li);});}
+
+if(TOKEN) showApp(); else showLogin();
+</script>
+</body>
+</html>
