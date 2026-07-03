@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tag Preview & Auction Inspector — Bidding Player</title>
+<style>
+  :root{--bg:#f5f7fc;--panel:#ffffff;--panel2:#f0f2fa;--line:#e3e7f2;--ink:#242b45;--muted:#6d7698;
+    --accent:#0fb5a0;--good:#0fa97f;--warn:#c98a00;--bad:#e0555a;--lav:#8e7fe0;--lav-soft:#f1eefc;--teal-soft:#e6f7f4;}
+  *{box-sizing:border-box;} body{margin:0;background:var(--bg);color:var(--ink);
+    font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:linear-gradient(90deg,var(--lav-soft),var(--teal-soft));
+    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10;}
+  header h1{font-size:14px;margin:0;font-weight:650;color:var(--accent);} .tag{font-size:11px;color:var(--muted);border:1px solid var(--line);padding:2px 8px;border-radius:20px;background:#fff;}
+  .spacer{flex:1;} a.back{color:var(--accent);text-decoration:none;font-size:12px;}
+  .layout{display:grid;grid-template-columns:1fr 1fr;gap:0;height:calc(100vh - 45px);}
+  @media(max-width:900px){.layout{grid-template-columns:1fr;height:auto;}}
+  .stage{padding:20px;overflow:auto;border-right:1px solid var(--line);}
+  .article{max-width:560px;margin:0 auto;} .article h2{font-size:22px;line-height:1.25;}
+  .article p{color:#4a5578;} .slot{margin:18px 0;border:1px dashed var(--line);border-radius:8px;min-height:40px;}
+  .inspector{padding:14px 16px;overflow:auto;background:#fbfcff;}
+  .inspector h3{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:14px 0 8px;}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;}
+  .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;}
+  .kpi .v{font-size:18px;font-weight:700;} .kpi .l{font-size:10px;color:var(--muted);text-transform:uppercase;}
+  table{width:100%;border-collapse:collapse;font-size:12px;} th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{color:var(--muted);font-size:10px;text-transform:uppercase;} code{font-family:ui-monospace,Menlo,monospace;font-size:11px;}
+  .pill{font-size:10px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--muted);white-space:nowrap;}
+  .pill.ok{color:var(--good);border-color:var(--good);} .pill.warn{color:var(--warn);border-color:var(--warn);} .pill.bad{color:var(--bad);border-color:var(--bad);}
+  .pill.win{color:#fff;background:var(--lav);border-color:var(--lav);}
+  .log{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#4a5578;max-height:180px;overflow:auto;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:8px;}
+  .log .u{color:#0f8f80;word-break:break-all;} .muted{color:var(--muted);} .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px;}
+  .banner{padding:8px 12px;font-size:12px;border-bottom:1px solid var(--line);background:var(--lav-soft);color:#4a4470;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Tag Preview</h1><span class="tag">+ Auction Inspector</span>
+  <span class="tag" id="plcLabel">—</span><div class="spacer"></div>
+  <a class="back" href="/admin">← back to dashboard</a>
+</header>
+<div class="banner" id="banner">Arming inspector… bids from this origin are usually blocked (not allow-listed), so <b>no-bid is expected</b> — this verifies the tag <b>loads, requests fire, and GAM/VAST are called</b>.</div>
+<div class="layout">
+  <div class="stage">
+    <div class="article">
+      <h2>Sample publisher article</h2>
+      <p class="muted">This is a test page that embeds the generated player tag exactly as a publisher would. The player mounts below; the inspector on the right captures the ad auction traffic in real time.</p>
+      <div class="slot" id="playerHost"></div>
+      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Nullam quis risus eget urna mollis ornare vel eu leo.</p>
+      <p>Cras mattis consectetur purus sit amet fermentum. Donec ullamcorper nulla non metus auctor fringilla. Maecenas sed diam eget risus varius blandit sit amet non magna.</p>
+    </div>
+  </div>
+  <div class="inspector">
+    <div class="kpis" id="kpis"></div>
+    <h3>Auctions</h3><div id="auctions"><p class="muted">waiting for auction traffic…</p></div>
+    <h3>Key-values sent to GAM</h3><div id="kv"><p class="muted">no GAM request seen yet</p></div>
+    <h3>Network calls</h3><div class="log" id="calls"></div>
+  </div>
+</div>
+
+<!-- ============ AdScope-derived inspector (ported, dependency-free) ============ -->
+<script>
+/* AdScopeLite — self-contained auction-inspection module (vanilla ES2019, no deps).
+ * Ported from the AdScope Chrome extension: interception + adapters + matcher only.
+ * Install synchronously (inline <script>) before other page scripts load.
+ * Emits document CustomEvents 'adscope:call' and 'adscope:auction'; exposes window.AdScopeLite.
+ */
+(function () {
+  'use strict';
+
+  if (window.__AdScopeLiteInstalled) return;
+  window.__AdScopeLiteInstalled = true;
+
+  var calls = [];
+  var auctions = [];
+  var requestMap = new Map();
+  var responseMap = new Map();
+  var auctionIndex = new Map();
+  var MAX_BUFFER = 500;
+
+  window.AdScopeLite = {
+    calls: calls,
+    auctions: auctions,
+    reset: function () {
+      calls.length = 0;
+      auctions.length = 0;
+      requestMap.clear();
+      responseMap.clear();
+      auctionIndex.clear();
+    }
+  };
+
+  var AD_PATTERNS = [
+    /googlesyndication\.com/, /doubleclick\.net/, /googleadservices\.com/,
+    /pubmatic\.com/, /appnexus\.com/, /adnxs\.com/, /rubiconproject\.com/,
+    /magnite\.com/, /openx\.net/, /indexexchange\.com/, /criteo\.com/,
+    /amazon-adsystem\.com/, /adsystem\.amazon/, /prebid\.org/, /33across\.com/,
+    /smartadserver\.com/, /sovrn\.com/, /triplelift\.com/, /sharethrough\.com/,
+    /xandr\.com/, /media\.net/, /taboola\.com/, /outbrain\.com/, /yieldmo\.com/,
+    /conversantmedia\.com/, /adsrvr\.org/, /adform\.net/, /bidswitch\.net/,
+    /spotx\.tv/, /spotxchange\.com/, /teads\.tv/, /freewheel\.tv/, /emxdgt\.com/,
+    /contextweb\.com/, /districtm\.(io|ca)/, /lkqd\.net/, /lijit\.com/, /rlcdn\.com/,
+    /[/?]ads[?=&/]/, /\/openrtb2?\//, /\/bid[/?&]/, /[?&]hb_pb=/, /[?&]auction_id=/
+  ];
+
+  function matchesAdPattern(url) {
+    for (var i = 0; i < AD_PATTERNS.length; i++) {
+      if (AD_PATTERNS[i].test(url)) return true;
+    }
+    return false;
+  }
+
+  function isOwnOrigin(url) {
+    try { return new URL(url, location.href).origin === location.origin; }
+    catch (e) { return false; }
+  }
+
+  function headersToRecord(headers) {
+    var out = {};
+    try { headers.forEach(function (v, k) { out[k.toLowerCase()] = v; }); } catch (e) {}
+    return out;
+  }
+
+  function uuid() {
+    if (window.crypto && typeof crypto.randomUUID === 'function') {
+      try { return crypto.randomUUID(); } catch (e) {}
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
+  var WIN_NOTICE_PATTERNS = ['/win', '/won', 'win_notice', 'billing_url'];
+
+  function detectWin(nurl, burl) {
+    function check(s) {
+      if (!s) return false;
+      var lower = s.toLowerCase();
+      for (var i = 0; i < WIN_NOTICE_PATTERNS.length; i++) {
+        if (lower.indexOf(WIN_NOTICE_PATTERNS[i]) !== -1) return true;
+      }
+      return false;
+    }
+    return check(nurl) || check(burl);
+  }
+
+  function normaliseCpm(price, currency) { return price; }
+  function safeJson(raw) { try { return JSON.parse(raw); } catch (e) { return null; } }
+
+  function sizeFromBanner(banner) {
+    if (!banner) return [];
+    var fmt = banner.format;
+    if (fmt && fmt.length) {
+      var out = [];
+      for (var i = 0; i < fmt.length; i++) {
+        var f = fmt[i];
+        if (typeof f.w === 'number' && typeof f.h === 'number') out.push([f.w, f.h]);
+      }
+      return out;
+    }
+    if (typeof banner.w === 'number' && typeof banner.h === 'number') return [[banner.w, banner.h]];
+    return [];
+  }
+
+  function first(arr) { return (arr && arr.length) ? arr[0] : undefined; }
+  function def(v, d) { return (v === undefined || v === null) ? d : v; }
+
+  function mediaTypesOf(imp) {
+    var mt = [];
+    if (imp.banner) mt.push('banner');
+    if (imp.video) mt.push('video');
+    if (imp.native) mt.push('native');
+    return mt.length ? mt : ['banner'];
+  }
+
+  var PrebidAdapter = {
+    name: 'prebid',
+    urlPattern: /\/openrtb2\/auction|\/auction|prebid\.org|prebid\./i,
+    canHandle: function (url) { return this.urlPattern.test(url); },
+    parseRequest: function (body, _h, url) {
+      var parsed = safeJson(body);
+      if (!parsed || !parsed.imp || !parsed.imp.length) return null;
+      var imp = parsed.imp[0];
+      var ext = imp.ext;
+      var prebidExt = ext && ext.prebid;
+      var adUnitCode = (prebidExt && prebidExt.adUnitCode != null) ? prebidExt.adUnitCode
+        : (imp.tagid != null ? imp.tagid : imp.id);
+      return {
+        impressionId: 'prebid:' + imp.id, adUnitCode: adUnitCode, slotName: adUnitCode,
+        bidFloor: def(imp.bidfloor, 0), bidFloorCurrency: def(imp.bidfloorcur, 'USD'),
+        sizes: sizeFromBanner(imp.banner), mediaTypes: mediaTypesOf(imp),
+        pageUrl: (parsed.site && parsed.site.page) ? parsed.site.page : url,
+        gdprConsent: (parsed.user && parsed.user.consent != null) ? parsed.user.consent : null,
+        usp: (parsed.regs && parsed.regs.us_privacy != null) ? parsed.regs.us_privacy : null, raw: parsed
+      };
+    },
+    parseAllResponses: function (body) {
+      var parsed = safeJson(body);
+      if (!parsed || !parsed.seatbid || !parsed.seatbid.length) return [];
+      var currency = def(parsed.cur, 'USD');
+      var results = [];
+      for (var s = 0; s < parsed.seatbid.length; s++) {
+        var seatbid = parsed.seatbid[s];
+        var bids = seatbid.bid || [];
+        for (var b = 0; b < bids.length; b++) {
+          var bid = bids[b];
+          var bidExt = bid.ext;
+          var prebidExt = bidExt && bidExt.prebid;
+          var bidderName = seatbid.seat != null ? seatbid.seat
+            : ((prebidExt && prebidExt.bidder != null) ? prebidExt.bidder : 'prebid');
+          results.push({
+            impressionId: 'prebid:' + bid.impid, bidderName: bidderName,
+            cpm: normaliseCpm(bid.price, currency), currency: currency,
+            advertiserDomain: def(first(bid.adomain), ''), creativeId: def(bid.crid, ''),
+            dealId: def(bid.dealid, null), ttl: def(bid.exp, 300),
+            isWin: detectWin(bid.nurl, bid.burl), rawResponse: parsed
+          });
+        }
+      }
+      return results;
+    }
+  };
+
+  var AppNexusAdapter = {
+    name: 'appnexus',
+    urlPattern: /appnexus\.com|xandr\.com|adnxs\.com/i,
+    canHandle: function (url) { return this.urlPattern.test(url); },
+    parseRequest: function (body, _h, url) {
+      var parsed = safeJson(body);
+      if (!parsed || !parsed.imp || !parsed.imp.length) return null;
+      var imp = parsed.imp[0];
+      var ext = imp.ext || {};
+      var anExt = ext.appnexus || {};
+      var placementId = anExt.placement_id != null ? String(anExt.placement_id) : undefined;
+      var memberId = anExt.member_id != null ? String(anExt.member_id) : undefined;
+      var adUnitCode = placementId != null ? placementId : (imp.tagid != null ? imp.tagid : imp.id);
+      return {
+        impressionId: 'appnexus:' + imp.id, adUnitCode: adUnitCode,
+        slotName: memberId ? (memberId + '/' + adUnitCode) : adUnitCode,
+        bidFloor: def(imp.bidfloor, 0), bidFloorCurrency: def(imp.bidfloorcur, 'USD'),
+        sizes: sizeFromBanner(imp.banner), mediaTypes: mediaTypesOf(imp),
+        pageUrl: (parsed.site && parsed.site.page) ? parsed.site.page : url,
+        gdprConsent: (parsed.user && parsed.user.consent != null) ? parsed.user.consent : null,
+        usp: (parsed.regs && parsed.regs.us_privacy != null) ? parsed.regs.us_privacy : null, raw: parsed
+      };
+    },
+    parseResponse: function (body) {
+      var parsed = safeJson(body);
+      if (!parsed || !parsed.seatbid || !parsed.seatbid.length) return null;
+      var seatbid = parsed.seatbid[0];
+      if (!seatbid || !seatbid.bid || !seatbid.bid.length) return null;
+      var bid = seatbid.bid[0];
+      var currency = def(parsed.cur, 'USD');
+      var bidExt = bid.ext || {};
+      var anBidExt = bidExt.appnexus || {};
+      var dealId = bid.dealid != null ? bid.dealid : (anBidExt.deal_id != null ? anBidExt.deal_id : null);
+      return {
+        impressionId: 'appnexus:' + bid.impid, bidderName: 'appnexus',
+        cpm: normaliseCpm(bid.price, currency), currency: currency,
+        advertiserDomain: def(first(bid.adomain), ''),
+        creativeId: bid.crid != null ? bid.crid : def(bid.adid, ''),
+        dealId: dealId, ttl: def(bid.exp, 300),
+        isWin: detectWin(bid.nurl, bid.burl), rawResponse: parsed
+      };
+    }
+  };
+
+  var PubmaticAdapter = {
+    name: 'pubmatic',
+    urlPattern: /pubmatic\.com/i,
+    canHandle: function (url) { return this.urlPattern.test(url); },
+    parseRequest: function (body, _h, url) {
+      var parsed = safeJson(body);
+      if (!parsed || !parsed.imp || !parsed.imp.length) return null;
+      var imp = parsed.imp[0];
+      var ext = imp.ext || {};
+      var pmExt = ext.pubmatic || {};
+      var adUnitCode = pmExt.adUnitCode != null ? pmExt.adUnitCode : (imp.tagid != null ? imp.tagid : imp.id);
+      var pageUrl = pmExt.kadpageurl != null ? pmExt.kadpageurl : ((parsed.site && parsed.site.page) ? parsed.site.page : url);
+      return {
+        impressionId: 'pubmatic:' + imp.id, adUnitCode: adUnitCode, slotName: adUnitCode,
+        bidFloor: def(imp.bidfloor, 0), bidFloorCurrency: def(imp.bidfloorcur, 'USD'),
+        sizes: sizeFromBanner(imp.banner), mediaTypes: mediaTypesOf(imp), pageUrl: pageUrl,
+        gdprConsent: (parsed.user && parsed.user.consent != null) ? parsed.user.consent : null,
+        usp: (parsed.regs && parsed.regs.us_privacy != null) ? parsed.regs.us_privacy : null, raw: parsed
+      };
+    },
+    parseResponse: function (body) {
+      var parsed = safeJson(body);
+      if (!parsed || !parsed.seatbid || !parsed.seatbid.length) return null;
+      var seatbid = parsed.seatbid[0];
+      if (!seatbid || !seatbid.bid || !seatbid.bid.length) return null;
+      var bid = seatbid.bid[0];
+      var currency = def(parsed.cur, 'USD');
+      var bidExt = bid.ext || {};
+      var pmBidExt = bidExt.pubmatic || {};
+      var isWin = pmBidExt.pwtbst === 1 || detectWin(bid.nurl, bid.burl);
+      return {
+        impressionId: 'pubmatic:' + bid.impid, bidderName: 'pubmatic',
+        cpm: normaliseCpm(bid.price, currency), currency: currency,
+        advertiserDomain: def(first(bid.adomain), ''), creativeId: def(bid.crid, ''),
+        dealId: def(bid.dealid, null), ttl: def(bid.exp, 300), isWin: isWin, rawResponse: parsed
+      };
+    }
+  };
+
+  var RubiconAdapter = {
+    name: 'rubicon',
+    urlPattern: /rubiconproject\.com|magnite\.com/i,
+    canHandle: function (url) { return this.urlPattern.test(url); },
+    _isFastlane: function (url) { return /\/a\/api\/fastlane/.test(url); },
+    parseRequest: function (body, _h, url) {
+      var parsed = safeJson(body);
+      if (!parsed) return null;
+      return this._isFastlane(url) ? this._parseFastlaneRequest(parsed, url) : this._parseOpenRtbRequest(parsed, url);
+    },
+    _parseFastlaneRequest: function (parsed, url) {
+      var slots = parsed.slots;
+      if (!slots || !slots.length) return null;
+      var slot = slots[0];
+      var slotName = def(slot.name, '');
+      var mediaTypes = ['banner'];
+      if (slot.video) mediaTypes.push('video');
+      var gdpr = parsed.gdpr_consent;
+      return {
+        impressionId: 'rubicon:' + slotName, adUnitCode: slotName, slotName: slotName,
+        bidFloor: def(parsed.floor, 0), bidFloorCurrency: 'USD', sizes: def(slot.sizes, []),
+        mediaTypes: mediaTypes, pageUrl: def(parsed.url, url),
+        gdprConsent: (gdpr && gdpr.consent_string != null) ? gdpr.consent_string : null,
+        usp: def(parsed.us_privacy, null)
+      };
+    },
+    _parseOpenRtbRequest: function (parsed, url) {
+      var imp = parsed.imp && parsed.imp[0];
+      if (!imp) return null;
+      var ext = imp.ext || {};
+      var rubExt = ext.rubicon || {};
+      var adSlot = rubExt.adSlot != null ? rubExt.adSlot : def(imp.tagid, '');
+      var banner = imp.banner;
+      var mediaTypes = [];
+      if (imp.banner) mediaTypes.push('banner');
+      if (imp.video) mediaTypes.push('video');
+      if (imp.native) mediaTypes.push('native');
+      var site = parsed.site || {};
+      var user = parsed.user || {};
+      var regs = parsed.regs || {};
+      var sizes = [];
+      if (banner && banner.format) {
+        for (var i = 0; i < banner.format.length; i++) sizes.push([banner.format[i].w, banner.format[i].h]);
+      }
+      return {
+        impressionId: 'rubicon:' + imp.id, adUnitCode: adSlot, slotName: adSlot,
+        bidFloor: def(imp.bidfloor, 0), bidFloorCurrency: def(imp.bidfloorcur, 'USD'),
+        sizes: sizes, mediaTypes: mediaTypes.length ? mediaTypes : ['banner'],
+        pageUrl: def(site.page, url), gdprConsent: def(user.consent, null), usp: def(regs.us_privacy, null)
+      };
+    },
+    parseResponse: function (body, _h, url) {
+      var parsed = safeJson(body);
+      if (!parsed) return null;
+      return this._isFastlane(url) ? this._parseFastlaneResponse(parsed) : this._parseOpenRtbResponse(parsed);
+    },
+    _parseFastlaneResponse: function (parsed) {
+      var ads = parsed.ads;
+      if (!ads || !ads.length) return null;
+      var ad = ads[0];
+      return {
+        impressionId: 'rubicon:' + def(ad.impression_id, ''), bidderName: 'rubicon',
+        cpm: def(ad.cpm, 0), currency: 'USD', advertiserDomain: '',
+        creativeId: def(ad.creative_id, ''), dealId: def(ad.deal_id, null),
+        ttl: 300, isWin: false, rawResponse: parsed
+      };
+    },
+    _parseOpenRtbResponse: function (parsed) {
+      var seatbid = parsed.seatbid && parsed.seatbid[0];
+      if (!seatbid) return null;
+      var bid = seatbid.bid && seatbid.bid[0];
+      if (!bid) return null;
+      var currency = def(parsed.cur, 'USD');
+      return {
+        impressionId: 'rubicon:' + bid.impid, bidderName: 'rubicon',
+        cpm: normaliseCpm(bid.price, currency), currency: currency,
+        advertiserDomain: def(first(bid.adomain), ''), creativeId: def(bid.crid, ''),
+        dealId: def(bid.dealid, null), ttl: def(bid.exp, 300),
+        isWin: detectWin(bid.nurl, bid.burl), rawResponse: parsed
+      };
+    }
+  };
+
+  var GoogleAdapter = {
+    name: 'google',
+    urlPattern: /googlesyndication\.com|doubleclick\.net|googleadservices\.com|securepubads\.g\.doubleclick\.net/i,
+    canHandle: function (url) { return this.urlPattern.test(url); },
+    NON_AUCTION_PATHS: ['/pcs/view', '/pagead/gen_204', '/pagead/ping', '/.well-known/', '/pagead/adview', '/pagead/viewthrough'],
+    parseRequest: function (body, _h, url) {
+      for (var i = 0; i < this.NON_AUCTION_PATHS.length; i++) {
+        if (url.indexOf(this.NON_AUCTION_PATHS[i]) !== -1) return null;
+      }
+      var urlObj = null;
+      try { urlObj = new URL(url); } catch (e) { urlObj = null; }
+      var json = safeJson(body);
+      if (json) return this._parseJsonRequest(json, url);
+      if (urlObj) return this._parseUrlRequest(urlObj);
+      return null;
+    },
+    parseResponse: function (body, _h, url) {
+      var urlObj = null;
+      try { urlObj = new URL(url); } catch (e) { urlObj = null; }
+      var json = safeJson(body);
+      if (json) {
+        var slotName = json.adUnitPath != null ? json.adUnitPath : (json.adunit != null ? json.adunit : '');
+        if (slotName) {
+          var cpmMicros = def(json.cpm_micros, 0);
+          return {
+            impressionId: 'google:' + slotName, bidderName: 'google', cpm: cpmMicros / 1000000,
+            currency: 'USD', advertiserDomain: def(json.advertiser_domain, ''),
+            creativeId: def(json.creative_id, ''), dealId: def(json.deal_id, null), ttl: 300,
+            isWin: detectWin(json.win_url, json.billing_url), rawResponse: json
+          };
+        }
+      }
+      var prevScpResult = this._parsePrevScp(url);
+      if (prevScpResult) return prevScpResult;
+      if (urlObj) {
+        var iu = this._getIuFromUrlObj(urlObj);
+        if (iu && this._detectFill(body)) {
+          return {
+            impressionId: 'google:' + iu, bidderName: 'google-direct', cpm: 0, currency: 'USD',
+            advertiserDomain: '', creativeId: '', dealId: null, ttl: 300, isWin: true, rawResponse: {}
+          };
+        }
+      }
+      return null;
+    },
+    _detectFill: function (body) {
+      if (!body || body.length === 0) return false;
+      if (body === '__response_pending__') return true;
+      if (body.indexOf('<VAST') !== -1) return body.indexOf('<Ad') !== -1;
+      if (body.indexOf('aw.0(') !== -1 || body.indexOf('googletag.') !== -1 || body.indexOf('document.write') !== -1) return true;
+      return body.length > 200;
+    },
+    _getIuFromUrlObj: function (urlObj) {
+      var iu = def(urlObj.searchParams.get('iu'), '');
+      if (!iu) {
+        var iuParts = def(urlObj.searchParams.get('iu_parts'), '').split(',').filter(Boolean);
+        var encPrevIus = def(urlObj.searchParams.get('enc_prev_ius'), '');
+        if (iuParts.length > 0 && encPrevIus) {
+          var firstSlotMatch = encPrevIus.match(/^(\/\d+)+/);
+          if (firstSlotMatch) {
+            var indices = firstSlotMatch[0].split('/').filter(Boolean);
+            iu = indices.map(function (i) { return def(iuParts[Number(i)], ''); }).join('/');
+          }
+        }
+      }
+      return iu;
+    },
+    _parseJsonRequest: function (json, url) {
+      var slotName = json.adUnitPath != null ? json.adUnitPath : (json.adunit != null ? json.adunit : (json.slot != null ? json.slot : ''));
+      if (!slotName) return null;
+      var cpmMicros = def(json.cpm_micros, 0);
+      return {
+        impressionId: 'google:' + slotName, adUnitCode: slotName, slotName: slotName,
+        bidFloor: cpmMicros / 1000000, bidFloorCurrency: 'USD', sizes: this._parseSizes(json.sizes),
+        mediaTypes: ['banner'], pageUrl: def(json.page_url, url), gdprConsent: def(json.gdpr_consent, null), usp: null
+      };
+    },
+    _parseUrlRequest: function (urlObj) {
+      var url = urlObj.href;
+      var iu = this._getIuFromUrlObj(urlObj);
+      if (!iu) return null;
+      var sz = def(urlObj.searchParams.get('sz'), '');
+      if (!sz) {
+        var prevIuSzs = def(urlObj.searchParams.get('prev_iu_szs'), '');
+        if (prevIuSzs) sz = prevIuSzs.split(/[,!]/)[0];
+      }
+      var sizes = sz.split('|').map(function (s) {
+        var parts = s.split('x').map(Number); return [parts[0], parts[1]];
+      }).filter(function (wh) { return wh[0] > 0 && wh[1] > 0; });
+      var output = def(urlObj.searchParams.get('output'), '');
+      var isVideo = output.indexOf('vast') !== -1 || !!urlObj.searchParams.get('vconp');
+      return {
+        impressionId: 'google:' + iu, adUnitCode: iu, slotName: iu, bidFloor: 0, bidFloorCurrency: 'USD',
+        sizes: sizes, mediaTypes: isVideo ? ['video'] : ['banner'],
+        pageUrl: def(urlObj.searchParams.get('url'), url), gdprConsent: def(urlObj.searchParams.get('gdpr_consent'), null), usp: null
+      };
+    },
+    _parsePrevScp: function (url) {
+      try {
+        var urlObj = new URL(url);
+        var prevScpRaw = def(urlObj.searchParams.get('prev_scp'), '');
+        if (!prevScpRaw) return null;
+        var firstScp = prevScpRaw.split('!')[0];
+        var params = new URLSearchParams(firstScp);
+        var hbPb = parseFloat(def(params.get('hb_pb'), '0'));
+        var hbBidder = def(params.get('hb_bidder'), '');
+        if (hbPb <= 0 || !hbBidder) return null;
+        var iu = this._getIuFromUrlObj(urlObj);
+        if (!iu) return null;
+        var advertiserDomain = params.get('oz_pubmatic_adv') != null ? params.get('oz_pubmatic_adv') : def(params.get('hb_adomain'), '');
+        var creativeId = params.get('oz_pubmatic_crid') != null ? params.get('oz_pubmatic_crid')
+          : (params.get('hb_crid') != null ? params.get('hb_crid') : def(params.get('hb_adid'), ''));
+        var rawObj = {};
+        params.forEach(function (v, k) { rawObj[k] = v; });
+        return {
+          impressionId: 'google:' + iu, bidderName: hbBidder, cpm: hbPb, currency: 'USD',
+          advertiserDomain: advertiserDomain, creativeId: creativeId, dealId: null, ttl: 300, isWin: true, rawResponse: rawObj
+        };
+      } catch (e) { return null; }
+    },
+    _parseSizes: function (raw) {
+      if (!Array.isArray(raw)) return [];
+      var out = [];
+      for (var i = 0; i < raw.length; i++) {
+        var s = raw[i];
+        if (Array.isArray(s) && s.length === 2) {
+          var w = Number(s[0]), h = Number(s[1]);
+          if (w > 0 && h > 0) out.push([w, h]);
+        } else if (typeof s === 'string') {
+          var p = s.split('x').map(Number);
+          if (p[0] > 0 && p[1] > 0) out.push([p[0], p[1]]);
+        }
+      }
+      return out;
+    }
+  };
+
+  var OpenRTBAdapter = {
+    name: 'openrtb',
+    urlPattern: /openrtb|\/ortb|\/bid|\/auction/i,
+    canHandle: function (url) { return this.urlPattern.test(url); },
+    parseRequest: function (body, _h, url) {
+      var parsed = safeJson(body);
+      if (!parsed || !parsed.imp || !parsed.imp.length) return null;
+      var imp = parsed.imp[0];
+      var pageUrl = (parsed.site && parsed.site.page) ? parsed.site.page : ((parsed.app && parsed.app.bundle) ? parsed.app.bundle : url);
+      return {
+        impressionId: 'openrtb:' + imp.id, adUnitCode: imp.tagid != null ? imp.tagid : imp.id,
+        slotName: imp.tagid != null ? imp.tagid : ((parsed.site && parsed.site.name != null) ? parsed.site.name : imp.id),
+        bidFloor: def(imp.bidfloor, 0), bidFloorCurrency: def(imp.bidfloorcur, 'USD'),
+        sizes: sizeFromBanner(imp.banner), mediaTypes: mediaTypesOf(imp), pageUrl: pageUrl,
+        gdprConsent: (parsed.user && parsed.user.consent != null) ? parsed.user.consent : null,
+        usp: (parsed.regs && parsed.regs.us_privacy != null) ? parsed.regs.us_privacy : null, raw: parsed
+      };
+    },
+    parseResponse: function (body) {
+      var parsed = safeJson(body);
+      if (!parsed || !parsed.seatbid || !parsed.seatbid.length) return null;
+      var seatbid = parsed.seatbid[0];
+      if (!seatbid.bid || !seatbid.bid.length) return null;
+      var bid = seatbid.bid[0];
+      var currency = def(parsed.cur, 'USD');
+      return {
+        impressionId: 'openrtb:' + bid.impid, bidderName: def(seatbid.seat, 'unknown'),
+        cpm: normaliseCpm(bid.price, currency), currency: currency,
+        advertiserDomain: def(first(bid.adomain), ''),
+        creativeId: bid.crid != null ? bid.crid : def(bid.adid, ''),
+        dealId: def(bid.dealid, null), ttl: def(bid.exp, 300),
+        isWin: detectWin(bid.nurl, bid.burl), rawResponse: parsed
+      };
+    }
+  };
+
+  var ADAPTERS = [GoogleAdapter, PrebidAdapter, PubmaticAdapter, AppNexusAdapter, RubiconAdapter, OpenRTBAdapter];
+
+  function getAdapter(url) {
+    for (var i = 0; i < ADAPTERS.length; i++) {
+      if (ADAPTERS[i].canHandle(url)) return ADAPTERS[i];
+    }
+    return ADAPTERS[ADAPTERS.length - 1];
+  }
+
+  var WIN_SIGNALS = ['/win', '/won', 'win_notice', 'billing_url', '/nurl', '/burl'];
+
+  function looksLikeWin(response) {
+    if (response.isWin) return true;
+    var raw = response.rawResponse || {};
+    var nurl = raw.nurl != null ? raw.nurl : '';
+    var burl = raw.burl != null ? raw.burl : '';
+    for (var i = 0; i < WIN_SIGNALS.length; i++) {
+      if (String(nurl).indexOf(WIN_SIGNALS[i]) !== -1 || String(burl).indexOf(WIN_SIGNALS[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  function buildAuction(impressionId, adapterName) {
+    var request = requestMap.get(impressionId) || null;
+    var bidResponses = responseMap.get(impressionId) || [];
+    if (!request && !bidResponses.length) return;
+    var winner = null;
+    for (var i = 0; i < bidResponses.length; i++) {
+      if (looksLikeWin(bidResponses[i])) { winner = bidResponses[i]; break; }
+    }
+    if (!winner) {
+      var sorted = bidResponses.slice().sort(function (a, b) { return b.cpm - a.cpm; });
+      if (sorted.length > 0 && sorted[0].cpm > 0) winner = sorted[0];
+    }
+    var existing = auctionIndex.get(impressionId);
+    var record = {
+      auctionId: existing ? existing.auctionId : uuid(), impressionId: impressionId,
+      slotName: request ? request.slotName : impressionId, adUnit: request ? request.adUnitCode : impressionId,
+      timestamp: Date.now(), pageUrl: request ? request.pageUrl : location.href,
+      request: request, responses: bidResponses, winner: winner, winningCpm: winner ? winner.cpm : 0,
+      bidFloor: request ? request.bidFloor : 0, numBids: bidResponses.length, adapter: adapterName
+    };
+    if (existing) {
+      var idx = auctions.indexOf(existing);
+      if (idx !== -1) auctions[idx] = record; else auctions.push(record);
+    } else {
+      auctions.push(record);
+      while (auctions.length > MAX_BUFFER) auctions.shift();
+    }
+    auctionIndex.set(impressionId, record);
+    try { document.dispatchEvent(new CustomEvent('adscope:auction', { detail: record })); } catch (e) {}
+  }
+
+  function parseGoogleHbKeyValues(url) {
+    try {
+      var u = new URL(url);
+      if (u.pathname.indexOf('/gampad/ads') === -1) return null;
+      var raw = u.searchParams.get('cust_params');
+      if (!raw) return null;
+      var params = new URLSearchParams(raw);
+      var out = {};
+      params.forEach(function (v, k) { out[k] = v; });
+      return Object.keys(out).length ? out : null;
+    } catch (e) { return null; }
+  }
+
+  function processCall(raw) {
+    var adapter, request = null, responses = [], googleHb = null, isVast = false;
+    try { adapter = getAdapter(raw.url); } catch (e) { adapter = OpenRTBAdapter; }
+    try { request = adapter.parseRequest(raw.requestBody || '', raw.requestHeaders || {}, raw.url); } catch (e) { request = null; }
+    try {
+      if (typeof adapter.parseAllResponses === 'function') {
+        responses = adapter.parseAllResponses(raw.responseBody || '') || [];
+      } else {
+        var r = adapter.parseResponse(raw.responseBody || '', raw.responseHeaders || {}, raw.url);
+        if (r) responses = [r];
+      }
+    } catch (e) { responses = []; }
+    if (adapter.name === 'google') {
+      try { googleHb = parseGoogleHbKeyValues(raw.url); } catch (e) { googleHb = null; }
+      try { isVast = !!raw.responseBody && raw.responseBody.indexOf('<VAST') !== -1; } catch (e) { isVast = false; }
+    }
+    var kind = adapter.name === 'google' ? 'gam' : (request || responses.length ? 'bid' : 'call');
+    var callDetail = {
+      url: raw.url, method: raw.method, kind: kind, responseStatus: raw.responseStatus,
+      timestamp: raw.timestamp, adapter: adapter.name, request: request, responses: responses
+    };
+    if (googleHb) { callDetail.keyValues = googleHb; }
+    if (adapter.name === 'google') callDetail.isVast = isVast;
+    calls.push(callDetail);
+    while (calls.length > MAX_BUFFER) calls.shift();
+    try { document.dispatchEvent(new CustomEvent('adscope:call', { detail: callDetail })); } catch (e) {}
+    var affected = {};
+    try {
+      if (request && request.impressionId) { requestMap.set(request.impressionId, request); affected[request.impressionId] = adapter.name; }
+      for (var i = 0; i < responses.length; i++) {
+        var resp = responses[i];
+        if (!resp || !resp.impressionId) continue;
+        var arr = responseMap.get(resp.impressionId);
+        if (!arr) { arr = []; responseMap.set(resp.impressionId, arr); }
+        arr.push(resp);
+        affected[resp.impressionId] = adapter.name;
+      }
+      for (var impId in affected) {
+        if (Object.prototype.hasOwnProperty.call(affected, impId)) buildAuction(impId, affected[impId]);
+      }
+    } catch (e) {}
+  }
+
+  var _originalFetch = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    var url;
+    try { url = typeof input === 'string' ? input : (input instanceof URL ? input.href : input.url); } catch (e) { url = ''; }
+    if (!url || isOwnOrigin(url) || !matchesAdPattern(url)) return _originalFetch(input, init);
+    var method = 'GET', requestHeaders = {}, requestBody = null;
+    try {
+      method = (init && init.method ? init.method : (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (init && init.body != null) {
+        requestBody = typeof init.body === 'string' ? init.body : (init.body instanceof URLSearchParams ? init.body.toString() : '[binary]');
+      }
+    } catch (e) {}
+    return _originalFetch(input, init).then(function (response) {
+      try {
+        var cloned = response.clone();
+        var isPending = false;
+        var textPromise = cloned.text();
+        var timeoutPromise = new Promise(function (_, reject) { setTimeout(function () { isPending = true; reject(new Error('timeout')); }, 2000); });
+        Promise.race([textPromise, timeoutPromise]).then(function (rb) { finish(rb); }, function () { finish(isPending ? '__response_pending__' : ''); });
+        function finish(responseBody) {
+          try {
+            processCall({ url: url, method: method, requestHeaders: requestHeaders, requestBody: requestBody,
+              responseStatus: response.status, responseHeaders: headersToRecord(response.headers), responseBody: responseBody, timestamp: Date.now() });
+          } catch (e) {}
+        }
+      } catch (e) {}
+      return response;
+    });
+  };
+
+  var _origOpen = XMLHttpRequest.prototype.open;
+  var _origSend = XMLHttpRequest.prototype.send;
+  var _origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+  XMLHttpRequest.prototype.open = function (method, url, async, username, password) {
+    try {
+      var resolved = typeof url === 'string' ? url : (url && url.href ? url.href : String(url));
+      this.__ads_url = resolved; this.__ads_method = String(method).toUpperCase(); this.__ads_headers = {};
+    } catch (e) {}
+    return _origOpen.call(this, method, url, async === undefined ? true : async, username == null ? null : username, password == null ? null : password);
+  };
+  XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+    try { if (this.__ads_headers) this.__ads_headers[String(name).toLowerCase()] = value; } catch (e) {}
+    return _origSetHeader.call(this, name, value);
+  };
+  XMLHttpRequest.prototype.send = function (body) {
+    var self = this;
+    try {
+      var url = self.__ads_url, method = self.__ads_method, reqHeaders = self.__ads_headers || {};
+      if (url && !isOwnOrigin(url) && matchesAdPattern(url)) {
+        self.addEventListener('readystatechange', function () {
+          if (self.readyState !== 4) return;
+          try {
+            var requestBody = null;
+            if (body != null) requestBody = typeof body === 'string' ? body : (body instanceof URLSearchParams ? body.toString() : '[binary]');
+            processCall({ url: url, method: method || 'GET', requestHeaders: reqHeaders, requestBody: requestBody,
+              responseStatus: self.status, responseHeaders: {}, responseBody: self.responseText, timestamp: Date.now() });
+          } catch (e) {}
+        });
+      }
+    } catch (e) {}
+    return _origSend.call(self, body);
+  };
+})();
+</script>
+
+<!-- ============ Preview app: fetch tag, arm, inject engine, render ============ -->
+<script>
+(function () {
+  const q = new URLSearchParams(location.search);
+  const pid = q.get("p");
+  const token = localStorage.getItem("cp_token") || "";
+  const calls = [], auctions = new Map();
+  const el = s => document.querySelector(s);
+
+  if (!pid) { el("#banner").textContent = "Missing ?p=<placement_id>"; return; }
+  el("#plcLabel").textContent = pid;
+
+  // ---- render ----
+  function renderKpis() {
+    const reqs = calls.filter(c => c.kind !== "gam").length;
+    const gam = calls.filter(c => c.kind === "gam").length;
+    const auc = [...auctions.values()];
+    const bids = auc.reduce((n, a) => n + (a.responses || []).filter(r => r.cpm > 0).length, 0);
+    const wins = auc.filter(a => a.winner).length;
+    el("#kpis").innerHTML = [
+      ["Ad calls", calls.length], ["Bid requests", reqs], ["Bids seen", bids],
+      ["GAM calls", gam], ["Auctions", auc.length], ["Wins", wins],
+    ].map(([l, v]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div></div>`).join("");
+  }
+  function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  function renderAuctions() {
+    const auc = [...auctions.values()];
+    if (!auc.length) { el("#auctions").innerHTML = '<p class="muted">waiting for auction traffic…</p>'; return; }
+    el("#auctions").innerHTML = auc.map(a => `<div class="card"><div style="display:flex;justify-content:space-between">
+      <b>${esc(a.adapter || "auction")}</b><span class="muted">${esc(a.slotName || a.adUnit || "")}</span></div>
+      <table><thead><tr><th>Bidder</th><th>CPM</th><th>Status</th></tr></thead><tbody>
+      ${(a.responses || []).map(r => `<tr><td>${esc(r.bidderName)}</td><td>${r.cpm ? "$" + r.cpm.toFixed(2) : "—"}</td>
+        <td>${a.winner && a.winner.impressionId === r.impressionId ? '<span class="pill win">win</span>' : (r.cpm > 0 ? '<span class="pill ok">bid</span>' : '<span class="pill warn">no-bid</span>')}</td></tr>`).join("")
+        || '<tr><td colspan="3" class="muted">request sent, awaiting responses</td></tr>'}</tbody></table></div>`).join("");
+  }
+  function renderKV(kv) {
+    if (!kv || !Object.keys(kv).length) return;
+    el("#kv").innerHTML = `<table><tbody>${Object.entries(kv).map(([k, v]) =>
+      `<tr><td><code>${esc(k)}</code></td><td><code>${esc(v)}</code></td></tr>`).join("")}</tbody></table>`;
+  }
+  function logCall(c) {
+    const status = c.responseStatus || 0;
+    const cls = status >= 200 && status < 300 ? "ok" : status ? "bad" : "warn";
+    const line = document.createElement("div");
+    line.innerHTML = `<span class="pill ${cls}">${status || "…"}</span> <span class="pill">${esc(c.kind || "call")}</span> <span class="u">${esc((c.url || "").slice(0, 120))}</span>`;
+    el("#calls").prepend(line);
+  }
+
+  // ---- listen to the ported inspector ----
+  document.addEventListener("adscope:call", e => {
+    const c = e.detail; calls.push(c); logCall(c); renderKpis();
+    if (c.kind === "gam" && c.keyValues) renderKV(c.keyValues);
+  });
+  document.addEventListener("adscope:auction", e => {
+    const a = e.detail; auctions.set(a.auctionId || a.impressionId || String(auctions.size), a);
+    renderAuctions(); renderKpis();
+  });
+
+  // ---- fetch the tag (admin endpoint, using dashboard token), then inject the engine ----
+  async function boot() {
+    if (!token) { el("#banner").innerHTML = "Not signed in — open the dashboard and log in first, then retry."; return; }
+    let data;
+    try {
+      const r = await fetch(`/v1/admin/placements/${pid}/embed`, { headers: { Authorization: "Bearer " + token } });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      data = await r.json();
+    } catch (err) { el("#banner").innerHTML = "Failed to load tag: " + esc(err.message); return; }
+
+    el("#banner").innerHTML = `Inspector armed · channel <b>${esc(data.channel)}</b> · ${data.config.bidders.length} bidder(s). Watching auction traffic — no-bid is expected from this origin.`;
+
+    // Parse the <script> string and inject a live, executing element into the player host.
+    const tmp = document.createElement("div");
+    tmp.innerHTML = data.tag;
+    const src = tmp.querySelector("script");
+    const s = document.createElement("script");
+    for (const attr of src.attributes) s.setAttribute(attr.name, attr.value);
+    if (!s.src && src.textContent) s.textContent = src.textContent;
+    el("#playerHost").appendChild(s);
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

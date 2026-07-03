@@ -88,6 +88,12 @@ async def admin_ui() -> FileResponse:
     return FileResponse(_STATIC_DIR / "admin.html")
 
 
+@app.get("/preview", include_in_schema=False)
+async def preview_ui() -> FileResponse:
+    """Self-contained tag preview + auction inspector (open with ?p=<placement_id>)."""
+    return FileResponse(_STATIC_DIR / "preview.html")
+
+
 @app.get("/health", tags=["meta"])
 async def health() -> dict[str, str]:
     return {"status": "ok"}
