@@ -8,15 +8,24 @@ speed. Migrations remain the canonical schema source — CI additionally runs
 from __future__ import annotations
 
 import os
+import re
 
 # NullPool so each test's fresh event loop gets its own connections (see app/db.py).
 os.environ.setdefault("DB_NULLPOOL", "1")
 
-# Configure the app BEFORE importing it (settings are cached at import).
-os.environ.setdefault(
-    "DATABASE_URL",
-    os.environ.get("TEST_DATABASE_URL", "postgresql+asyncpg://bp:bp@localhost:55432/control_plane"),
-)
+# The suite DROPS all tables on teardown, so it must NEVER run against a dev/prod
+# database. Resolution order:
+#   1. TEST_DATABASE_URL (explicit) — used verbatim.
+#   2. else derive a "<db>_test" database from DATABASE_URL (so a stray `pytest`
+#      against your dev DATABASE_URL still hits <db>_test, not the real one).
+#   3. else the local default, "_test"-suffixed.
+_DEFAULT = "postgresql+asyncpg://bp:bp@localhost:55432/control_plane_test"
+_test_url = os.environ.get("TEST_DATABASE_URL")
+if not _test_url:
+    _base = os.environ.get("DATABASE_URL")
+    _test_url = re.sub(r"/([^/?]+)(\?|$)", r"/\1_test\2", _base, count=1) if _base else _DEFAULT
+# Point the app (settings are cached at import) at the resolved TEST database.
+os.environ["DATABASE_URL"] = _test_url
 os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("ADMIN_USERNAME", "admin")
 os.environ.setdefault("ADMIN_PASSWORD", "admin")

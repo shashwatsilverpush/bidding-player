@@ -25,6 +25,9 @@ jobs:
       ADMIN_USERNAME: admin
       ADMIN_PASSWORD: admin
       PUBLIC_BASE_URL: http://localhost:8000
+      # The CI Postgres is an ephemeral service container, so it is safe for the
+      # (table-dropping) suite to run against it directly.
+      TEST_DATABASE_URL: postgresql+asyncpg://bp:bp@localhost:5432/control_plane
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
