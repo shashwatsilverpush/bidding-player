@@ -52,6 +52,12 @@
   .hide{display:none;} code{font-family:ui-monospace,Menlo,monospace;background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12px;}
   .check{display:flex;gap:8px;align-items:flex-start;margin:6px 0;font-size:13px;} .check .ic{flex:0 0 auto;}
   .empty{color:var(--muted);padding:20px;text-align:center;border:1px dashed var(--line);border-radius:8px;}
+  .hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;} .hdr h2{margin:0;}
+  .modal-bg{position:fixed;inset:0;background:rgba(40,43,69,.35);backdrop-filter:blur(2px);display:flex;
+    align-items:flex-start;justify-content:center;padding:60px 16px;z-index:100;}
+  .modal{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px;width:100%;max-width:440px;
+    box-shadow:0 20px 60px rgba(40,43,69,.25);} .modal h3{margin:0 0 14px;font-size:15px;}
+  .modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
 </style>
 </head>
 <body>
@@ -80,6 +86,28 @@ const S={top:"publishers",pub:null,sub:"properties",site:null,au:null,plc:null,p
 const $=s=>document.querySelector(s);
 function toast(m,k="ok"){const t=document.createElement("div");t.className="toast "+k;t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),3400);}
 function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+// Spec-driven modal form. fields:[{key,label,type?,value?,placeholder?,options?,hint?}]. onSubmit(values) may throw to keep open.
+function openForm(opts){
+  const bg=document.createElement("div");bg.className="modal-bg";
+  const body=(opts.fields||[]).map(f=>{
+    if(f.type==="select")return `<label>${esc(f.label)}</label><select data-k="${f.key}">${(f.options||[]).map(o=>`<option value="${esc(o.value)}" ${o.value===f.value?"selected":""}>${esc(o.label)}</option>`).join("")}</select>`;
+    if(f.type==="checkbox")return `<label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" data-k="${f.key}" style="width:auto" ${f.value?"checked":""}/> ${esc(f.label)}</label>`;
+    if(f.type==="textarea")return `<label>${esc(f.label)}</label><textarea data-k="${f.key}" rows="3" placeholder="${esc(f.placeholder||"")}">${esc(f.value||"")}</textarea>`;
+    return `<label>${esc(f.label)}</label><input data-k="${f.key}" value="${esc(f.value??"")}" placeholder="${esc(f.placeholder||"")}"/>${f.hint?`<p class="muted" style="margin:4px 0 0">${esc(f.hint)}</p>`:""}`;
+  }).join("");
+  bg.innerHTML=`<div class="modal"><h3>${esc(opts.title)}</h3><div>${body}</div>${opts.note?`<p class="muted" style="margin-top:10px">${opts.note}</p>`:""}
+    <div class="actions"><button class="btn ghost" data-x>Cancel</button><button class="btn" data-ok>${esc(opts.submitLabel||"Save")}</button></div></div>`;
+  document.body.appendChild(bg);
+  const close=()=>bg.remove();
+  bg.addEventListener("click",e=>{if(e.target===bg)close();});
+  document.addEventListener("keydown",function esc2(e){if(e.key==="Escape"){close();document.removeEventListener("keydown",esc2);}});
+  bg.querySelector("[data-x]").onclick=close;
+  const f0=bg.querySelector("input,select,textarea");if(f0)f0.focus();
+  bg.querySelector("[data-ok]").onclick=async()=>{
+    const v={};bg.querySelectorAll("[data-k]").forEach(i=>{v[i.dataset.k]=i.type==="checkbox"?i.checked:i.value;});
+    try{await opts.onSubmit(v);close();}catch(e){toast(e.message,"err");}
+  };
+}
 async function api(path,{method="GET",body=null,auth=true}={}){const h={"Content-Type":"application/json"};if(auth&&TOKEN)h.Authorization="Bearer "+TOKEN;
   const r=await fetch(path,{method,headers:h,body:body?JSON.stringify(body):null});if(r.status===401){logout();throw new Error("Session expired");}
   const t=await r.text();const d=t?JSON.parse(t):null;if(!r.ok){const e=d&&d.detail;throw new Error(typeof e==="string"?e:JSON.stringify(e||d));}return d;}
@@ -114,15 +142,15 @@ async function render(){setNav();const m=$("#main");
 
 // ---- publishers list ----
 async function renderPublishers(m){const pubs=await api("/v1/admin/publishers");
-  m.innerHTML=`<div class="card"><h2>Publishers</h2><ul class="list" id="pl"></ul></div>
-    <div class="card"><h2>New publisher</h2><div class="row"><div><label>Name</label><input id="pName" placeholder="Acme Media"/></div>
-    <div><label>GAM network code</label><input id="pGam" placeholder="21775744923"/></div></div><button class="btn" id="pAdd">Add publisher</button></div>`;
-  const ul=$("#pl");if(!pubs.length)ul.innerHTML='<div class="empty">No publishers yet — add one below.</div>';
+  m.innerHTML=`<div class="card"><div class="hdr"><h2>Publishers</h2><button class="btn small" id="pNew">+ New publisher</button></div><ul class="list" id="pl"></ul></div>`;
+  const ul=$("#pl");if(!pubs.length)ul.innerHTML='<div class="empty">No publishers yet — click “+ New publisher”.</div>';
   pubs.forEach(p=>{const li=document.createElement("li");
     li.innerHTML=`<span>${esc(p.name)} <span class="pill ${p.status==='active'?'on':''}">${p.status}</span></span><span class="id">${p.id} ›</span>`;
     li.onclick=()=>go({pub:p,sub:"properties",site:null,au:null,plc:null});ul.appendChild(li);});
-  $("#pAdd").onclick=async()=>{const name=$("#pName").value.trim();if(!name)return toast("Name required","err");
-    try{const p=await api("/v1/admin/publishers",{method:"POST",body:{name,gam_network_code:$("#pGam").value.trim()||null}});toast("Created");go({pub:p,sub:"properties"});}catch(e){toast(e.message,"err");}};}
+  $("#pNew").onclick=()=>openForm({title:"New publisher",submitLabel:"Create",
+    fields:[{key:"name",label:"Name",placeholder:"Acme Media"},{key:"gam",label:"GAM network code",placeholder:"21775744923"}],
+    onSubmit:async v=>{if(!v.name.trim())throw new Error("Name required");
+      const p=await api("/v1/admin/publishers",{method:"POST",body:{name:v.name.trim(),gam_network_code:v.gam.trim()||null}});toast("Created");go({pub:p,sub:"properties"});}});}
 
 // ---- publisher detail ----
 async function renderPublisher(m){const p=S.pub;
@@ -145,41 +173,43 @@ async function subOverview(el){const sites=await api(`/v1/admin/publishers/${S.p
     <p class="muted" style="margin-top:12px">Use <b>Properties</b> to add sites → ad units → placements, and <b>Demand</b> to enable SSPs.</p>`;}
 
 async function subProperties(el){const sites=await api(`/v1/admin/publishers/${S.pub.id}/sites`);
-  el.innerHTML=`<ul class="list" id="sl"></ul>
-    <fieldset><legend>New site</legend><div class="row"><div><label>Domain</label><input id="sDom" placeholder="acme.example"/></div></div><button class="btn" id="sAdd">Add site</button></fieldset>`;
-  const ul=$("#sl");if(!sites.length)ul.innerHTML='<div class="empty">No sites yet.</div>';
+  el.innerHTML=`<div class="hdr"><span class="muted">Sites</span><button class="btn small" id="sNew">+ New site</button></div><ul class="list" id="sl"></ul>`;
+  const ul=$("#sl");if(!sites.length)ul.innerHTML='<div class="empty">No sites yet — click “+ New site”.</div>';
   sites.forEach(s=>{const li=document.createElement("li");li.innerHTML=`<span>🌐 ${esc(s.domain)}</span><span class="id">${s.id} ›</span>`;
     li.onclick=()=>go({site:s,au:null,plc:null});ul.appendChild(li);});
-  $("#sAdd").onclick=async()=>{const d=$("#sDom").value.trim();if(!d)return toast("Domain required","err");
-    try{const s=await api(`/v1/admin/publishers/${S.pub.id}/sites`,{method:"POST",body:{domain:d}});toast("Site added");go({site:s});}catch(e){toast(e.message,"err");}};}
+  $("#sNew").onclick=()=>openForm({title:"New site",submitLabel:"Add site",
+    fields:[{key:"domain",label:"Domain",placeholder:"acme.example"},{key:"bundle",label:"App bundle (optional)"}],
+    onSubmit:async v=>{if(!v.domain.trim())throw new Error("Domain required");
+      const s=await api(`/v1/admin/publishers/${S.pub.id}/sites`,{method:"POST",body:{domain:v.domain.trim(),app_bundle:v.bundle.trim()||null}});toast("Site added");go({site:s});}});}
 
 async function renderSite(m){crumb([{t:"Publishers",go:()=>go({pub:null})},{t:S.pub.name,go:()=>go({site:null,au:null,plc:null,sub:"properties"})},{t:S.site.domain}]);
   const aus=await api(`/v1/admin/sites/${S.site.id}/ad-units`);
-  m.innerHTML=`<div class="card"><h2>Ad units · ${esc(S.site.domain)}</h2><ul class="list" id="al"></ul>
-    <fieldset><legend>New ad unit</legend><label>GAM ad unit path</label><input id="aPath" placeholder="/21775744923/acme/video"/>
-    <label>Format</label><select id="aFmt"><option>video</option><option>banner</option></select><button class="btn" id="aAdd">Add ad unit</button></fieldset></div>`;
-  const ul=$("#al");if(!aus.length)ul.innerHTML='<div class="empty">No ad units yet.</div>';
+  m.innerHTML=`<div class="card"><div class="hdr"><h2>Ad units · ${esc(S.site.domain)}</h2><button class="btn small" id="aNew">+ New ad unit</button></div><ul class="list" id="al"></ul></div>`;
+  const ul=$("#al");if(!aus.length)ul.innerHTML='<div class="empty">No ad units yet — click “+ New ad unit”.</div>';
   aus.forEach(a=>{const li=document.createElement("li");li.innerHTML=`<span>📐 ${esc(a.gam_ad_unit_path)} <span class="pill">${a.format}</span></span><span class="id">${a.id} ›</span>`;
     li.onclick=()=>go({au:a,plc:null});ul.appendChild(li);});
-  $("#aAdd").onclick=async()=>{const p=$("#aPath").value.trim();if(!p)return toast("Path required","err");
-    try{const a=await api(`/v1/admin/sites/${S.site.id}/ad-units`,{method:"POST",body:{gam_ad_unit_path:p,format:$("#aFmt").value}});toast("Ad unit added");go({au:a});}catch(e){toast(e.message,"err");}};}
+  $("#aNew").onclick=()=>openForm({title:"New ad unit",submitLabel:"Add ad unit",
+    fields:[{key:"path",label:"GAM ad unit path",placeholder:"/21775744923/acme/video"},
+      {key:"format",label:"Format",type:"select",value:"video",options:[{value:"video",label:"video"},{value:"banner",label:"banner"}]}],
+    onSubmit:async v=>{if(!v.path.trim())throw new Error("Path required");
+      const a=await api(`/v1/admin/sites/${S.site.id}/ad-units`,{method:"POST",body:{gam_ad_unit_path:v.path.trim(),format:v.format}});toast("Ad unit added");go({au:a});}});}
 
 async function renderAdUnit(m){crumb([{t:"Publishers",go:()=>go({pub:null})},{t:S.pub.name,go:()=>go({site:null,au:null,plc:null,sub:"properties"})},
     {t:S.site.domain,go:()=>go({au:null,plc:null})},{t:S.au.gam_ad_unit_path}]);
   const [plcs,dem]=await Promise.all([api(`/v1/admin/ad-units/${S.au.id}/placements`),api(`/v1/admin/publishers/${S.pub.id}/demand`)]);
   S._demand=dem;const demandOn=dem.filter(d=>d.enabled).length;
-  m.innerHTML=`<div class="card"><h2>Placements · ${esc(S.au.gam_ad_unit_path)}</h2><ul class="list" id="ql"></ul>
-    <fieldset><legend>New placement</legend><div class="row"><div><label>Name</label><input id="cName" placeholder="Homepage instream"/></div>
-    <div><label>Type</label><select id="cType"><option>instream</option><option>outstream</option></select></div>
-    <div><label>Engine delivery</label><select id="cCh"><option value="auto">auto-update</option><option value="pinned">pinned</option></select></div></div>
-    <button class="btn" id="cAdd">Add placement</button></fieldset></div>`;
-  const ul=$("#ql");if(!plcs.length)ul.innerHTML='<div class="empty">No placements yet.</div>';
+  m.innerHTML=`<div class="card"><div class="hdr"><h2>Placements · ${esc(S.au.gam_ad_unit_path)}</h2><button class="btn small" id="cNew">+ New placement</button></div><ul class="list" id="ql"></ul></div>`;
+  const ul=$("#ql");if(!plcs.length)ul.innerHTML='<div class="empty">No placements yet — click “+ New placement”.</div>';
   plcs.forEach(p=>{const st=readiness(p,demandOn);const li=document.createElement("li");
     li.innerHTML=`<span>▶ ${esc(p.name)} <span class="pill">${p.config.placement}</span></span><span><span class="pill ${st.cls}">${st.label}</span> <span class="id">›</span></span>`;
     li.onclick=()=>go({plc:p,plcTab:"tag"});ul.appendChild(li);});
-  $("#cAdd").onclick=async()=>{const name=$("#cName").value.trim();if(!name)return toast("Name required","err");
-    const cfg={placement:$("#cType").value,timeout:1200,bias:"0.10"};if(cfg.placement==="instream")cfg.video="https://vjs.zencdn.net/v/oceans.mp4";
-    try{const p=await api(`/v1/admin/ad-units/${S.au.id}/placements`,{method:"POST",body:{name,engine_channel:$("#cCh").value,config:cfg,active:true}});toast("Placement created");go({plc:p,plcTab:"tag"});}catch(e){toast(e.message,"err");}};}
+  $("#cNew").onclick=()=>openForm({title:"New placement",submitLabel:"Create",
+    fields:[{key:"name",label:"Name",placeholder:"Homepage instream"},
+      {key:"type",label:"Type",type:"select",value:"instream",options:[{value:"instream",label:"instream"},{value:"outstream",label:"outstream"}]},
+      {key:"channel",label:"Engine delivery",type:"select",value:"auto",options:[{value:"auto",label:"auto-update"},{value:"pinned",label:"pinned"}]}],
+    onSubmit:async v=>{if(!v.name.trim())throw new Error("Name required");
+      const cfg={placement:v.type,timeout:1200,bias:"0.10"};if(v.type==="instream")cfg.video="https://vjs.zencdn.net/v/oceans.mp4";
+      const p=await api(`/v1/admin/ad-units/${S.au.id}/placements`,{method:"POST",body:{name:v.name.trim(),engine_channel:v.channel,config:cfg,active:true}});toast("Placement created");go({plc:p,plcTab:"tag"});}});}
 
 function readiness(p,demandOn){const c=p.config;const miss=[];if(!c.adTag)miss.push("GAM tag");if(!demandOn)miss.push("demand");
   if(c.placement==="instream"&&!c.video)miss.push("video");
@@ -288,29 +318,32 @@ async function paneAnalytics(el){const pid=S.plc.id;
 
 // ---- publisher demand (subtab) ----
 async function subDemand(el){const [cat,en]=await Promise.all([api("/v1/admin/demand-partners"),api(`/v1/admin/publishers/${S.pub.id}/demand`)]);
-  const by={};en.forEach(e=>by[e.demand_partner_code]=e);el.innerHTML="";
-  cat.forEach(dp=>{const e=by[dp.code];const d=document.createElement("div");d.className="card";d.style.marginBottom="10px";
-    const inputs=dp.required_params.map(k=>`<div><label>${k}</label><input data-k="${k}" value="${e?esc(e.params[k]??""):""}"/></div>`).join("");
-    d.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><b>${esc(dp.label)}</b><span class="pill ${e&&e.enabled?'on':''}">${e&&e.enabled?'enabled':'off'}</span></div>
-      <div class="row">${inputs}<div><label>Floor ($)</label><input data-floor value="${e&&e.floor!=null?e.floor:''}"/></div></div>
-      <button class="btn small" data-save>${e?'Update':'Enable'}</button>${e?'<button class="danger small" data-rm style="margin-left:8px">Disable</button>':''}`;
-    d.querySelector("[data-save]").onclick=async()=>{const params={};d.querySelectorAll("input[data-k]").forEach(i=>{if(i.value!=="")params[i.dataset.k]=i.value;});const f=d.querySelector("[data-floor]").value.trim();
-      try{await api(`/v1/admin/publishers/${S.pub.id}/demand/${dp.code}`,{method:"PUT",body:{params,floor:f?parseFloat(f):null,enabled:true}});toast(dp.label+" saved");subDemand(el);}catch(x){toast(x.message,"err");}};
-    const rm=d.querySelector("[data-rm]");if(rm)rm.onclick=async()=>{try{await api(`/v1/admin/publishers/${S.pub.id}/demand/${dp.code}`,{method:"DELETE"});toast(dp.label+" disabled");subDemand(el);}catch(x){toast(x.message,"err");}};
-    el.appendChild(d);});}
+  const by={};en.forEach(e=>by[e.demand_partner_code]=e);
+  el.innerHTML=`<p class="muted" style="margin:0 0 10px">Enable SSPs for this publisher; enabled partners flow into every placement's tag &amp; runtime config.</p><ul class="list" id="dml"></ul>`;
+  const ul=$("#dml");
+  cat.forEach(dp=>{const e=by[dp.code];const li=document.createElement("li");li.style.cursor="default";
+    li.innerHTML=`<span><b>${esc(dp.label)}</b> <span class="pill ${e&&e.enabled?'on':''}">${e&&e.enabled?'enabled':'off'}</span> <span class="muted">${dp.required_params.join(", ")}</span></span>
+      <span><button class="btn small" data-edit>${e?'Edit':'Enable'}</button>${e?'<button class="btn small danger" data-dis style="margin-left:6px">Disable</button>':''}</span>`;
+    li.querySelector("[data-edit]").onclick=()=>openForm({title:(e?"Edit ":"Enable ")+dp.label,submitLabel:"Save",
+      fields:dp.required_params.map(k=>({key:k,label:k,value:e?e.params[k]:""})).concat([{key:"__floor",label:"Floor ($, optional)",value:e&&e.floor!=null?e.floor:""}]),
+      onSubmit:async v=>{const params={};dp.required_params.forEach(k=>{if(String(v[k]??"").trim()!=="")params[k]=v[k];});const f=String(v.__floor??"").trim();
+        await api(`/v1/admin/publishers/${S.pub.id}/demand/${dp.code}`,{method:"PUT",body:{params,floor:f?parseFloat(f):null,enabled:true}});toast(dp.label+" saved");subDemand(el);}});
+    const dis=li.querySelector("[data-dis]");if(dis)dis.onclick=async()=>{try{await api(`/v1/admin/publishers/${S.pub.id}/demand/${dp.code}`,{method:"DELETE"});toast(dp.label+" disabled");subDemand(el);}catch(x){toast(x.message,"err");}};
+    ul.appendChild(li);});}
 
 // ---- demand catalog (top-level) ----
 async function renderDemandCatalog(m){const cat=await api("/v1/admin/demand-partners");
-  m.innerHTML=`<div class="card"><h2>Demand partner catalog</h2><p class="muted">The SSPs available platform-wide. Enable them per publisher inside a publisher's <b>Demand</b> tab.</p>
+  m.innerHTML=`<div class="card"><div class="hdr"><h2>Demand partner catalog</h2><button class="btn small" id="dNew">+ Add partner</button></div>
+    <p class="muted">The SSPs available platform-wide. Enable them per publisher inside a publisher's <b>Demand</b> tab.</p>
     <table><thead><tr><th>Code</th><th>Label</th><th>Adapter</th><th>Required params</th></tr></thead><tbody>
-    ${cat.map(d=>`<tr><td><code>${esc(d.code)}</code></td><td>${esc(d.label)}</td><td class="muted">${esc(d.adapter_module)}</td><td class="muted">${d.required_params.join(", ")}</td></tr>`).join("")}</tbody></table></div>
-    <div class="card"><h2>Add partner to catalog</h2><div class="row"><div><label>Code</label><input id="dCode" placeholder="mynewssp"/></div>
-    <div><label>Label</label><input id="dLabel" placeholder="My New SSP"/></div><div><label>Adapter module</label><input id="dMod" placeholder="mynewsspBidAdapter"/></div></div>
-    <label>Required params (comma-separated)</label><input id="dParams" placeholder="placementId, siteId"/>
-    <button class="btn" id="dAdd">Add to catalog</button><p class="muted" style="margin-top:8px">Note: the Prebid bundle served to publishers must also include this adapter, or it won't bid.</p></div>`;
-  $("#dAdd").onclick=async()=>{const code=$("#dCode").value.trim();if(!code)return toast("Code required","err");
-    try{await api("/v1/admin/demand-partners",{method:"POST",body:{code,label:$("#dLabel").value.trim()||code,adapter_module:$("#dMod").value.trim()||code+"BidAdapter",
-      required_params:$("#dParams").value.split(",").map(s=>s.trim()).filter(Boolean)}});toast("Added");renderDemandCatalog(m);}catch(e){toast(e.message,"err");}};}
+    ${cat.map(d=>`<tr><td><code>${esc(d.code)}</code></td><td>${esc(d.label)}</td><td class="muted">${esc(d.adapter_module)}</td><td class="muted">${d.required_params.join(", ")}</td></tr>`).join("")}</tbody></table></div>`;
+  $("#dNew").onclick=()=>openForm({title:"Add demand partner",submitLabel:"Add to catalog",
+    note:"The Prebid bundle served to publishers must also include this adapter, or it won't bid.",
+    fields:[{key:"code",label:"Code",placeholder:"mynewssp"},{key:"label",label:"Label",placeholder:"My New SSP"},
+      {key:"mod",label:"Adapter module",placeholder:"mynewsspBidAdapter"},{key:"params",label:"Required params (comma-separated)",placeholder:"placementId, siteId"}],
+    onSubmit:async v=>{if(!v.code.trim())throw new Error("Code required");
+      await api("/v1/admin/demand-partners",{method:"POST",body:{code:v.code.trim(),label:v.label.trim()||v.code.trim(),
+        adapter_module:v.mod.trim()||v.code.trim()+"BidAdapter",required_params:v.params.split(",").map(s=>s.trim()).filter(Boolean)}});toast("Added");renderDemandCatalog(m);}});}
 
 if(TOKEN)showApp();else showLogin();
 </script>

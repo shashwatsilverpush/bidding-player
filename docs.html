@@ -501,7 +501,7 @@
   <h2>Embed code reference</h2>
   <p>The <strong>v2</strong> tag shape uses <code>data-bidders</code> — a JSON array of every SSP that should bid in this auction. The Prebid bundle at <code>data-prebid-url</code> must include adapters for every bidder listed.</p>
 
-  <pre><code><span class="tok-pun">&lt;</span><span class="tok-tag">script</span> <span class="tok-attr">src</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.5.0/engine/player.js"</span>
+  <pre><code><span class="tok-pun">&lt;</span><span class="tok-tag">script</span> <span class="tok-attr">src</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@v2.5.0/engine/player.js"</span>
         <span class="tok-attr">id</span>=<span class="tok-str">"adtech-player-core"</span>
         <span class="tok-attr">data-bidders</span>=<span class="tok-str">'[
           {"bidder":"limelightDigital","params":{"host":"ads-jbi003.rtba.bidsxchange.com","publisherId":"649658371","adUnitId":972556929,"adUnitType":"video"}},
@@ -509,7 +509,7 @@
         ]'</span>
         <span class="tok-attr">data-tag</span>=<span class="tok-str">"https://pubads.g.doubleclick.net/gampad/ads?iu=/…&amp;sz=640x480&amp;output=vast&amp;correlator="</span>
         <span class="tok-attr">data-video</span>=<span class="tok-str">"https://your-cdn.example.com/content.mp4"</span>
-        <span class="tok-attr">data-prebid-url</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.5.0/prebid/prebid-limelight-appnexus.js"</span>
+        <span class="tok-attr">data-prebid-url</span>=<span class="tok-str">"https://cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@v2.5.0/prebid/prebid-limelight-appnexus.js"</span>
         <span class="tok-attr">data-timeout</span>=<span class="tok-str">"1200"</span>  <span class="tok-attr">data-bias</span>=<span class="tok-str">"0.10"</span>
         <span class="tok-attr">data-autoplay</span>=<span class="tok-str">"true"</span>  <span class="tok-attr">data-muted</span>=<span class="tok-str">"true"</span>  <span class="tok-attr">data-fluid</span>=<span class="tok-str">"true"</span>
         <span class="tok-attr">async</span><span class="tok-pun">&gt;&lt;/</span><span class="tok-tag">script</span><span class="tok-pun">&gt;</span></code></pre>
@@ -547,7 +547,7 @@
   <p>For instream, add <code>data-sticky="true"</code> to keep the player visible while the reader scrolls: it floats to the bottom-right corner (still playing, × to dismiss) and snaps back inline on scroll-up, with the original layout space preserved. This raises viewability and completed-view rates — off by default, opt in per placement.</p>
 
   <h3>Adding a new SSP / Prebid bundle</h3>
-  <p>The <code>prebid/</code> directory holds pre-built Prebid.js bundles. Each <code>data-prebid-url</code> points at one of these. To add a new bundle (e.g. when onboarding a publisher that uses a different SSP), trigger the <strong>"Build Prebid bundle"</strong> workflow in the Actions tab — supply the comma-separated module list and a filename, the workflow runs <code>gulp build</code> and commits the result. Full instructions in <code><a href="https://github.com/aryanvani-projects/bidding-player/blob/main/prebid/README.md" target="_blank" rel="noopener">prebid/README.md</a></code>.</p>
+  <p>The <code>prebid/</code> directory holds pre-built Prebid.js bundles. Each <code>data-prebid-url</code> points at one of these. To add a new bundle (e.g. when onboarding a publisher that uses a different SSP), trigger the <strong>"Build Prebid bundle"</strong> workflow in the Actions tab — supply the comma-separated module list and a filename, the workflow runs <code>gulp build</code> and commits the result. Full instructions in <code><a href="https://github.com/shashwatsilverpush/bidding-player/blob/main/prebid/README.md" target="_blank" rel="noopener">prebid/README.md</a></code>.</p>
 
   <div class="callout warn">
     <span class="label">Keep <code>src</code>, <code>data-prebid-url</code>, and <code>data-bidders</code> in sync</span>
@@ -736,7 +736,7 @@ pbjs.que.push(<span class="tok-key">function</span>() {
 
 <footer>
   Bidding Player • v2.5.0 • Built on Prebid.js, video.js, Google IMA SDK<br>
-  Engine: <code>cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.5.0/engine/player.js</code>
+  Engine: <code>cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@v2.5.0/engine/player.js</code>
 </footer>
 
 </main>

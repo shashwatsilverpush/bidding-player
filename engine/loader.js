@@ -16,7 +16,7 @@
  *   data-channel="canary"            — force the canary version (for QA)
  */
 (function () {
-  var REPO = "aryanvani-projects/bidding-player";
+  var REPO = "shashwatsilverpush/bidding-player";
   var CDN = "https://cdn.jsdelivr.net/gh/" + REPO;
   var MANIFEST = CDN + "@main/engine/channel.json";
   // Known-good engine used if the manifest can't be reached. Bump on release

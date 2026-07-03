@@ -1,7 +1,7 @@
 # Workstream B — Engine Instrumentation Plan
 
 > **This describes changes to `engine/player.js` in the separate
-> `aryanvani-projects/bidding-player` repo.** It is a spec + example code for the
+> `shashwatsilverpush/bidding-player` repo.** It is a spec + example code for the
 > engine team, not something built in the control-plane repo. Line numbers are
 > approximate against **v2.5.0** — confirm before editing.
 

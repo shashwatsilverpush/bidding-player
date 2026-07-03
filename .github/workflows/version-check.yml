@@ -20,7 +20,7 @@ jobs:
           fail=0
           for f in index.html demo/publisher-test.html; do
             # Find any jsDelivr URL pointing at this repo with a ref token
-            mismatches=$(grep -oE 'cdn\.jsdelivr\.net/gh/aryanvani-projects/bidding-player@[^/"]+/' "$f" | grep -v -F "$EXPECTED" || true)
+            mismatches=$(grep -oE 'cdn\.jsdelivr\.net/gh/shashwatsilverpush/bidding-player@[^/"]+/' "$f" | grep -v -F "$EXPECTED" || true)
             if [ -n "$mismatches" ]; then
               echo "::error file=$f::Found jsDelivr URLs not matching VERSION ($VERSION):"
               echo "$mismatches"

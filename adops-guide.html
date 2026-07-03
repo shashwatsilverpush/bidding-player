@@ -325,7 +325,7 @@
   <p>When a publisher needs an SSP we don't have a bundle for yet, build a new one. This is a GitHub Actions workflow — no local tooling needed.</p>
 
   <ol class="steps">
-    <li><h3>Open the Actions tab</h3><p>Go to <a href="https://github.com/aryanvani-projects/bidding-player/actions" target="_blank" rel="noopener">github.com/aryanvani-projects/bidding-player/actions</a>. Select <strong>Build Prebid bundle</strong> from the workflow list on the left.</p></li>
+    <li><h3>Open the Actions tab</h3><p>Go to <a href="https://github.com/shashwatsilverpush/bidding-player/actions" target="_blank" rel="noopener">github.com/shashwatsilverpush/bidding-player/actions</a>. Select <strong>Build Prebid bundle</strong> from the workflow list on the left.</p></li>
     <li><h3>Click "Run workflow"</h3><p>Top-right of the runs list. A form drops down with three inputs.</p></li>
     <li><h3>Fill the inputs</h3>
       <p><strong>modules</strong> — comma-separated Prebid adapter names. Find names at <a href="https://docs.prebid.org/dev-docs/bidders.html" target="_blank" rel="noopener">docs.prebid.org/dev-docs/bidders.html</a>. Example: <code>limelightDigitalBidAdapter,appnexusBidAdapter</code>.</p>
@@ -399,7 +399,7 @@
     <li>Land changes on <code>main</code>. Bump <code>VERSION</code> file (the CI version-drift check enforces consistency between <code>VERSION</code> and embedded jsDelivr URLs).</li>
     <li>Tag the release: <code>git tag v2.X.Y &amp;&amp; git push --tags</code>.</li>
     <li>Update the dashboard's default version field if appropriate (in <code>index.html</code>, the <code>adopsVersion</code> input).</li>
-    <li><strong>Promote to the auto-update channel:</strong> set <code>stable</code> in <code>engine/channel.json</code> to the new version, commit, then <strong>purge</strong> <code>https://purge.jsdelivr.net/gh/aryanvani-projects/bidding-player@main/engine/channel.json</code> (and <code>@2/engine/loader.js</code>) so auto-update tags pick it up within minutes.</li>
+    <li><strong>Promote to the auto-update channel:</strong> set <code>stable</code> in <code>engine/channel.json</code> to the new version, commit, then <strong>purge</strong> <code>https://purge.jsdelivr.net/gh/shashwatsilverpush/bidding-player@main/engine/channel.json</code> (and <code>@2/engine/loader.js</code>) so auto-update tags pick it up within minutes.</li>
     <li><strong>Rollback</strong> (if a release misbehaves): set <code>channel.json</code> <code>stable</code> back to the previous version, commit, purge — every auto-update publisher reverts. <strong>Canary:</strong> set <code>canary</code> + <code>canaryPct</code> (0–100) to roll a release to a sticky % of viewers first.</li>
     <li><em>Pinned</em> publishers on older tags are unaffected — jsDelivr serves immutable bytes per tag.</li>
   </ol>
@@ -502,8 +502,8 @@
 
 <footer>
   Bidding Player Ad Ops Console &bull; v2.5.0 &bull; Internal documentation<br>
-  Repo: <code>github.com/aryanvani-projects/bidding-player</code> &bull;
-  Engine: <code>cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.5.0/engine/player.js</code>
+  Repo: <code>github.com/shashwatsilverpush/bidding-player</code> &bull;
+  Engine: <code>cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@v2.5.0/engine/player.js</code>
 </footer>
 
 </main>

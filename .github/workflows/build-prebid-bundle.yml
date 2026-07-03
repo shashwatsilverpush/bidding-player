@@ -98,5 +98,5 @@ jobs:
       - name: Print bundle URL for sharing with publisher
         run: |
           VERSION=$(cat VERSION | tr -d '[:space:]')
-          echo "::notice::Bundle live at: https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@main/prebid/${{ inputs.bundle_name }}.js"
-          echo "::notice::Once tagged v${VERSION}: https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v${VERSION}/prebid/${{ inputs.bundle_name }}.js"
+          echo "::notice::Bundle live at: https://cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@main/prebid/${{ inputs.bundle_name }}.js"
+          echo "::notice::Once tagged v${VERSION}: https://cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@v${VERSION}/prebid/${{ inputs.bundle_name }}.js"

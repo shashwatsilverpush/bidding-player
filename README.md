@@ -18,9 +18,9 @@ A Prebid.js-powered video header-bidding player that auctions against GAM. Ships
 
 | Channel       | Pattern                                                                              |
 | ------------- | ------------------------------------------------------------------------------------ |
-| Production    | `https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@vX.Y.Z/engine/player.js`    |
-| Testing       | `https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@<branch>/engine/player.js`  |
-| Tag generator | `https://aryanvani-projects.github.io/bidding-player/`                                     |
+| Production    | `https://cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@vX.Y.Z/engine/player.js`    |
+| Testing       | `https://cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@<branch>/engine/player.js`  |
+| Tag generator | `https://shashwatsilverpush.github.io/bidding-player/`                                     |
 
 Prod tags are **immutable** — once `v1.0.0` is published, the bytes at that URL never change. Branch tags exist for testing and are cached by jsDelivr for ~30 min.
 

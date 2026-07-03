@@ -19,7 +19,7 @@ dashboards, ML/dynamic floors. The data model is tenant-shaped so multi-account
 and self-serve can be added later without a rewrite.
 
 > The existing product (engine `player.js`, `loader.js`, Prebid bundle, tag
-> generator) lives in a separate repo, `aryanvani-projects/bidding-player`, and is
+> generator) lives in a separate repo, `shashwatsilverpush/bidding-player`, and is
 > **not** modified here. Engine changes needed to talk to this control plane are
 > specified in [`docs/engine-instrumentation.md`](docs/engine-instrumentation.md).
 

@@ -24,13 +24,13 @@ class Settings(BaseSettings):
     # Telemetry / config delivery
     public_base_url: str = "http://localhost:8000"
     default_prebid_url: str = (
-        "https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@v2.5.0/prebid/prebid.js"
+        "https://cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@v2.5.0/prebid/prebid.js"
     )
     default_sample_rate: float = 1.0
 
     # Engine tag generation (mirrors index.html buildEngineFile). The engine CDN
-    # artifact currently lives under aryanvani-projects; override if it moves.
-    engine_repo: str = "aryanvani-projects/bidding-player"
+    # artifact currently lives under shashwatsilverpush; override if it moves.
+    engine_repo: str = "shashwatsilverpush/bidding-player"
     default_engine_version: str = "v2.5.0"
     default_cache_url: str = "https://prebid.adnxs.com/pbc/v1/cache"
     default_div_id: str = "bp-video-slot"

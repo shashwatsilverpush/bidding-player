@@ -9,10 +9,10 @@
 ## 1. Project Overview
 
 **Name:** Bidding Player (`bidding-player`)  
-**Owner:** aryanvani-projects  
-**GitHub:** https://github.com/aryanvani-projects/bidding-player  
-**Live Site:** https://aryanvani-projects.github.io/bidding-player/  
-**CDN Base:** `https://cdn.jsdelivr.net/gh/aryanvani-projects/bidding-player@vX.Y.Z/`
+**Owner:** shashwatsilverpush  
+**GitHub:** https://github.com/shashwatsilverpush/bidding-player  
+**Live Site:** https://shashwatsilverpush.github.io/bidding-player/  
+**CDN Base:** `https://cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@vX.Y.Z/`
 
 A self-hosted video header-bidding player built on **Prebid.js + video.js + Google IMA SDK**.
 The engine is a single script tag (`engine/player.js`) that publishers drop onto any page.
@@ -330,7 +330,7 @@ Located in `/tmp/auction-test/` (throwaway, not committed):
 | `verify-sandbox-bias.js` | 7-check Sandbox bias toggle OFF path |
 
 All use Puppeteer against `file://` URL of `index.html`.
-Chrome binary: `/Users/aryanvani/.cache/puppeteer/chrome/mac_arm-138.0.7204.92/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`
+Chrome binary: `~/.cache/puppeteer/chrome/mac_arm-138.0.7204.92/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`
 
 **Test regex patterns** — use `[:\s]+` not `\s+` when matching log lines, because the phase logger uses `key: value` format with Unicode tree characters.
 

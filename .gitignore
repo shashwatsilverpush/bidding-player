@@ -3,3 +3,8 @@
 node_modules/
 .idea/
 .vscode/
+
+# Planning docs generated during product-planning discussion (not part of the project)
+Bidding-Player_Gap-Analysis.docx
+Bidding-Player_Roadmap-and-Spec.docx
+CONTROL-PLANE_BUILD-PROMPT.md
