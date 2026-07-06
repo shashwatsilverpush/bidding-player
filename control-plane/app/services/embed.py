@@ -19,7 +19,7 @@ def _jsdelivr(repo: str, version: str, path: str) -> str:
     return f"https://cdn.jsdelivr.net/gh/{repo}@{version}/{path}"
 
 
-def build_embed_tag(cfg: RuntimeConfig, settings: Settings) -> str:
+def build_embed_tag(cfg: RuntimeConfig, settings: Settings, placement_id: str) -> str:
     """Return the `<script …></script>` string for a placement.
 
     ``cfg.engineChannel`` == "auto" emits the auto-updating loader (engine version
@@ -76,6 +76,11 @@ def build_embed_tag(cfg: RuntimeConfig, settings: Settings) -> str:
         f'        data-div-id="{_esc(cfg.divId)}"',
         f'        data-cache="{_esc(cfg.cacheUrl)}"',
         f'        data-prebid-url="{_esc(prebid_out)}"',
+        # Telemetry: lets the engine beacon lifecycle events to the collector.
+        f'        data-account="{_esc(cfg.account)}"',
+        f'        data-placement-id="{_esc(placement_id)}"',
+        f'        data-beacon-url="{_esc(cfg.beaconUrl)}"',
+        f'        data-sample-rate="{cfg.sampleRate}"',
         "        async></script>",
     ]
     return "\n".join(lines)

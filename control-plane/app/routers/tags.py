@@ -39,5 +39,5 @@ async def get_embed(
     if channel in ("auto", "pinned"):
         cfg = cfg.model_copy(update={"engineChannel": channel})
 
-    tag = build_embed_tag(cfg, get_settings())
+    tag = build_embed_tag(cfg, get_settings(), placement_id)
     return EmbedResponse(placement_id=placement_id, channel=cfg.engineChannel, tag=tag, config=cfg)

@@ -54,7 +54,17 @@
     vpaidMode:   currentScript.getAttribute("data-vpaid") || "insecure",
     divId:       currentScript.getAttribute("data-div-id") || "comparos-video-placement",
     cacheUrl:    currentScript.getAttribute("data-cache") || "https://prebid.adnxs.com/pbc/v1/cache",
-    prebidUrl:   currentScript.getAttribute("data-prebid-url") || "https://cdnjs.cloudflare.com/ajax/libs/prebid.js/6.7.0/prebid.js"
+    prebidUrl:   currentScript.getAttribute("data-prebid-url") || "https://cdnjs.cloudflare.com/ajax/libs/prebid.js/6.7.0/prebid.js",
+
+    // ─── Telemetry (control-plane analytics) ──────────────────────
+    // When data-beacon-url + data-account + data-placement-id are present, the
+    // engine fire-and-forgets lifecycle events (load, bid request/response,
+    // win, impression, complete, error) to the collector. Absent on legacy
+    // tags → telemetry is a no-op, so nothing changes for existing publishers.
+    account:     currentScript.getAttribute("data-account") || "",
+    placementId: currentScript.getAttribute("data-placement-id") || "",
+    beaconUrl:   currentScript.getAttribute("data-beacon-url") || "",
+    sampleRate:  (function (v) { return isNaN(v) ? 1 : v; })(parseFloat(currentScript.getAttribute("data-sample-rate")))
   };
 
   // Resolve the bidder list for this auction. New tags use `data-bidders`
@@ -89,6 +99,72 @@
   function winLog(b, c) { if (!DEBUG) return; try { console.log("%c 🏆 WINNER %c " + b + " | Raw CPM: $" + c.toFixed(2), "background:linear-gradient(90deg,#f1c40f,#e67e22);color:#000;font-weight:bold;padding:2px 8px;border-radius:3px;", "color:#f1c40f;font-weight:bold;"); } catch (_) {} }
   function noBidLog() { if (!DEBUG) return; try { console.log("%c ⚠️ NO MARKET DEMAND %c Fallback to $0.00 targeting.", "background:#3a3a3a;color:#bdc3c7;font-weight:bold;padding:2px 8px;border-radius:3px;", "color:#bdc3c7;"); } catch (_) {} }
   function warn(m) { if (!DEBUG) return; try { console.warn("[AdTechPlayer]", m); } catch (_) {} }
+
+  // ─── Telemetry ──────────────────────────────────────────────────
+  // Fire-and-forget beacons to the control-plane collector. Never throws into
+  // the auction/render path; no-op unless the tag carries data-beacon-url +
+  // data-account + data-placement-id. sendBeacon first (text/plain → no CORS
+  // preflight), fetch keepalive fallback. Honours data-sample-rate.
+  var ENGINE_VERSION = "2.5.2";
+  var TELE_ON = !!(cfg.beaconUrl && cfg.account && cfg.placementId);
+  var SESSION_ID = (function () {
+    try { return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10); }
+    catch (_) { return "sess"; }
+  })();
+  function uuid() {
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (_) {}
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0, v = c === "x" ? r : (r & 0x3) | 0x8; return v.toString(16);
+    });
+  }
+  function teleConsent() {
+    // Reuse whatever consent Prebid already resolved rather than re-querying a CMP.
+    try {
+      if (typeof pbjs !== "undefined" && pbjs.getConsentMetadata) {
+        var m = pbjs.getConsentMetadata() || {};
+        var g = m.gdpr || {};
+        return { gdpr: !!g.gdprApplies, tcString: g.consentString || null,
+                 usp: (m.usp && m.usp.uspString) || null };
+      }
+    } catch (_) {}
+    return null;
+  }
+  function gamIu() {
+    try { return new URL(cfg.adTagUrl).searchParams.get("iu") || null; } catch (_) { return null; }
+  }
+  function beacon(event, props) {
+    try {
+      if (!TELE_ON) return;
+      if (cfg.sampleRate < 1 && Math.random() > cfg.sampleRate) return;
+      var body = JSON.stringify({
+        v: 1, event: event, ts: Date.now(), eventId: uuid(),
+        account: cfg.account, placementId: cfg.placementId, adUnitPath: gamIu(),
+        pageUrl: (window.location && window.location.href) || "", sessionId: SESSION_ID,
+        engineVersion: ENGINE_VERSION, consent: teleConsent(), props: props || {}
+      });
+      var sent = false;
+      try {
+        if (navigator.sendBeacon) {
+          sent = navigator.sendBeacon(cfg.beaconUrl, new Blob([body], { type: "text/plain" }));
+        }
+      } catch (_) {}
+      if (!sent && typeof fetch === "function") {
+        fetch(cfg.beaconUrl, { method: "POST", body: body, keepalive: true,
+          credentials: "omit", headers: { "Content-Type": "text/plain" } }).catch(function () {});
+      }
+    } catch (_) {}
+  }
+  function imaAdInfo(e) {
+    try {
+      var ad = e && e.getAd && e.getAd();
+      if (!ad) return {};
+      return {
+        adId: ad.getAdId ? ad.getAdId() : undefined,
+        creativeId: ad.getCreativeId ? ad.getCreativeId() : undefined,
+        adDuration: ad.getDuration ? ad.getDuration() : undefined
+      };
+    } catch (_) { return {}; }
+  }
 
   function roundGran(c) { return Math.floor(c / 0.10) * 0.10; }
   function applyBias(raw) { return parseFloat(roundGran(raw + cfg.floorBias).toFixed(2)); }
@@ -239,9 +315,10 @@
       try {
         var adc = new google.ima.AdDisplayContainer(adContainer, videoEl);
         var loader = new google.ima.AdsLoader(adc);
-        loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function () {
+        loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (e) {
           adContainer.style.zIndex = "-1";
           adContainer.style.pointerEvents = "none";
+          beacon("ad_error", { phase: "ima_loader", errorCode: String((e && e.getError && e.getError()) || "") });
           try { player.play(); } catch (_) {}
         }, false);
         loader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, function (e) {
@@ -249,12 +326,16 @@
           // Expose the manager so the sticky/floating logic can call mgr.resize()
           // and reflow the live ad creative when the player docks/undocks.
           container.__atpMgr = mgr;
-          mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function () {
+          mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (e) {
             adContainer.style.zIndex = "-1";
             adContainer.style.pointerEvents = "none";
             container.__atpMgr = null;
             try { mgr.destroy(); } catch (_) {}
+            beacon("ad_error", { phase: "ima", errorCode: String((e && e.getError && e.getError()) || "") });
             player.play().catch(function(){});
+          });
+          mgr.addEventListener(google.ima.AdEvent.Type.STARTED, function (ev) {
+            beacon("impression", imaAdInfo(ev));
           });
           mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_PAUSE_REQUESTED, function () {
             adContainer.style.zIndex = "10";
@@ -265,6 +346,9 @@
             adContainer.style.zIndex = "-1";
             adContainer.style.pointerEvents = "none";
             player.play().catch(function(){});
+          });
+          mgr.addEventListener(google.ima.AdEvent.Type.COMPLETE, function () {
+            beacon("ad_complete", { viewedPct: 100 });
           });
           mgr.addEventListener(google.ima.AdEvent.Type.ALL_ADS_COMPLETED, function () {
             adContainer.style.zIndex = "-1";
@@ -328,6 +412,7 @@
 
       loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (e) {
         warn("outstream loader error: " + ((e && e.getError && e.getError()) || "unknown"));
+        beacon("ad_error", { phase: "ima_loader", errorCode: String((e && e.getError && e.getError()) || "") });
         collapse();
       }, false);
 
@@ -357,9 +442,16 @@
 
         mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (ev) {
           warn("outstream ad error: " + ((ev && ev.getError && ev.getError()) || "unknown"));
+          beacon("ad_error", { phase: "ima", errorCode: String((ev && ev.getError && ev.getError()) || "") });
           soundBtn.style.display = "none";
           collapse();
           try { mgr.destroy(); } catch (_) {}
+        });
+        mgr.addEventListener(google.ima.AdEvent.Type.STARTED, function (ev) {
+          beacon("impression", imaAdInfo(ev));
+        });
+        mgr.addEventListener(google.ima.AdEvent.Type.COMPLETE, function () {
+          beacon("ad_complete", { viewedPct: 100 });
         });
         // No content to pause/resume — just size the slot to the ad.
         mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_PAUSE_REQUESTED, function () {
@@ -508,6 +600,7 @@
     step(1, "Auction Initialized via CDN. Bidders: " + bidderNames + " | Timeout: " + cfg.timeout + "ms");
     if (typeof pbjs === "undefined") {
       warn("Prebid failed network retrieval — Fallback active.");
+      beacon("no_demand", { phase: "prebid_unavailable", fallbackServed: true });
       render(stitchTag(cfg.adTagUrl, noBidTargeting()));
       return;
     }
@@ -567,6 +660,25 @@
       } catch (e) { warn("addAdUnits: " + e.message); }
 
       step(1.5, "Requesting video ad payload. Bidders: " + bidderNames + ". Player size: " + pw + "x" + ph);
+
+      // Telemetry: capture per-bidder outcomes + the request itself.
+      try {
+        pbjs.onEvent("bidResponse", function (bid) {
+          beacon("bid_response", { bidder: bid.bidderCode || bid.bidder, cpm: bid.cpm,
+            currency: bid.currency, status: "bid", latencyMs: bid.timeToRespond });
+        });
+        pbjs.onEvent("noBid", function (bid) {
+          beacon("bid_response", { bidder: bid.bidder || bid.bidderCode, status: "no-bid" });
+        });
+        pbjs.onEvent("bidTimeout", function (data) {
+          try { (data || []).forEach(function (b) { beacon("bid_response", { bidder: b.bidder, status: "timeout" }); }); } catch (_) {}
+        });
+        pbjs.onEvent("bidderError", function (o) {
+          beacon("bid_response", { bidder: (o && o.bidderRequest && o.bidderRequest.bidderCode) || "", status: "error" });
+        });
+      } catch (_) {}
+      beacon("bid_request", { bidders: cfg.bidders.map(function (b) { return b.bidder; }), timeout: cfg.timeout });
+
       try {
         pbjs.requestBids({
           timeout: cfg.timeout,
@@ -580,6 +692,7 @@
               // house line item exactly as if no bidder responded.
               if (cfg.floorMin !== null && winner.cpm < cfg.floorMin) {
                 noBidLog();
+                beacon("no_demand", { phase: "floor_min", fallbackServed: true });
                 finalUrl = stitchTag(cfg.adTagUrl, noBidTargeting());
               } else {
                 // Floor max: cap the raw CPM before bias and bucketing so
@@ -606,9 +719,14 @@
                 if (targeting[bidderKey]) targeting[bidderKey] = cpmStr;
 
                 finalUrl = stitchTag(cfg.adTagUrl, targeting);
+                beacon("auction_win", {
+                  bidder: winner.bidder, cpmRaw: rawCpm, cpmBiased: finalCpm,
+                  hbPb: cpmStr, floorApplied: (cfg.floorMax !== null && winner.cpm > cfg.floorMax)
+                });
               }
             } else {
               noBidLog();
+              beacon("no_demand", { phase: "auction", fallbackServed: true });
               finalUrl = stitchTag(cfg.adTagUrl, noBidTargeting());
             }
             try { if (pbjs.removeAdUnit) pbjs.removeAdUnit(code); } catch (_) {}
@@ -625,6 +743,11 @@
   ready(function () {
     loadCss("https://cdn.jsdelivr.net/npm/video.js@8/dist/video-js.min.css");
     ensureMount();
+    beacon("player_load", {
+      placement: cfg.placement,
+      referrer: (document && document.referrer) || "",
+      viewport: (window.innerWidth || 0) + "x" + (window.innerHeight || 0)
+    });
     Promise.all([
       loadScript("https://cdn.jsdelivr.net/npm/video.js@8/dist/video.min.js"),
       loadScript("https://imasdk.googleapis.com/js/sdkloader/ima3.js"),
