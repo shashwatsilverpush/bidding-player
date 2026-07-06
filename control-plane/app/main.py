@@ -83,15 +83,19 @@ async def root() -> RedirectResponse:
     return RedirectResponse(url="/admin")
 
 
+# no-cache so a redeploy is picked up immediately (etag still yields cheap 304s).
+_NOCACHE = {"Cache-Control": "no-cache"}
+
+
 @app.get("/admin", include_in_schema=False)
 async def admin_ui() -> FileResponse:
-    return FileResponse(_STATIC_DIR / "admin.html")
+    return FileResponse(_STATIC_DIR / "admin.html", headers=_NOCACHE)
 
 
 @app.get("/preview", include_in_schema=False)
 async def preview_ui() -> FileResponse:
     """Self-contained tag preview + auction inspector (open with ?p=<placement_id>)."""
-    return FileResponse(_STATIC_DIR / "preview.html")
+    return FileResponse(_STATIC_DIR / "preview.html", headers=_NOCACHE)
 
 
 @app.get("/health", tags=["meta"])
