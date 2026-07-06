@@ -68,9 +68,15 @@ async def test_breakdown_by_dimension(client: AsyncClient, auth_headers: dict[st
         assert r.status_code == 200, dim
         rows = r.json()
         assert len(rows) >= 1
-        assert {"key", "loads", "wins", "impressions", "fillRate", "avgCpmRaw", "avgCpmBiased"} <= set(
-            rows[0].keys()
-        )
+        assert {
+            "key",
+            "loads",
+            "wins",
+            "impressions",
+            "fillRate",
+            "avgCpmRaw",
+            "avgCpmBiased",
+        } <= set(rows[0].keys())
     bad = await client.get("/v1/admin/analytics/breakdown?dimension=nope", headers=auth_headers)
     assert bad.status_code == 422
 

@@ -6,6 +6,8 @@ partners into the flat shape the engine fetches.
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -19,8 +21,22 @@ class PlacementNotFound(Exception):
     pass
 
 
+def base_url_from_request(request: Any) -> str:
+    """Public base URL for this request — honours X-Forwarded-Host and forces
+    https for non-local hosts (deployed environments are TLS-terminated by a proxy
+    that may forward as http)."""
+    host = request.headers.get("x-forwarded-host") or request.url.netloc
+    hostname = host.split(":")[0]
+    scheme = request.url.scheme if hostname in ("localhost", "127.0.0.1") else "https"
+    return f"{scheme}://{host}"
+
+
 async def assemble_config(
-    session: AsyncSession, placement_id: str, *, require_active: bool = True
+    session: AsyncSession,
+    placement_id: str,
+    *,
+    require_active: bool = True,
+    request_base: str | None = None,
 ) -> RuntimeConfig:
     """Assemble runtime config for a placement.
 
@@ -72,7 +88,7 @@ async def assemble_config(
         cacheUrl=cfg.cacheUrl or settings.default_cache_url,
         bidders=bidders,
         prebidUrl=cfg.prebidUrl or settings.default_prebid_url,
-        beaconUrl=settings.beacon_url,
+        beaconUrl=settings.beacon_url(request_base),
         sampleRate=cfg.sampleRate if cfg.sampleRate is not None else settings.default_sample_rate,
         account=publisher.account_id,
         adUnitPath=ad_unit.gam_ad_unit_path,

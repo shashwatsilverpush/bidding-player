@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import AdminDep
 from app.db import get_session
 from app.schemas.config import RuntimeConfig
-from app.services.config_assembly import PlacementNotFound, assemble_config
+from app.services.config_assembly import (
+    PlacementNotFound,
+    assemble_config,
+    base_url_from_request,
+)
 from app.services.embed import build_embed_tag
 from app.settings import get_settings
 
@@ -28,11 +32,17 @@ class EmbedResponse(BaseModel):
 @router.get("/placements/{placement_id}/embed", response_model=EmbedResponse)
 async def get_embed(
     placement_id: str,
+    request: Request,
     session: AsyncSession = SessionDep,
     channel: str | None = Query(default=None, description="auto|pinned; overrides placement"),
 ) -> EmbedResponse:
     try:
-        cfg = await assemble_config(session, placement_id, require_active=False)
+        cfg = await assemble_config(
+            session,
+            placement_id,
+            require_active=False,
+            request_base=base_url_from_request(request),
+        )
     except PlacementNotFound as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "placement not found") from exc
 

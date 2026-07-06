@@ -33,8 +33,11 @@ class Settings(BaseSettings):
     admin_password: str | None = None
     admin_password_hash: str | None = None
 
-    # Telemetry / config delivery
-    public_base_url: str = "http://localhost:8000"
+    # Telemetry / config delivery. Leave UNSET in deployed environments so the
+    # beacon/config URL is derived from the incoming request host — then every
+    # environment (staging/prod/preview) self-serves the correct URL with no
+    # per-env secret. Set it only to force a specific base (e.g. local dev).
+    public_base_url: str | None = None
     default_prebid_url: str = (
         "https://cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@v2.5.2/prebid/prebid.js"
     )
@@ -62,9 +65,11 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
-    @property
-    def beacon_url(self) -> str:
-        return f"{self.public_base_url.rstrip('/')}/e"
+    def beacon_url(self, request_base: str | None = None) -> str:
+        """Collector URL baked into generated tags. Prefer an explicit
+        PUBLIC_BASE_URL; else the per-request host; else localhost."""
+        base = self.public_base_url or request_base or "http://localhost:8000"
+        return f"{base.rstrip('/')}/e"
 
     @property
     def admin_cors_list(self) -> list[str]:
