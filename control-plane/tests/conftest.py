@@ -31,6 +31,9 @@ os.environ.setdefault("ADMIN_USERNAME", "admin")
 os.environ.setdefault("ADMIN_PASSWORD", "admin")
 os.environ.setdefault("PUBLIC_BASE_URL", "http://testserver")
 os.environ.setdefault("CONSENT_MODE", "anonymize")
+# Force jsDelivr tag output in tests regardless of a local .env ENGINE_BASE_URL
+# (pydantic-settings reads .env; os.environ takes precedence).
+os.environ["ENGINE_BASE_URL"] = ""
 
 from collections.abc import AsyncGenerator  # noqa: E402
 

@@ -14,7 +14,7 @@ from sqlalchemy import Float, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.models import Event
+from app.models import AdUnit, Event, Placement, Publisher, Site
 
 
 def _filters(
@@ -221,3 +221,70 @@ async def key_values(
         "hb_pb": [{"value": v or "(none)", "count": n} for v, n in hb_rows],
         "hb_bidder": [{"value": b or "(none)", "count": n} for b, n in winner_rows],
     }
+
+
+# Dimension -> the grouping column (joined events -> placement -> ad_unit -> site -> publisher).
+_DIM_COLS = {
+    "publisher": Publisher.name,
+    "site": Site.domain,
+    "ad_unit": AdUnit.gam_ad_unit_path,
+    "placement": Placement.name,
+    "format": AdUnit.format,
+}
+
+
+async def breakdown(
+    session: AsyncSession,
+    *,
+    dimension: str,
+    ts_from: datetime | None,
+    ts_to: datetime | None,
+) -> list[dict[str, Any]]:
+    """Per-dimension funnel metrics, joining events up the tenant chain.
+    dimension ∈ publisher | site | ad_unit | placement | format."""
+    dim = _DIM_COLS.get(dimension, Publisher.name)
+
+    def cnt(event: str) -> ColumnElement[int]:
+        return func.count().filter(Event.event_type == event)
+
+    conds: list[ColumnElement[bool]] = []
+    if ts_from is not None:
+        conds.append(Event.ts_server >= ts_from)
+    if ts_to is not None:
+        conds.append(Event.ts_server <= ts_to)
+
+    stmt = (
+        select(
+            dim.label("key"),
+            cnt("player_load").label("loads"),
+            cnt("bid_request").label("requests"),
+            cnt("auction_win").label("wins"),
+            cnt("impression").label("impressions"),
+            func.avg(Event.cpm_raw).label("avg_raw"),
+            func.avg(Event.cpm_biased).label("avg_biased"),
+        )
+        .select_from(Event)
+        .join(Placement, Event.placement_id == Placement.id)
+        .join(AdUnit, Placement.ad_unit_id == AdUnit.id)
+        .join(Site, AdUnit.site_id == Site.id)
+        .join(Publisher, Site.publisher_id == Publisher.id)
+        .where(*conds)
+        .group_by(dim)
+        .order_by(cnt("player_load").desc())
+    )
+    rows = (await session.execute(stmt)).all()
+    out: list[dict[str, Any]] = []
+    for key, loads, requests, wins, imps, avg_raw, avg_biased in rows:
+        out.append(
+            {
+                "key": key,
+                "loads": loads,
+                "requests": requests,
+                "wins": wins,
+                "impressions": imps,
+                "fillRate": round(imps / loads, 4) if loads else None,
+                "avgCpmRaw": round(float(avg_raw), 4) if avg_raw is not None else None,
+                "avgCpmBiased": round(float(avg_biased), 4) if avg_biased is not None else None,
+            }
+        )
+    return out

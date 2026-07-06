@@ -60,6 +60,21 @@ async def test_timeseries(client: AsyncClient, auth_headers: dict[str, str]) -> 
     assert {"ts", "event", "count"} <= set(ts[0].keys())
 
 
+async def test_breakdown_by_dimension(client: AsyncClient, auth_headers: dict[str, str]) -> None:
+    ids = await build_chain(client, auth_headers)
+    await _seed(client, auth_headers, ids["placement_id"], 120)
+    for dim in ("publisher", "site", "ad_unit", "placement", "format"):
+        r = await client.get(f"/v1/admin/analytics/breakdown?dimension={dim}", headers=auth_headers)
+        assert r.status_code == 200, dim
+        rows = r.json()
+        assert len(rows) >= 1
+        assert {"key", "loads", "wins", "impressions", "fillRate", "avgCpmRaw", "avgCpmBiased"} <= set(
+            rows[0].keys()
+        )
+    bad = await client.get("/v1/admin/analytics/breakdown?dimension=nope", headers=auth_headers)
+    assert bad.status_code == 422
+
+
 async def test_analytics_requires_auth(client: AsyncClient) -> None:
     r = await client.get("/v1/admin/analytics/summary")
     assert r.status_code in (401, 403)

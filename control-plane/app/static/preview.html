@@ -52,6 +52,8 @@
   </div>
   <div class="inspector">
     <div class="kpis" id="kpis"></div>
+    <h3>Player events <span class="muted" style="font-weight:400">(from the engine)</span></h3>
+    <div class="log" id="events"><span class="muted">waiting for player events…</span></div>
     <h3>Auctions</h3><div id="auctions"><p class="muted">waiting for auction traffic…</p></div>
     <h3>Key-values sent to GAM</h3><div id="kv"><p class="muted">no GAM request seen yet</p></div>
     <h3>Network calls</h3><div class="log" id="calls"></div>
@@ -746,6 +748,49 @@
 
   if (!pid) { el("#banner").textContent = "Missing ?p=<placement_id>"; return; }
   el("#plcLabel").textContent = pid;
+
+  // ---- capture the engine's own telemetry beacons for a reliable event timeline ----
+  // The engine POSTs lifecycle events to its data-beacon-url via sendBeacon/fetch.
+  // We tap those (before injecting the engine) so the timeline reflects exactly
+  // what the engine reports — including IMA-derived impression/complete that raw
+  // network sniffing can't see.
+  const EVENT_ICONS = { player_load:"▶", bid_request:"📤", bid_response:"📥",
+    auction_win:"🏆", no_demand:"∅", impression:"👁", ad_complete:"✅", ad_error:"⚠️" };
+  let evCount = 0;
+  function onEngineEvent(ev) {
+    try {
+      const e = typeof ev === "string" ? JSON.parse(ev) : ev;
+      if (!e || !e.event) return;
+      if (evCount === 0) el("#events").innerHTML = "";
+      evCount++;
+      const p = e.props || {};
+      let detail = "";
+      if (e.event === "bid_response") detail = `${p.bidder||""} · ${p.status||""}${p.cpm?" · $"+p.cpm:""}`;
+      else if (e.event === "auction_win") detail = `${p.bidder||""} · raw $${p.cpmRaw} → biased $${p.cpmBiased} (hb_pb ${p.hbPb})`;
+      else if (e.event === "bid_request") detail = (p.bidders||[]).join(", ");
+      else if (e.event === "ad_error" || e.event === "no_demand") detail = p.phase || p.errorCode || "";
+      else if (e.event === "impression") detail = p.creativeId ? "creative "+p.creativeId : "";
+      const line = document.createElement("div");
+      line.innerHTML = `<span class="pill ok">${EVENT_ICONS[e.event]||"•"} ${esc(e.event)}</span> <span class="muted">${esc(detail)}</span>`;
+      el("#events").prepend(line);
+    } catch (_) {}
+  }
+  function isBeaconUrl(u) { try { return (u||"").indexOf("/e") !== -1 && new URL(u, location.href).pathname === "/e"; } catch (_) { return false; } }
+  // sendBeacon (engine's primary transport)
+  const _sb = navigator.sendBeacon && navigator.sendBeacon.bind(navigator);
+  if (_sb) navigator.sendBeacon = function (url, data) {
+    if (isBeaconUrl(url) && data) { try { (data.text ? data.text() : Promise.resolve(String(data))).then(onEngineEvent); } catch (_) {} }
+    return _sb(url, data);
+  };
+  // fetch fallback
+  const _f = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    try {
+      const url = typeof input === "string" ? input : (input && input.url);
+      if (isBeaconUrl(url) && init && init.body) onEngineEvent(String(init.body));
+    } catch (_) {}
+    return _f(input, init);
+  };
 
   // ---- render ----
   function renderKpis() {

@@ -66,6 +66,7 @@
 <nav class="hide" id="nav">
   <button data-top="publishers" class="active">Publishers</button>
   <button data-top="demand">Demand Partners</button>
+  <button data-top="analytics">Analytics</button>
 </nav>
 <div class="crumbs hide" id="crumbs"></div>
 
@@ -82,7 +83,7 @@
 
 <script>
 let TOKEN=localStorage.getItem("cp_token")||"";
-const S={top:"publishers",pub:null,sub:"properties",site:null,au:null,plc:null,plcTab:"tag",_demand:[]};
+const S={top:"publishers",pub:null,sub:"properties",site:null,au:null,plc:null,plcTab:"prebid",_demand:[]};
 const $=s=>document.querySelector(s);
 function toast(m,k="ok"){const t=document.createElement("div");t.className="toast "+k;t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),3400);}
 function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -133,6 +134,7 @@ function crumb(parts){$("#crumbs").classList.remove("hide");
 
 async function render(){setNav();const m=$("#main");
   if(S.top==="demand"){crumb([{t:"Demand Partners"}]);return renderDemandCatalog(m);}
+  if(S.top==="analytics"){crumb([{t:"Analytics"}]);return renderAnalyticsSection(m);}
   if(!S.pub){crumb([{t:"Publishers"}]);return renderPublishers(m);}
   if(S.plc) return renderPlacement(m);
   if(S.au) return renderAdUnit(m);
@@ -202,14 +204,14 @@ async function renderAdUnit(m){crumb([{t:"Publishers",go:()=>go({pub:null})},{t:
   const ul=$("#ql");if(!plcs.length)ul.innerHTML='<div class="empty">No placements yet — click “+ New placement”.</div>';
   plcs.forEach(p=>{const st=readiness(p,demandOn);const li=document.createElement("li");
     li.innerHTML=`<span>▶ ${esc(p.name)} <span class="pill">${p.config.placement}</span></span><span><span class="pill ${st.cls}">${st.label}</span> <span class="id">›</span></span>`;
-    li.onclick=()=>go({plc:p,plcTab:"tag"});ul.appendChild(li);});
+    li.onclick=()=>go({plc:p,plcTab:"prebid"});ul.appendChild(li);});
   $("#cNew").onclick=()=>openForm({title:"New placement",submitLabel:"Create",
     fields:[{key:"name",label:"Name",placeholder:"Homepage instream"},
       {key:"type",label:"Type",type:"select",value:"instream",options:[{value:"instream",label:"instream"},{value:"outstream",label:"outstream"}]},
       {key:"channel",label:"Engine delivery",type:"select",value:"auto",options:[{value:"auto",label:"auto-update"},{value:"pinned",label:"pinned"}]}],
     onSubmit:async v=>{if(!v.name.trim())throw new Error("Name required");
       const cfg={placement:v.type,timeout:1200,bias:"0.10"};if(v.type==="instream")cfg.video="https://vjs.zencdn.net/v/oceans.mp4";
-      const p=await api(`/v1/admin/ad-units/${S.au.id}/placements`,{method:"POST",body:{name:v.name.trim(),engine_channel:v.channel,config:cfg,active:true}});toast("Placement created");go({plc:p,plcTab:"tag"});}});}
+      const p=await api(`/v1/admin/ad-units/${S.au.id}/placements`,{method:"POST",body:{name:v.name.trim(),engine_channel:v.channel,config:cfg,active:true}});toast("Placement created");go({plc:p,plcTab:"prebid"});}});}
 
 function readiness(p,demandOn){const c=p.config;const miss=[];if(!c.adTag)miss.push("GAM tag");if(!demandOn)miss.push("demand");
   if(c.placement==="instream"&&!c.video)miss.push("video");
@@ -220,12 +222,38 @@ async function renderPlacement(m){const p=S.plc;
   crumb([{t:"Publishers",go:()=>go({pub:null})},{t:S.pub.name,go:()=>go({site:null,au:null,plc:null,sub:"properties"})},
     {t:S.site.domain,go:()=>go({au:null,plc:null})},{t:S.au.gam_ad_unit_path,go:()=>go({plc:null})},{t:p.name}]);
   m.innerHTML=`<div class="card"><h2>${esc(p.name)} <span class="pill">${p.config.placement}</span></h2>
-    <div class="subtabs">${[["tag","Player Tag"],["gam","GAM"],["analytics","Analytics"]].map(([k,l])=>`<button data-t="${k}" class="${S.plcTab===k?'active':''}">${l}</button>`).join("")}</div>
+    <p class="muted" style="margin:-6px 0 12px">A placement has two sides: <b>① Prebid</b> (the header-bidding demand that competes for the impression) and <b>② GAM</b> (your ad server, which the winning price is passed to). Configure each, then generate the <b>Player Tag</b>.</p>
+    <div class="subtabs">${[["prebid","① Prebid — demand"],["gam","② GAM — ad server"],["tag","Player Tag"],["analytics","Analytics"]].map(([k,l])=>`<button data-t="${k}" class="${S.plcTab===k?'active':''}">${l}</button>`).join("")}</div>
     <div id="pt"></div></div>`;
   m.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>go({plcTab:b.dataset.t}));
-  if(S.plcTab==="tag")await paneTag($("#pt"));else if(S.plcTab==="gam")await paneGam($("#pt"));else await paneAnalytics($("#pt"));}
+  if(S.plcTab==="prebid")await panePrebid($("#pt"));
+  else if(S.plcTab==="gam")await paneGam($("#pt"));
+  else if(S.plcTab==="tag")await paneTag($("#pt"));
+  else await paneAnalytics($("#pt"));}
 
 async function getPlc(){return api(`/v1/admin/placements/${S.plc.id}`);}
+
+// ① Prebid (demand) side: which SSPs compete + the header-bidding auction knobs.
+async function panePrebid(el){
+  const [p,dem]=await Promise.all([getPlc(),api(`/v1/admin/publishers/${S.pub.id}/demand`)]);
+  const c=p.config;const on=dem.filter(d=>d.enabled);
+  el.innerHTML=`<div class="grid2">
+    <div class="card"><h2>Demand partners bidding</h2>
+      ${on.length?`<table><thead><tr><th>SSP</th><th>Floor</th></tr></thead><tbody>`+
+        on.map(e=>`<tr><td><b>${esc(e.demand_partner_code)}</b></td><td>${e.floor!=null?'$'+e.floor:'—'}</td></tr>`).join("")+`</tbody></table>`
+        :'<div class="empty">No SSPs enabled for this publisher yet.</div>'}
+      <p class="muted" style="margin-top:10px">These are the bidders that fire header-bidding requests. Manage them (and their credentials) at the publisher level → <a href="#" id="goDemand" style="color:var(--accent)">Demand tab</a>.</p></div>
+    <div class="card"><h2>Auction settings</h2>
+      <div class="row"><div><label>Bidder timeout (ms)</label><input id="pTo"/></div><div><label>Floor bias ($)</label><input id="pBias"/></div></div>
+      <div class="row"><div><label>Floor min ($, optional)</label><input id="pFmin" placeholder="none"/></div><div><label>Floor max ($, optional)</label><input id="pFmax" placeholder="none"/></div></div>
+      <label>Prebid cache URL</label><input id="pCache"/>
+      <button class="btn" id="pSave">Save Prebid settings</button>
+      <p class="muted" style="margin-top:8px">Govern the header-bidding auction: how long to wait for bids, and the floor/bias applied before the winning price is bucketed into <code>hb_pb</code> for GAM.</p></div></div>`;
+  $("#pTo").value=c.timeout??1200;$("#pBias").value=c.bias??"0.10";$("#pFmin").value=c.floorMin??"";$("#pFmax").value=c.floorMax??"";$("#pCache").value=c.cacheUrl||"";
+  $("#goDemand").onclick=(e)=>{e.preventDefault();go({sub:"demand",site:null,au:null,plc:null});};
+  $("#pSave").onclick=async()=>{const cur=(await getPlc()).config;const fmin=$("#pFmin").value.trim(),fmax=$("#pFmax").value.trim();
+    try{await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{config:{...cur,timeout:parseInt($("#pTo").value||"1200",10),bias:($("#pBias").value||"0.00"),floorMin:fmin?parseFloat(fmin):null,floorMax:fmax?parseFloat(fmax):null,cacheUrl:$("#pCache").value.trim()||null}}});toast("Prebid settings saved");}catch(e){toast(e.message,"err");}};
+}
 
 async function paneTag(el){const p=await getPlc();const c=p.config;
   el.innerHTML=`<div class="grid2"><div>
@@ -274,22 +302,23 @@ async function preflight(){const cfg=window._cfg||(await api(`/v1/admin/placemen
     out.map(x=>`<div class="check"><span class="ic">${x.b?'✅':'⚠️'}</span><span>${x.m}</span></div>`).join("")+
     `<p class="muted" style="margin-top:8px">A live in-browser test (Prebid request → response → GAM request → impression) is coming next — aligned to your existing debugger.</p></div>`;}
 
+// ② GAM (ad server) side: the VAST tag the winning price is passed to + the
+// key-values you must set up line items against in Google Ad Manager.
 async function paneGam(el){const c=(await getPlc()).config;
-  el.innerHTML=`<div class="grid2"><div>
-    <label>GAM VAST tag URL <span class="muted">(data-tag)</span></label><textarea id="gTag" rows="4" placeholder="https://pubads.g.doubleclick.net/gampad/ads?iu=/.../&output=vast&..."></textarea>
-    <label>Prebid cache URL</label><input id="gCache"/>
-    <fieldset><legend>Auction management</legend><div class="row"><div><label>Timeout (ms)</label><input id="gTo"/></div><div><label>Floor bias ($)</label><input id="gBias"/></div></div>
-    <div class="row"><div><label>Floor min ($)</label><input id="gFmin" placeholder="none"/></div><div><label>Floor max ($)</label><input id="gFmax" placeholder="none"/></div></div></fieldset>
-    <button class="btn" id="gSave">Save GAM config</button></div>
-    <div><label>Key-values passed to GAM</label>
+  el.innerHTML=`<div class="grid2">
+    <div class="card"><h2>GAM ad request</h2>
+    <label>GAM VAST tag URL <span class="muted">(data-tag)</span></label><textarea id="gTag" rows="5" placeholder="https://pubads.g.doubleclick.net/gampad/ads?iu=/NETWORK/ad_unit&sz=640x480&output=vast&..."></textarea>
+    <button class="btn" id="gSave">Save GAM tag</button>
+    <p class="muted" style="margin-top:8px">The engine stitches the Prebid result (<code>hb_pb</code>, <code>hb_bidder</code>) into this tag's <code>cust_params</code> and hands the final VAST request to IMA.</p></div>
+    <div class="card"><h2>Key-values to target in GAM</h2>
+    <p class="muted" style="margin:0 0 8px">Create price-priority line items in Google Ad Manager keyed on these:</p>
     <table><thead><tr><th>Key</th><th>Meaning</th></tr></thead><tbody>
-    <tr><td><code>hb_pb</code></td><td>Winning price bucket (post-bias)</td></tr><tr><td><code>hb_bidder</code></td><td>Winning SSP</td></tr>
+    <tr><td><code>hb_pb</code></td><td>Winning price bucket (post floor-bias)</td></tr><tr><td><code>hb_bidder</code></td><td>Winning SSP</td></tr>
     <tr><td><code>hb_pb_&lt;bidder&gt;</code></td><td>Per-bidder price (send-all-bids)</td></tr><tr><td><code>hb_bidder_&lt;bidder&gt;</code></td><td>Per-bidder code</td></tr></tbody></table>
-    <p class="muted" style="margin-top:10px">No-demand fallback calls GAM with <code>hb_pb=0.00</code>. Line items/creatives are set up in GAM itself (GAM-API automation is a later phase).</p></div></div>`;
-  $("#gTag").value=c.adTag||"";$("#gCache").value=c.cacheUrl||"";$("#gTo").value=c.timeout??1200;$("#gBias").value=c.bias??"0.10";$("#gFmin").value=c.floorMin??"";$("#gFmax").value=c.floorMax??"";
-  $("#gSave").onclick=async()=>{const cur=(await getPlc()).config;const fmin=$("#gFmin").value.trim(),fmax=$("#gFmax").value.trim();
-    try{await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{config:{...cur,adTag:$("#gTag").value.trim()||null,cacheUrl:$("#gCache").value.trim()||null,
-      timeout:parseInt($("#gTo").value||"1200",10),bias:($("#gBias").value||"0.00"),floorMin:fmin?parseFloat(fmin):null,floorMax:fmax?parseFloat(fmax):null}}});toast("GAM config saved");}catch(e){toast(e.message,"err");}};}
+    <p class="muted" style="margin-top:10px">No-demand fallback calls GAM with <code>hb_pb=0.00</code> so your house line item serves. Line items/creatives are set up in GAM itself (GAM-API automation is a later phase).</p></div></div>`;
+  $("#gTag").value=c.adTag||"";
+  $("#gSave").onclick=async()=>{const cur=(await getPlc()).config;
+    try{await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{config:{...cur,adTag:$("#gTag").value.trim()||null}}});toast("GAM tag saved");}catch(e){toast(e.message,"err");}};}
 
 async function paneAnalytics(el){const pid=S.plc.id;
   el.innerHTML=`<div class="row" style="align-items:flex-end"><div style="flex:0 0 auto"><label>Range</label>
@@ -330,6 +359,39 @@ async function subDemand(el){const [cat,en]=await Promise.all([api("/v1/admin/de
         await api(`/v1/admin/publishers/${S.pub.id}/demand/${dp.code}`,{method:"PUT",body:{params,floor:f?parseFloat(f):null,enabled:true}});toast(dp.label+" saved");subDemand(el);}});
     const dis=li.querySelector("[data-dis]");if(dis)dis.onclick=async()=>{try{await api(`/v1/admin/publishers/${S.pub.id}/demand/${dp.code}`,{method:"DELETE"});toast(dp.label+" disabled");subDemand(el);}catch(x){toast(x.message,"err");}};
     ul.appendChild(li);});}
+
+// ---- top-level Analytics (account-wide, dimensional) ----
+async function renderAnalyticsSection(m){
+  m.innerHTML=`<div class="card"><div class="hdr"><h2>Analytics — all publishers</h2>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+      <div><label>Break down by</label><select id="anDim"><option value="publisher">Publisher</option><option value="site">Site</option><option value="ad_unit">Ad unit</option><option value="placement">Placement</option><option value="format">Format</option></select></div>
+      <div><label>Range</label><select id="anR"><option value="7">Last 7 days</option><option value="1">Last 24h</option><option value="30">Last 30 days</option><option value="0">All time</option></select></div>
+      <button class="ghost small" id="anRef" style="margin:0">Refresh</button></div></div>
+    <div class="kpis" id="anKpis"></div></div>
+    <div class="grid2"><div class="card"><h2>Funnel (all placements)</h2><div class="funnel" id="anFunnel"></div></div>
+    <div class="card"><h2>Wins over time (daily)</h2><div class="spark" id="anSpark"></div><p class="muted" id="anSparkLbl"></p></div></div>
+    <div class="card"><h2>By <span id="anDimLbl">publisher</span></h2><div id="anBreak"></div></div>`;
+  const money=v=>v==null?"—":"$"+Number(v).toFixed(2),pct=v=>v==null?"—":(v*100).toFixed(1)+"%";
+  const load=async()=>{
+    const d=parseInt($("#anR").value,10);const rp=d?`&from=${encodeURIComponent(new Date(Date.now()-d*864e5).toISOString())}`:"";
+    const q=rp?"?"+rp.slice(1):"";const dim=$("#anDim").value;$("#anDimLbl").textContent=dim.replace("_"," ");
+    const [s,ts,br]=await Promise.all([
+      api("/v1/admin/analytics/summary"+q),
+      api("/v1/admin/analytics/timeseries?bucket=day"+rp),
+      api("/v1/admin/analytics/breakdown?dimension="+dim+rp)]);
+    $("#anKpis").innerHTML=[["Player loads",s.loads],["Bid requests",s.requests],["Win rate",pct(s.winRate)],["Fill rate",pct(s.fillRate)],["eCPM raw",money(s.avgCpmRaw)],["eCPM biased",money(s.avgCpmBiased)]].map(([l,v])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v??"—"}</div></div>`).join("");
+    const steps=[["Load",s.loads],["Bid request",s.requests],["Win",s.wins],["Impression",s.impressions],["Complete",s.completes]];const fmax=Math.max(1,...steps.map(x=>x[1]));
+    $("#anFunnel").innerHTML=steps.map(([l,v])=>`<div><div class="flabel"><span>${l}</span><span>${v}</span></div><div class="bar"><i style="width:${(v/fmax*100).toFixed(1)}%"></i></div></div>`).join("");
+    const wins={};ts.filter(r=>r.event==="auction_win").forEach(r=>wins[r.ts.slice(0,10)]=r.count);const dys=Object.keys(wins).sort();const smax=Math.max(1,...dys.map(x=>wins[x]));
+    $("#anSpark").innerHTML=dys.map(x=>`<i style="height:${(wins[x]/smax*100).toFixed(0)}%" title="${x}: ${wins[x]}"></i>`).join("")||'<span class="muted">no data</span>';
+    $("#anSparkLbl").textContent=dys.length?`${dys[0]} → ${dys[dys.length-1]}`:"";
+    $("#anBreak").innerHTML=br.length?`<table><thead><tr><th>${esc(dim)}</th><th>Loads</th><th>Requests</th><th>Wins</th><th>Imps</th><th>Fill</th><th>eCPM raw</th><th>eCPM biased</th></tr></thead><tbody>`+
+      br.map(r=>`<tr><td><b>${esc(r.key)}</b></td><td>${r.loads}</td><td>${r.requests}</td><td>${r.wins}</td><td>${r.impressions}</td><td>${pct(r.fillRate)}</td><td>${money(r.avgCpmRaw)}</td><td>${money(r.avgCpmBiased)}</td></tr>`).join("")+`</tbody></table>`
+      :'<div class="empty">No data yet — generate demo data on a placement, or wait for live traffic.</div>';
+  };
+  $("#anRef").onclick=load;$("#anDim").onchange=load;$("#anR").onchange=load;
+  await load();
+}
 
 // ---- demand catalog (top-level) ----
 async function renderDemandCatalog(m){const cat=await api("/v1/admin/demand-partners");

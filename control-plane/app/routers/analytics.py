@@ -54,6 +54,18 @@ async def timeseries(
     )
 
 
+@router.get("/breakdown")
+async def breakdown(
+    session: AsyncSession = SessionDep,
+    dimension: str = Query(default="publisher"),
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None),
+) -> list[dict[str, Any]]:
+    if dimension not in ("publisher", "site", "ad_unit", "placement", "format"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid dimension")
+    return await analytics.breakdown(session, dimension=dimension, ts_from=from_, ts_to=to)
+
+
 @router.get("/key-values")
 async def key_values(
     session: AsyncSession = SessionDep,
