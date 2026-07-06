@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # artifact currently lives under shashwatsilverpush; override if it moves.
     engine_repo: str = "shashwatsilverpush/bidding-player"
     default_engine_version: str = "v2.5.2"
+    # Local-dev override: when set (e.g. http://localhost:8080), generated tags
+    # load engine/player.js + prebid/prebid.js from THIS base instead of jsDelivr,
+    # so you can test unreleased engine changes locally before cutting a release.
+    engine_base_url: str | None = None
     default_cache_url: str = "https://prebid.adnxs.com/pbc/v1/cache"
     default_div_id: str = "bp-video-slot"
 

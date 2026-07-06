@@ -30,7 +30,12 @@ def build_embed_tag(cfg: RuntimeConfig, settings: Settings, placement_id: str) -
     version = settings.default_engine_version
     is_auto = cfg.engineChannel == "auto"
 
-    if is_auto:
+    if settings.engine_base_url:
+        # Local-dev: pin to the local engine files (no loader/channel indirection).
+        base = settings.engine_base_url.rstrip("/")
+        src = f"{base}/engine/player.js"
+        prebid_out = f"{base}/prebid/prebid.js"
+    elif is_auto:
         src = _jsdelivr(repo, "2", "engine/loader.js")
         # Rewrite the prebid path to carry the loader's __VER__ token.
         prebid_out = _prebid_with_token(cfg.prebidUrl, repo)
