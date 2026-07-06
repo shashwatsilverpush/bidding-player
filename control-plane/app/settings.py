@@ -67,9 +67,13 @@ class Settings(BaseSettings):
 
     def beacon_url(self, request_base: str | None = None) -> str:
         """Collector URL baked into generated tags. Prefer an explicit
-        PUBLIC_BASE_URL; else the per-request host; else localhost."""
-        base = self.public_base_url or request_base or "http://localhost:8000"
-        return f"{base.rstrip('/')}/e"
+        PUBLIC_BASE_URL; else the per-request host; else localhost. Forces a
+        scheme so a scheme-less PUBLIC_BASE_URL (e.g. 'host.example') still yields
+        an absolute https URL — a bare host would break on an HTTPS publisher page."""
+        base = (self.public_base_url or request_base or "http://localhost:8000").strip().rstrip("/")
+        if not base.startswith(("http://", "https://")):
+            base = "https://" + base
+        return f"{base}/e"
 
     @property
     def admin_cors_list(self) -> list[str]:
