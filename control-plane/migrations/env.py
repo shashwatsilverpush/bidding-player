@@ -19,8 +19,12 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Inject the real (async) DB URL from settings.
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# Inject the real (async) DB URL from settings, stripping libpq-only params
+# (sslmode/channel_binding) asyncpg rejects; SSL is passed via connect_args.
+from app.db import async_engine_args  # noqa: E402
+
+_db_url, _db_connect_args = async_engine_args(get_settings().database_url)
+config.set_main_option("sqlalchemy.url", _db_url)
 
 target_metadata = Base.metadata
 
@@ -48,6 +52,7 @@ async def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=NullPool,
+        connect_args=_db_connect_args,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
