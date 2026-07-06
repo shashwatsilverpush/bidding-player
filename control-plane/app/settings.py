@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,17 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+asyncpg://bp:bp@localhost:55432/control_plane"
+
+    @field_validator("database_url")
+    @classmethod
+    def _force_asyncpg_driver(cls, v: str) -> str:
+        """Managed Postgres (Shipyard, RDS, Neon, …) hands out ``postgres://`` /
+        ``postgresql://`` URLs, which SQLAlchemy maps to the sync psycopg2 driver.
+        This app is fully async, so coerce the scheme to the asyncpg driver."""
+        for prefix in ("postgresql+psycopg2://", "postgresql://", "postgres://"):
+            if v.startswith(prefix):
+                return "postgresql+asyncpg://" + v[len(prefix) :]
+        return v
 
     # Auth
     jwt_secret: str = "change-me"
