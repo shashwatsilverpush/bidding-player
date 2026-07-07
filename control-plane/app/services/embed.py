@@ -1,15 +1,16 @@
 """Generate the publisher `<script>` embed tag from stored config.
 
-This is a faithful server-side port of the engine repo's tag generator
-(`index.html::buildEngineFile`) so the emitted tag is byte-compatible with the
-engine's expected ``data-*`` attributes. The only difference is the source of the
-values: here they come from the database (placement config + enabled demand
-partners) instead of hand-typed form fields.
+The generator emits ONLY the thin "integrate-once" tag: the publisher pastes it
+once and never edits it again. It carries just ``data-config-url`` +
+``data-placement-id``; the engine fetches the live ``RuntimeConfig`` at load, so
+demand (DSP add/remove), floors, bias, timeout and the VAST tag are all
+backend-controlled and take effect on the next page load with no re-integration.
+
+(The engine still *reads* the legacy ``data-*`` snapshot attributes, so any static
+tag already deployed in the wild keeps working — but we no longer generate those.)
 """
 
 from __future__ import annotations
-
-import json
 
 from app.schemas.config import RuntimeConfig
 from app.settings import Settings
@@ -19,94 +20,41 @@ def _jsdelivr(repo: str, version: str, path: str) -> str:
     return f"https://cdn.jsdelivr.net/gh/{repo}@{version}/{path}"
 
 
-def build_embed_tag(cfg: RuntimeConfig, settings: Settings, placement_id: str) -> str:
-    """Return the `<script …></script>` string for a placement.
-
-    ``cfg.engineChannel`` == "auto" emits the auto-updating loader (engine version
-    resolved at runtime; ``data-prebid-url`` carries a ``__VER__`` token the loader
-    substitutes). Anything else pins the exact engine version.
-    """
+def _engine_src(cfg: RuntimeConfig, settings: Settings) -> str:
+    """Resolve the `<script src>`: local engine (dev override), the auto-updating
+    loader (``engineChannel == 'auto'``), or the pinned engine version."""
     repo = settings.engine_repo
-    version = settings.default_engine_version
-    is_auto = cfg.engineChannel == "auto"
-
     if settings.engine_base_url:
-        # Local-dev: pin to the local engine files (no loader/channel indirection).
-        base = settings.engine_base_url.rstrip("/")
-        src = f"{base}/engine/player.js"
-        prebid_out = f"{base}/prebid/prebid.js"
-    elif is_auto:
-        src = _jsdelivr(repo, "2", "engine/loader.js")
-        # Rewrite the prebid path to carry the loader's __VER__ token.
-        prebid_out = _prebid_with_token(cfg.prebidUrl, repo)
-    else:
-        src = _jsdelivr(repo, version, "engine/player.js")
-        prebid_out = cfg.prebidUrl
+        return f"{settings.engine_base_url.rstrip('/')}/engine/player.js"
+    if cfg.engineChannel == "auto":
+        return _jsdelivr(repo, "2", "engine/loader.js")
+    return _jsdelivr(repo, settings.default_engine_version, "engine/player.js")
 
-    # data-bidders mirrors the engine contract: [{bidder, params}]. Per-bidder
-    # floor is not an engine tag attribute (floors are global via data-floor-*).
-    bidders = [{"bidder": b.bidder, "params": b.params} for b in cfg.bidders]
-    bidders_json = json.dumps(bidders, separators=(",", ":"))
-    safe_json = bidders_json.replace("<", "\\u003c").replace("'", "&#39;")
 
-    is_outstream = cfg.placement == "outstream"
-    lines: list[str] = [
-        f'<script src="{_esc(src)}"',
+def _config_base(cfg: RuntimeConfig) -> str:
+    """Control-plane base for the runtime-config endpoint, derived from the beacon
+    URL (same host). ``beacon_url()`` returns ``<base>/e``; strip the ``/e``."""
+    b = cfg.beaconUrl or ""
+    return b[:-2] if b.endswith("/e") else b
+
+
+def build_embed_tag(cfg: RuntimeConfig, settings: Settings, placement_id: str) -> str:
+    """Return the thin, self-configuring `<script …></script>` for a placement.
+
+    Integrate once, never edit: the engine self-configures from the control plane
+    via ``data-config-url``/``data-placement-id``. ``engineChannel == 'auto'`` emits
+    the auto-updating loader; anything else pins the engine version — either way the
+    runtime config is fetched, not baked.
+    """
+    lines = [
+        f'<script src="{_esc(_engine_src(cfg, settings))}"',
         '        id="adtech-player-core"',
-        f"        data-bidders='{safe_json}'",
-        f'        data-tag="{_esc(cfg.adTag or "")}"',
-        f'        data-timeout="{cfg.timeout}"',
-        f'        data-bias="{cfg.bias}"',
-    ]
-    if cfg.floorMin is not None:
-        lines.append(f'        data-floor-min="{cfg.floorMin:.2f}"')
-    if cfg.floorMax is not None:
-        lines.append(f'        data-floor-max="{cfg.floorMax:.2f}"')
-    if is_outstream:
-        lines.append('        data-placement="outstream"')
-    else:
-        lines.append(f'        data-video="{_esc(cfg.video or "")}"')
-        if cfg.sticky:
-            lines.append('        data-sticky="true"')
-    lines += [
-        f'        data-autoplay="{_b(cfg.autoplay)}"',
-        f'        data-muted="{_b(cfg.muted)}"',
-        f'        data-fluid="{_b(cfg.fluid)}"',
-    ]
-    if not is_outstream:
-        lines.append(f'        data-loop="{_b(cfg.loop)}"')
-    lines += [
-        f'        data-preload="{cfg.preload}"',
-        f'        data-vpaid="{cfg.vpaid}"',
-        f'        data-div-id="{_esc(cfg.divId)}"',
-        f'        data-cache="{_esc(cfg.cacheUrl)}"',
-        f'        data-prebid-url="{_esc(prebid_out)}"',
-        # Telemetry: lets the engine beacon lifecycle events to the collector.
-        f'        data-account="{_esc(cfg.account)}"',
+        f'        data-config-url="{_esc(_config_base(cfg) + "/v1/config")}"',
         f'        data-placement-id="{_esc(placement_id)}"',
-        f'        data-beacon-url="{_esc(cfg.beaconUrl)}"',
-        f'        data-sample-rate="{cfg.sampleRate}"',
         "        async></script>",
     ]
     return "\n".join(lines)
 
 
-def _prebid_with_token(prebid_url: str, repo: str) -> str:
-    marker = f"{repo.split('/')[-1]}@"
-    idx = prebid_url.find(marker)
-    if idx == -1:
-        return prebid_url
-    after = prebid_url[idx + len(marker) :]
-    slash = after.find("/")
-    if slash == -1:
-        return prebid_url
-    path = after[slash + 1 :]
-    return _jsdelivr(repo, "__VER__", path)
-
-
 def _esc(s: str) -> str:
     return s.replace('"', "&quot;")
-
-
-def _b(v: bool) -> str:
-    return "true" if v else "false"

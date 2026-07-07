@@ -64,7 +64,16 @@
     account:     currentScript.getAttribute("data-account") || "",
     placementId: currentScript.getAttribute("data-placement-id") || "",
     beaconUrl:   currentScript.getAttribute("data-beacon-url") || "",
-    sampleRate:  (function (v) { return isNaN(v) ? 1 : v; })(parseFloat(currentScript.getAttribute("data-sample-rate")))
+    sampleRate:  (function (v) { return isNaN(v) ? 1 : v; })(parseFloat(currentScript.getAttribute("data-sample-rate"))),
+
+    // ─── Dynamic ("integrate-once") config ────────────────────────
+    // When data-config-url is present (alongside data-placement-id), the engine
+    // fetches RuntimeConfig from <config-url>/<placement-id> at boot and applies
+    // it OVER these attribute defaults — so demand (DSP add/remove), floors,
+    // bias, timeout and the VAST tag are backend-controlled and change with no
+    // tag edit on the publisher's side. Absent → the tag is fully static (every
+    // existing tag in the wild is unaffected).
+    configUrl:   currentScript.getAttribute("data-config-url") || ""
   };
 
   // Resolve the bidder list for this auction. New tags use `data-bidders`
@@ -105,7 +114,7 @@
   // the auction/render path; no-op unless the tag carries data-beacon-url +
   // data-account + data-placement-id. sendBeacon first (text/plain → no CORS
   // preflight), fetch keepalive fallback. Honours data-sample-rate.
-  var ENGINE_VERSION = "2.5.2";
+  var ENGINE_VERSION = "2.6.0";
   var TELE_ON = !!(cfg.beaconUrl && cfg.account && cfg.placementId);
   var SESSION_ID = (function () {
     try { return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10); }
@@ -740,18 +749,89 @@
     });
   }
 
+  // ─── Dynamic config resolution ──────────────────────────────────
+  // Fetch the placement's RuntimeConfig and apply it over the attribute
+  // defaults. A last-known-good copy is cached in localStorage so a control-
+  // plane blip can never blank the player. resolveConfig() ALWAYS resolves
+  // (never rejects); in static mode (no data-config-url) it resolves instantly.
+  var CFG_CACHE_KEY = "atp_cfg_" + (cfg.placementId || "default");
+  var CFG_TIMEOUT_MS = 1500;
+
+  function cfgCacheGet() {
+    try { var s = localStorage.getItem(CFG_CACHE_KEY); return s ? JSON.parse(s) : null; } catch (_) { return null; }
+  }
+  function cfgCacheSet(rc) {
+    try { localStorage.setItem(CFG_CACHE_KEY, JSON.stringify(rc)); } catch (_) {}
+  }
+
+  function applyRuntimeConfig(rc) {
+    if (!rc || typeof rc !== "object") return;
+    function has(k) { return rc[k] !== undefined && rc[k] !== null; }
+    if (has("placement"))  cfg.placement = String(rc.placement).toLowerCase();
+    if (has("timeout"))    cfg.timeout = parseInt(rc.timeout, 10) || cfg.timeout;
+    if (has("bias"))       { var b = parseFloat(rc.bias); if (!isNaN(b)) cfg.floorBias = b; }
+    if (has("floorMin"))   cfg.floorMin = (function (v) { return isNaN(v) ? null : v; })(parseFloat(rc.floorMin));
+    if (has("floorMax"))   cfg.floorMax = (function (v) { return isNaN(v) ? null : v; })(parseFloat(rc.floorMax));
+    if (has("adTag"))      cfg.adTagUrl = rc.adTag || cfg.adTagUrl;
+    if (has("video"))      cfg.videoUrl = rc.video || cfg.videoUrl;
+    if (has("sticky"))     cfg.sticky = !!rc.sticky;
+    if (has("autoplay"))   cfg.autoplay = !!rc.autoplay;
+    if (has("muted"))      cfg.muted = !!rc.muted;
+    if (has("fluid"))      cfg.fluid = !!rc.fluid;
+    if (has("loop"))       cfg.loop = !!rc.loop;
+    if (has("preload"))    cfg.preload = rc.preload || cfg.preload;
+    if (has("vpaid"))      cfg.vpaidMode = rc.vpaid || cfg.vpaidMode;
+    if (has("divId"))      cfg.divId = rc.divId || cfg.divId;
+    if (has("cacheUrl"))   cfg.cacheUrl = rc.cacheUrl || cfg.cacheUrl;
+    if (has("prebidUrl"))  cfg.prebidUrl = rc.prebidUrl || cfg.prebidUrl;
+    if (has("beaconUrl"))  cfg.beaconUrl = rc.beaconUrl || cfg.beaconUrl;
+    if (has("account"))    cfg.account = rc.account || cfg.account;
+    if (has("sampleRate")) { var s = parseFloat(rc.sampleRate); if (!isNaN(s)) cfg.sampleRate = s; }
+    if (Array.isArray(rc.bidders) && rc.bidders.length) {
+      cfg.bidders = rc.bidders.map(function (b) { return { bidder: b.bidder, params: b.params || {} }; });
+    }
+    // Telemetry gate depends on config-supplied fields; recompute after apply.
+    TELE_ON = !!(cfg.beaconUrl && cfg.account && cfg.placementId);
+  }
+
+  function resolveConfig() {
+    if (!cfg.configUrl || !cfg.placementId) return Promise.resolve();  // static tag
+    var url = cfg.configUrl.replace(/\/+$/, "") + "/" + encodeURIComponent(cfg.placementId);
+    if (typeof fetch !== "function") { applyRuntimeConfig(cfgCacheGet()); return Promise.resolve(); }
+    var ctrl = ("AbortController" in window) ? new AbortController() : null;
+    var to = setTimeout(function () { if (ctrl) try { ctrl.abort(); } catch (_) {} }, CFG_TIMEOUT_MS);
+    var opts = { credentials: "omit" };
+    if (ctrl) opts.signal = ctrl.signal;
+    return fetch(url, opts)
+      .then(function (r) { return r && r.ok ? r.json() : null; })
+      .then(function (rc) {
+        clearTimeout(to);
+        if (rc) { applyRuntimeConfig(rc); cfgCacheSet(rc); step("0.1", "Runtime config applied from control plane."); }
+        else { applyRuntimeConfig(cfgCacheGet()); warn("config fetch failed (non-OK); using cached/attribute defaults."); }
+      })
+      .catch(function () {
+        clearTimeout(to);
+        applyRuntimeConfig(cfgCacheGet());
+        warn("config fetch error/timeout; using cached/attribute defaults.");
+      });
+  }
+
   ready(function () {
-    loadCss("https://cdn.jsdelivr.net/npm/video.js@8/dist/video-js.min.css");
-    ensureMount();
-    beacon("player_load", {
-      placement: cfg.placement,
-      referrer: (document && document.referrer) || "",
-      viewport: (window.innerWidth || 0) + "x" + (window.innerHeight || 0)
+    // Dynamic mode resolves config BEFORE mount/deps/auction so bidders, floors,
+    // bias, VAST and prebidUrl reflect the backend. Static mode resolves instantly.
+    resolveConfig().then(function () {
+      loadCss("https://cdn.jsdelivr.net/npm/video.js@8/dist/video-js.min.css");
+      ensureMount();
+      beacon("player_load", {
+        placement: cfg.placement,
+        referrer: (document && document.referrer) || "",
+        viewport: (window.innerWidth || 0) + "x" + (window.innerHeight || 0)
+      });
+      Promise.all([
+        loadScript("https://cdn.jsdelivr.net/npm/video.js@8/dist/video.min.js"),
+        loadScript("https://imasdk.googleapis.com/js/sdkloader/ima3.js"),
+        loadScript(cfg.prebidUrl)
+      ]).then(runAuction).catch(function (e) { warn("Dependency boot break: " + e.message); render(stitchTag(cfg.adTagUrl, noBidTargeting())); });
     });
-    Promise.all([
-      loadScript("https://cdn.jsdelivr.net/npm/video.js@8/dist/video.min.js"),
-      loadScript("https://imasdk.googleapis.com/js/sdkloader/ima3.js"),
-      loadScript(cfg.prebidUrl)
-    ]).then(runAuction).catch(function (e) { warn("Dependency boot break: " + e.message); render(stitchTag(cfg.adTagUrl, noBidTargeting())); });
   });
 })();

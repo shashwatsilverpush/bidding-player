@@ -21,7 +21,7 @@
   var MANIFEST = CDN + "@main/engine/channel.json";
   // Known-good engine used if the manifest can't be reached. Bump on release
   // only when the engine itself changes in a way the loader must floor to.
-  var FALLBACK = "2.5.2";
+  var FALLBACK = "2.6.0";
   var TIMEOUT_MS = 1500;
 
   var me = document.currentScript || document.getElementById("adtech-player-core");

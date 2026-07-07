@@ -8,3 +8,14 @@ node_modules/
 Bidding-Player_Gap-Analysis.docx
 Bidding-Player_Roadmap-and-Spec.docx
 CONTROL-PLANE_BUILD-PROMPT.md
+
+# Working artifacts from build/planning sessions — keep local, never push.
+# Only core code (engine/, control-plane app + maintained test suite, migrations)
+# is meant for GitHub.
+/docs/                 # session spec/design scratch (e.g. dynamic-tag-spec.md)
+SOP.md
+*-spec.md
+*.scratch.*
+scratch/
+tmp/
+DEP-*.log

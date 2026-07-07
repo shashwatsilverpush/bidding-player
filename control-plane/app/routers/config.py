@@ -30,6 +30,8 @@ async def get_config(
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail={"error": "placement_not_found", "id": placement_id}
         ) from exc
-    # Edge-cacheable; the loader/engine fetch this with a short timeout + fallback.
-    response.headers["Cache-Control"] = "public, max-age=300"
+    # Edge-cacheable; the engine fetches this with a short timeout + localStorage
+    # fallback. stale-while-revalidate lets an edge serve slightly-stale config
+    # while it refreshes, so a control-plane blip never blocks the player.
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=86400"
     return cfg
