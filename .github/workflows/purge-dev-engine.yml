@@ -1,0 +1,45 @@
+name: Purge @dev engine (jsDelivr)
+
+# Staging loads the engine from the `@dev` jsDelivr ref (set ENGINE_BASE_URL to
+# https://cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@dev on the staging
+# app). jsDelivr caches `@dev` for ~12h, so without this a push to dev wouldn't be
+# visible on staging until the cache expired — which is exactly how the "stale
+# engine" surprise happens. This purges the engine/prebid bytes on every dev push
+# so staging always serves the just-pushed code. Production is unaffected (it uses
+# the stable channel, not @dev).
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "engine/**"
+      - "prebid/**"
+
+permissions:
+  contents: read
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Purge jsDelivr @dev cache for engine assets
+        run: |
+          REPO="shashwatsilverpush/bidding-player"
+          FILES=(
+            "engine/player.js"
+            "engine/loader.js"
+            "engine/channel.json"
+            "prebid/prebid.js"
+          )
+          fail=0
+          for f in "${FILES[@]}"; do
+            url="https://purge.jsdelivr.net/gh/${REPO}@dev/${f}"
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "000")
+            echo "purge ${f} -> HTTP ${code}"
+            # jsDelivr returns 200 on success; don't hard-fail the build on a
+            # transient purge hiccup, just surface it.
+            if [ "$code" != "200" ]; then
+              echo "::warning::purge of ${f} returned HTTP ${code}"
+            fi
+          done
+          echo "Done. Staging (@dev) will serve the freshly pushed engine within seconds."
