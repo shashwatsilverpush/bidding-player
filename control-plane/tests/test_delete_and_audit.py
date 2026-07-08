@@ -129,11 +129,13 @@ async def test_audit_records_create_update_delete_restore(
     assert rows[0]["before"]["name"] == "Acme Media"
     assert rows[0]["after"]["name"] == "Renamed"
 
-    # soft delete is logged as a delete (not a generic update)
+    # soft delete is logged as a delete (not a generic update), and carries the
+    # human label captured at write time (readable even though the row is now gone)
     await client.delete(
         f"/v1/admin/publishers/{pub_id}", headers=auth_headers, params={"cascade": "true"}
     )
-    assert await _audit(client, auth_headers, entity_id=pub_id, action="delete")
+    dels = await _audit(client, auth_headers, entity_id=pub_id, action="delete")
+    assert dels and dels[0]["entity_label"] == "Renamed"
 
     # restore
     await client.post(f"/v1/admin/publishers/{pub_id}/restore", headers=auth_headers)
@@ -147,6 +149,7 @@ async def test_audit_captures_actor_and_device_signals(
     rows = await _audit(client, auth_headers, entity_id=ids["publisher_id"], action="create")
     row = rows[0]
     assert row["actor"] == "admin"
+    assert row["entity_label"] == "Acme Media"  # name, not just the opaque id
     assert row["method"] == "POST"
     assert row["path"] == "/v1/admin/publishers"
     assert row["user_agent"]  # httpx sends a default UA

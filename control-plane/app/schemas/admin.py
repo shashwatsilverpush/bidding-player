@@ -178,6 +178,7 @@ class AuditLogOut(BaseModel):
     action: str
     entity_type: str
     entity_id: str
+    entity_label: str | None
     actor: str | None
     ip: str | None
     user_agent: str | None

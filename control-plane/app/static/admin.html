@@ -442,9 +442,9 @@ async function renderHistory(m){
     if(a)qs.push("action="+encodeURIComponent(a));if(e)qs.push("entity_type="+encodeURIComponent(e));
     const rows=await api("/v1/admin/audit-log?"+qs.join("&"));
     if(!rows.length){$("#hBody").innerHTML='<div class="empty">No changes recorded for this filter.</div>';return;}
-    $("#hBody").innerHTML=`<table><thead><tr><th>Time</th><th>Action</th><th>Entity</th><th>ID</th><th>Actor</th><th>IP</th><th>Agent</th><th>Details</th></tr></thead><tbody>`+
+    $("#hBody").innerHTML=`<table><thead><tr><th>Time</th><th>Action</th><th>Entity</th><th>Name</th><th>Actor</th><th>IP</th><th>Agent</th><th>Details</th></tr></thead><tbody>`+
       rows.map(r=>`<tr><td>${esc(fmtt(r.created_at))}</td><td><span class="pill ${pillCls(r.action)}">${esc(r.action)}</span></td>
-        <td>${esc(r.entity_type)}</td><td class="id">${esc(r.entity_id)}</td><td>${esc(r.actor||"—")}</td>
+        <td>${esc(r.entity_type)}</td><td title="${esc(r.entity_id)}">${esc(r.entity_label||r.entity_id)}</td><td>${esc(r.actor||"—")}</td>
         <td class="id">${esc(r.ip||"—")}</td><td class="muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.user_agent||"")}">${esc(r.user_agent||"—")}</td>
         <td class="muted" style="font-size:12px">${detail(r)}</td></tr>`).join("")+`</tbody></table>`;
   };

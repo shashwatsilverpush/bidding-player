@@ -102,9 +102,10 @@ Properties/placements and a **History** tab over the audit log.
 
 `GET /v1/admin/audit-log` (admin auth) returns entries newest-first with filters
 `entity_type`/`entity_id`/`actor`/`action`/`since`/`until` + `limit`/`offset`. Each row
-is Action / entity id / Time / actor + device signals (`ip`, `user_agent`, `method`,
-`path`, `request_id`) + `before`/`after`/`changed_fields`. Surfaced in the dashboard's
-**History** tab.
+is Action / entity id + `entity_label` (human name captured at write time — readable
+even for soft-deleted rows) / Time / actor + device signals (`ip`, `user_agent`,
+`method`, `path`, `request_id`) + `before`/`after`/`changed_fields`. Surfaced in the
+dashboard's **History** tab (shows the name; id on hover).
 
 Capture is automatic in `app/services/audit.py` via SQLAlchemy session listeners —
 **no router writes to it directly**:

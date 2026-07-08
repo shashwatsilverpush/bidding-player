@@ -26,6 +26,9 @@ class AuditLog(Base):
     # tenant/demand table name, e.g. "publisher", "placement", "demand_partner"
     entity_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     entity_id: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    # human-friendly label captured at write time (name/domain/path/label) so the log
+    # is readable even for soft-deleted rows; the opaque id still lives in entity_id.
+    entity_label: Mapped[str | None] = mapped_column(String(300), nullable=True)
     # the acting admin subject (single admin today; real usernames once multi-user)
     actor: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     # request/device signals — hints, not identity (see CLAUDE.md)

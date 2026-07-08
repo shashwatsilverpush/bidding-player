@@ -104,12 +104,33 @@ def _base_ctx() -> dict[str, Any]:
     }
 
 
+# The natural display name per table (falls back to the id when absent).
+_LABEL_FIELDS = {
+    "account": "name",
+    "publisher": "name",
+    "site": "domain",
+    "ad_unit": "gam_ad_unit_path",
+    "placement": "name",
+    "demand_partner": "label",
+    # publisher_demand has no natural name -> label stays null (id shown)
+}
+
+
+def _label(obj: Any) -> str | None:
+    field = _LABEL_FIELDS.get(obj.__tablename__)
+    if not field:
+        return None
+    val = getattr(obj, field, None)
+    return str(val) if val is not None else None
+
+
 def _row(obj: Any, action: str, base: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": gen_id("aud"),
         "action": action,
         "entity_type": obj.__tablename__,
         "entity_id": getattr(obj, "id", None),
+        "entity_label": _label(obj),
         "before": None,
         "after": None,
         "changed_fields": None,
