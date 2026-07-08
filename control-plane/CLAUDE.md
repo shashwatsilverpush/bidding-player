@@ -44,7 +44,7 @@ This backend delivers:
 - **Lint/type:** `ruff` (lint+format) and `mypy` must stay green. Run
   `ruff check . && mypy app && pytest` before committing.
 - IDs are opaque strings: `<prefix>_<random>` via `app.db.gen_id` (`acc_`, `pub_`,
-  `site_`, `au_`, `plc_`, `dp_`, `pd_`, `evt_`).
+  `site_`, `au_`, `plc_`, `dp_`, `pd_`, `evt_`, `aud_` audit rows, `req_` request ids).
 
 ## 3. Layout
 
@@ -54,11 +54,11 @@ app/
   settings.py        # pydantic-settings (env)
   db.py              # async engine/session, Base, gen_id(), utcnow()
   static/admin.html  # single-page admin dashboard (6 tabs)
-  models/            # SQLAlchemy: tenancy.py, demand.py, events.py
+  models/            # SQLAlchemy: tenancy.py, demand.py, events.py, audit.py
   schemas/           # Pydantic: config.py (PlacementConfig/RuntimeConfig), admin.py, events.py
-  auth/              # security.py (hash/jwt), deps.py (require_admin)
-  routers/           # auth, admin_publishers, admin_demand, tags, analytics, config, collector, stats
-  services/          # config_assembly, ingest, embed (buildEngineFile port), analytics, demo, seed
+  auth/              # security.py (hash/jwt), deps.py (require_admin + audit context)
+  routers/           # auth, admin_publishers, admin_demand, admin_audit, tags, analytics, config, collector, stats
+  services/          # config_assembly, ingest, embed (buildEngineFile port), analytics, demo, seed, audit
 migrations/          # alembic (async env.py); versions/ holds schema + seed
 tests/               # pytest + httpx.AsyncClient; conftest bootstraps schema+seed
 docs/                # event-schema.md, engine-instrumentation.md (Workstream B)
@@ -71,9 +71,20 @@ docs/                # event-schema.md, engine-instrumentation.md (Workstream B)
 (per-publisher enablement + params + floor, `UNIQUE(publisher_id, demand_partner_id)`).
 `Event` (append-only telemetry; flat + typed + `props JSONB`; promoted win cols
 `cpm_raw`/`cpm_biased`/`hb_pb`/`bidder`).
+`AuditLog` (append-only admin change history — see §5b).
 
 Bootstrap account id is fixed: `acc_root` (`app/services/seed.py`). Publisher
 creation defaults to it.
+
+**Deletes are soft** for the tenant chain: `Publisher/Site/AdUnit/Placement` carry a
+nullable `deleted_at`. Delete = stamp `deleted_at`; lists, `_get_or_404`, and config
+assembly all filter `deleted_at IS NULL` (a deleted placement or any deleted ancestor
+stops serving config, even for admin tag generation). Deleting a parent with live
+children needs `?cascade=true` (else 409); cascade soft-deletes the subtree in one
+transaction. `POST .../{id}/restore` clears `deleted_at` (children stay deleted).
+`DemandPartner`/`PublisherDemand` are still hard-deleted; deleting a `DemandPartner`
+still enabled anywhere → 409. Dashboard exposes delete (with cascade confirm) on
+Properties/placements and a **History** tab over the audit log.
 
 ## 5. The two runtime contracts (keep stable under `/v1/`)
 
@@ -86,6 +97,28 @@ creation defaults to it.
   envelope (`app/schemas/events.py`), drops unknown accounts / invalid events
   silently, dedups on `eventId`, enriches (ts_server, UA, ip_country stub),
   applies the consent rule, promotes win CPMs. Tolerates `text/plain` bodies.
+
+## 5b. Admin change history (audit log)
+
+`GET /v1/admin/audit-log` (admin auth) returns entries newest-first with filters
+`entity_type`/`entity_id`/`actor`/`action`/`since`/`until` + `limit`/`offset`. Each row
+is Action / entity id / Time / actor + device signals (`ip`, `user_agent`, `method`,
+`path`, `request_id`) + `before`/`after`/`changed_fields`. Surfaced in the dashboard's
+**History** tab.
+
+Capture is automatic in `app/services/audit.py` via SQLAlchemy session listeners —
+**no router writes to it directly**:
+- `before_flush` records updates + deletes (attribute *history* is only reliable
+  here); `after_flush` records inserts (PKs assigned) and writes the whole batch with
+  one core `INSERT` on the open transaction. `before_commit` is **not** usable — it
+  fires *before* the commit's flush.
+- Only `_AUDITED_TABLES` (tenant chain + demand) are tracked; `Event` and `audit_log`
+  are excluded (the latter would loop).
+- A soft delete (UPDATE of `deleted_at`) is logged as `delete`/`restore`, not `update`.
+- Actor + device signals come from a `ContextVar` set in `require_admin`, which is
+  **`async`** on purpose: a sync dep runs in a threadpool whose ContextVar writes
+  wouldn't reach the flush. Single admin today, so `actor` is usually `"admin"`; `ip`
+  (X-Forwarded-For first hop, else socket peer) is a device hint, not identity.
 
 ## 6. Critical domain facts (don't regress)
 

@@ -67,6 +67,7 @@
   <button data-top="publishers" class="active">Publishers</button>
   <button data-top="demand">Demand Partners</button>
   <button data-top="analytics">Analytics</button>
+  <button data-top="history">History</button>
 </nav>
 <div class="crumbs hide" id="crumbs"></div>
 
@@ -109,6 +110,19 @@ function openForm(opts){
     try{await opts.onSubmit(v);close();}catch(e){toast(e.message,"err");}
   };
 }
+// Soft-delete confirm. For parents pass cascadeLabel -> a checkbox that adds
+// ?cascade=true; leaving it unchecked and hitting a 409 keeps the modal open with
+// the server's "pass ?cascade=true" message, so the user can tick it and retry.
+function askDelete({kind,path,name,cascadeLabel,after}){
+  openForm({title:`Delete ${esc(kind)}?`,submitLabel:"Delete",
+    note:`“${esc(name)}” will be removed. This is a soft delete — restore it from the History tab.`,
+    fields:cascadeLabel?[{key:"casc",type:"checkbox",label:cascadeLabel}]:[],
+    onSubmit:async v=>{
+      const q=(cascadeLabel&&v.casc)?"?cascade=true":"";
+      await api(path+q,{method:"DELETE"});
+      toast(kind+" deleted");if(after)await after();
+    }});
+}
 async function api(path,{method="GET",body=null,auth=true}={}){const h={"Content-Type":"application/json"};if(auth&&TOKEN)h.Authorization="Bearer "+TOKEN;
   const r=await fetch(path,{method,headers:h,body:body?JSON.stringify(body):null});if(r.status===401){logout();throw new Error("Session expired");}
   const t=await r.text();const d=t?JSON.parse(t):null;if(!r.ok){const e=d&&d.detail;throw new Error(typeof e==="string"?e:JSON.stringify(e||d));}return d;}
@@ -135,6 +149,7 @@ function crumb(parts){$("#crumbs").classList.remove("hide");
 async function render(){setNav();const m=$("#main");
   if(S.top==="demand"){crumb([{t:"Demand Partners"}]);return renderDemandCatalog(m);}
   if(S.top==="analytics"){crumb([{t:"Analytics"}]);return renderAnalyticsSection(m);}
+  if(S.top==="history"){crumb([{t:"History"}]);return renderHistory(m);}
   if(!S.pub){crumb([{t:"Publishers"}]);return renderPublishers(m);}
   if(S.plc) return renderPlacement(m);
   if(S.au) return renderAdUnit(m);
@@ -157,9 +172,11 @@ async function renderPublishers(m){const pubs=await api("/v1/admin/publishers");
 // ---- publisher detail ----
 async function renderPublisher(m){const p=S.pub;
   crumb([{t:"Publishers",go:()=>go({pub:null})},{t:p.name}]);
-  m.innerHTML=`<div class="card"><h2>${esc(p.name)}</h2>
+  m.innerHTML=`<div class="card"><div class="hdr"><h2>${esc(p.name)}</h2><button class="btn small danger" id="pubDel" style="margin:0">Delete publisher</button></div>
     <div class="subtabs">${["properties","demand","overview"].map(s=>`<button data-s="${s}" class="${S.sub===s?'active':''}">${s[0].toUpperCase()+s.slice(1)}</button>`).join("")}</div>
     <div id="sub"></div></div>`;
+  $("#pubDel").onclick=()=>askDelete({kind:"publisher",path:`/v1/admin/publishers/${p.id}`,name:p.name,
+    cascadeLabel:"Also delete all sites, ad units & placements",after:()=>go({pub:null})});
   m.querySelectorAll("[data-s]").forEach(b=>b.onclick=()=>go({sub:b.dataset.s,site:null,au:null,plc:null}));
   if(S.sub==="properties")await subProperties($("#sub"));
   else if(S.sub==="demand")await subDemand($("#sub"));
@@ -177,8 +194,12 @@ async function subOverview(el){const sites=await api(`/v1/admin/publishers/${S.p
 async function subProperties(el){const sites=await api(`/v1/admin/publishers/${S.pub.id}/sites`);
   el.innerHTML=`<div class="hdr"><span class="muted">Sites</span><button class="btn small" id="sNew">+ New site</button></div><ul class="list" id="sl"></ul>`;
   const ul=$("#sl");if(!sites.length)ul.innerHTML='<div class="empty">No sites yet — click “+ New site”.</div>';
-  sites.forEach(s=>{const li=document.createElement("li");li.innerHTML=`<span>🌐 ${esc(s.domain)}</span><span class="id">${s.id} ›</span>`;
-    li.onclick=()=>go({site:s,au:null,plc:null});ul.appendChild(li);});
+  sites.forEach(s=>{const li=document.createElement("li");
+    li.innerHTML=`<span>🌐 ${esc(s.domain)}</span><span><button class="btn small danger" data-del style="margin:0">Delete</button> <span class="id">${s.id} ›</span></span>`;
+    li.onclick=()=>go({site:s,au:null,plc:null});
+    li.querySelector("[data-del]").onclick=e=>{e.stopPropagation();askDelete({kind:"site",path:`/v1/admin/sites/${s.id}`,name:s.domain,
+      cascadeLabel:"Also delete its ad units & placements",after:()=>subProperties(el)});};
+    ul.appendChild(li);});
   $("#sNew").onclick=()=>openForm({title:"New site",submitLabel:"Add site",
     fields:[{key:"domain",label:"Domain",placeholder:"acme.example"},{key:"bundle",label:"App bundle (optional)"}],
     onSubmit:async v=>{if(!v.domain.trim())throw new Error("Domain required");
@@ -188,8 +209,12 @@ async function renderSite(m){crumb([{t:"Publishers",go:()=>go({pub:null})},{t:S.
   const aus=await api(`/v1/admin/sites/${S.site.id}/ad-units`);
   m.innerHTML=`<div class="card"><div class="hdr"><h2>Ad units · ${esc(S.site.domain)}</h2><button class="btn small" id="aNew">+ New ad unit</button></div><ul class="list" id="al"></ul></div>`;
   const ul=$("#al");if(!aus.length)ul.innerHTML='<div class="empty">No ad units yet — click “+ New ad unit”.</div>';
-  aus.forEach(a=>{const li=document.createElement("li");li.innerHTML=`<span>📐 ${esc(a.gam_ad_unit_path)} <span class="pill">${a.format}</span></span><span class="id">${a.id} ›</span>`;
-    li.onclick=()=>go({au:a,plc:null});ul.appendChild(li);});
+  aus.forEach(a=>{const li=document.createElement("li");
+    li.innerHTML=`<span>📐 ${esc(a.gam_ad_unit_path)} <span class="pill">${a.format}</span></span><span><button class="btn small danger" data-del style="margin:0">Delete</button> <span class="id">${a.id} ›</span></span>`;
+    li.onclick=()=>go({au:a,plc:null});
+    li.querySelector("[data-del]").onclick=e=>{e.stopPropagation();askDelete({kind:"ad unit",path:`/v1/admin/ad-units/${a.id}`,name:a.gam_ad_unit_path,
+      cascadeLabel:"Also delete its placements",after:()=>renderSite(m)});};
+    ul.appendChild(li);});
   $("#aNew").onclick=()=>openForm({title:"New ad unit",submitLabel:"Add ad unit",
     fields:[{key:"path",label:"GAM ad unit path",placeholder:"/21775744923/acme/video"},
       {key:"format",label:"Format",type:"select",value:"video",options:[{value:"video",label:"video"},{value:"banner",label:"banner"}]}],
@@ -203,8 +228,10 @@ async function renderAdUnit(m){crumb([{t:"Publishers",go:()=>go({pub:null})},{t:
   m.innerHTML=`<div class="card"><div class="hdr"><h2>Placements · ${esc(S.au.gam_ad_unit_path)}</h2><button class="btn small" id="cNew">+ New placement</button></div><ul class="list" id="ql"></ul></div>`;
   const ul=$("#ql");if(!plcs.length)ul.innerHTML='<div class="empty">No placements yet — click “+ New placement”.</div>';
   plcs.forEach(p=>{const st=readiness(p,demandOn);const li=document.createElement("li");
-    li.innerHTML=`<span>▶ ${esc(p.name)} <span class="pill">${p.config.placement}</span></span><span><span class="pill ${st.cls}">${st.label}</span> <span class="id">›</span></span>`;
-    li.onclick=()=>go({plc:p,plcTab:"prebid"});ul.appendChild(li);});
+    li.innerHTML=`<span>▶ ${esc(p.name)} <span class="pill">${p.config.placement}</span></span><span><span class="pill ${st.cls}">${st.label}</span> <button class="btn small danger" data-del style="margin:0">Delete</button> <span class="id">›</span></span>`;
+    li.onclick=()=>go({plc:p,plcTab:"prebid"});
+    li.querySelector("[data-del]").onclick=e=>{e.stopPropagation();askDelete({kind:"placement",path:`/v1/admin/placements/${p.id}`,name:p.name,after:()=>renderAdUnit(m)});};
+    ul.appendChild(li);});
   $("#cNew").onclick=()=>openForm({title:"New placement",submitLabel:"Create",
     fields:[{key:"name",label:"Name",placeholder:"Homepage instream"},
       {key:"type",label:"Type",type:"select",value:"instream",options:[{value:"instream",label:"instream"},{value:"outstream",label:"outstream"}]},
@@ -393,12 +420,45 @@ async function renderAnalyticsSection(m){
   await load();
 }
 
+// ---- change history (audit log) ----
+async function renderHistory(m){
+  m.innerHTML=`<div class="card"><div class="hdr"><h2>Change history</h2>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+      <div><label>Action</label><select id="hAct"><option value="">all</option><option value="create">create</option><option value="update">update</option><option value="delete">delete</option><option value="restore">restore</option></select></div>
+      <div><label>Entity</label><select id="hEnt"><option value="">all</option><option value="publisher">publisher</option><option value="site">site</option><option value="ad_unit">ad_unit</option><option value="placement">placement</option><option value="demand_partner">demand_partner</option><option value="publisher_demand">publisher_demand</option></select></div>
+      <button class="ghost small" id="hRef" style="margin:0">Refresh</button></div></div>
+    <p class="muted" style="margin:-6px 0 12px">Every create / update / delete / restore on publishers, sites, ad units, placements and demand. <b>IP</b> and <b>agent</b> are device hints, not identity (single admin login today).</p>
+    <div id="hBody"></div></div>`;
+  const fmtt=t=>{try{return new Date(t).toLocaleString();}catch(e){return t;}};
+  const fmtv=v=>v==null?"∅":(typeof v==="object"?JSON.stringify(v):String(v));
+  const pillCls=a=>({create:"on",update:"",delete:"bad",restore:"warn"}[a]||"");
+  const detail=r=>{
+    if(r.action==="update"&&r.changed_fields&&r.changed_fields.length)
+      return r.changed_fields.map(f=>`<b>${esc(f)}</b>: ${esc(fmtv(r.before&&r.before[f]))} → ${esc(fmtv(r.after&&r.after[f]))}`).join("<br>");
+    return `<span class="muted">${esc(r.action)}d</span>`;
+  };
+  const load=async()=>{
+    const qs=["limit=200"];const a=$("#hAct").value,e=$("#hEnt").value;
+    if(a)qs.push("action="+encodeURIComponent(a));if(e)qs.push("entity_type="+encodeURIComponent(e));
+    const rows=await api("/v1/admin/audit-log?"+qs.join("&"));
+    if(!rows.length){$("#hBody").innerHTML='<div class="empty">No changes recorded for this filter.</div>';return;}
+    $("#hBody").innerHTML=`<table><thead><tr><th>Time</th><th>Action</th><th>Entity</th><th>ID</th><th>Actor</th><th>IP</th><th>Agent</th><th>Details</th></tr></thead><tbody>`+
+      rows.map(r=>`<tr><td>${esc(fmtt(r.created_at))}</td><td><span class="pill ${pillCls(r.action)}">${esc(r.action)}</span></td>
+        <td>${esc(r.entity_type)}</td><td class="id">${esc(r.entity_id)}</td><td>${esc(r.actor||"—")}</td>
+        <td class="id">${esc(r.ip||"—")}</td><td class="muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.user_agent||"")}">${esc(r.user_agent||"—")}</td>
+        <td class="muted" style="font-size:12px">${detail(r)}</td></tr>`).join("")+`</tbody></table>`;
+  };
+  $("#hRef").onclick=load;$("#hAct").onchange=load;$("#hEnt").onchange=load;
+  await load();
+}
+
 // ---- demand catalog (top-level) ----
 async function renderDemandCatalog(m){const cat=await api("/v1/admin/demand-partners");
   m.innerHTML=`<div class="card"><div class="hdr"><h2>Demand partner catalog</h2><button class="btn small" id="dNew">+ Add partner</button></div>
     <p class="muted">The SSPs available platform-wide. Enable them per publisher inside a publisher's <b>Demand</b> tab.</p>
-    <table><thead><tr><th>Code</th><th>Label</th><th>Adapter</th><th>Required params</th></tr></thead><tbody>
-    ${cat.map(d=>`<tr><td><code>${esc(d.code)}</code></td><td>${esc(d.label)}</td><td class="muted">${esc(d.adapter_module)}</td><td class="muted">${d.required_params.join(", ")}</td></tr>`).join("")}</tbody></table></div>`;
+    <table><thead><tr><th>Code</th><th>Label</th><th>Adapter</th><th>Required params</th><th></th></tr></thead><tbody>
+    ${cat.map(d=>`<tr><td><code>${esc(d.code)}</code></td><td>${esc(d.label)}</td><td class="muted">${esc(d.adapter_module)}</td><td class="muted">${d.required_params.join(", ")}</td><td style="text-align:right"><button class="btn small danger" data-del="${esc(d.id)}" data-code="${esc(d.code)}" style="margin:0">Delete</button></td></tr>`).join("")}</tbody></table></div>`;
+  m.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>askDelete({kind:"demand partner",path:`/v1/admin/demand-partners/${b.dataset.del}`,name:b.dataset.code,after:()=>renderDemandCatalog(m)}));
   $("#dNew").onclick=()=>openForm({title:"Add demand partner",submitLabel:"Add to catalog",
     note:"The Prebid bundle served to publishers must also include this adapter, or it won't bid.",
     fields:[{key:"code",label:"Code",placeholder:"mynewssp"},{key:"label",label:"Label",placeholder:"My New SSP"},

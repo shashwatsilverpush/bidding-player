@@ -44,7 +44,7 @@ async def assemble_config(
     tag generation passes ``require_active=False`` so a tag can be produced for a
     freshly created or paused placement.
     """
-    where = [Placement.id == placement_id]
+    where = [Placement.id == placement_id, Placement.deleted_at.is_(None)]
     if require_active:
         where.append(Placement.active.is_(True))
     stmt = (
@@ -61,6 +61,10 @@ async def assemble_config(
     ad_unit = placement.ad_unit
     site = ad_unit.site
     publisher: Publisher = site.publisher
+    # A soft-deleted ancestor anywhere up the chain takes the placement offline,
+    # even for admin tag generation (require_active=False).
+    if any(o.deleted_at is not None for o in (ad_unit, site, publisher)):
+        raise PlacementNotFound(placement_id)
     if require_active and publisher.status != "active":
         raise PlacementNotFound(placement_id)
 

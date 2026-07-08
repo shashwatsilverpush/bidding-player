@@ -7,12 +7,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import AdminDep
-from app.db import get_session
+from app.db import get_session, utcnow
 from app.models import Account, AdUnit, Placement, Publisher, Site
 from app.schemas.admin import (
     AdUnitCreate,
@@ -37,10 +37,36 @@ SessionDep = Depends(get_session)
 
 
 async def _get_or_404(session: AsyncSession, model: type[Any], obj_id: str, what: str) -> Any:
+    """Fetch a live row. A soft-deleted row reads as 404 (use restore to bring back)."""
     obj = await session.get(model, obj_id)
-    if obj is None:
+    if obj is None or getattr(obj, "deleted_at", None) is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"{what} not found")
     return obj
+
+
+async def _count_live_children(
+    session: AsyncSession, child: type[Any], fk: Any, parent_id: str
+) -> int:
+    stmt = select(func.count()).where(fk == parent_id, child.deleted_at.is_(None))
+    return int((await session.execute(stmt)).scalar_one())
+
+
+async def _stamp(
+    session: AsyncSession, model: type[Any], fk: Any, parent_ids: list[str], ts: Any
+) -> list[str]:
+    """Soft-delete every live ``model`` row under ``parent_ids`` by loading them as
+    ORM objects (so each change is picked up by the audit listeners) and stamping
+    ``deleted_at``. Returns the affected ids for the next level down."""
+    if not parent_ids:
+        return []
+    rows = (
+        (await session.execute(select(model).where(fk.in_(parent_ids), model.deleted_at.is_(None))))
+        .scalars()
+        .all()
+    )
+    for r in rows:
+        r.deleted_at = ts
+    return [r.id for r in rows]
 
 
 def _placement_out(p: Placement) -> PlacementOut:
@@ -51,6 +77,7 @@ def _placement_out(p: Placement) -> PlacementOut:
         engine_channel=p.engine_channel,
         config=PlacementConfig.model_validate(p.config_json or {}),
         active=p.active,
+        deleted_at=p.deleted_at,
         created_at=p.created_at,
         updated_at=p.updated_at,
     )
@@ -78,7 +105,17 @@ async def create_publisher(body: PublisherCreate, session: AsyncSession = Sessio
 
 @router.get("/publishers", response_model=list[PublisherOut])
 async def list_publishers(session: AsyncSession = SessionDep):
-    rows = (await session.execute(select(Publisher).order_by(Publisher.created_at))).scalars().all()
+    rows = (
+        (
+            await session.execute(
+                select(Publisher)
+                .where(Publisher.deleted_at.is_(None))
+                .order_by(Publisher.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -100,10 +137,42 @@ async def update_publisher(
 
 
 @router.delete("/publishers/{publisher_id}", status_code=204)
-async def delete_publisher(publisher_id: str, session: AsyncSession = SessionDep):
+async def delete_publisher(
+    publisher_id: str,
+    cascade: bool = Query(
+        False, description="also soft-delete all child sites/ad-units/placements"
+    ),
+    session: AsyncSession = SessionDep,
+):
+    """Soft-delete a publisher. Refuses (409) if it still has live sites unless
+    ``cascade=true``, in which case the whole subtree is soft-deleted in one go."""
     pub = await _get_or_404(session, Publisher, publisher_id, "publisher")
-    await session.delete(pub)
+    children = await _count_live_children(session, Site, Site.publisher_id, publisher_id)
+    if children and not cascade:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"publisher has {children} live site(s); pass ?cascade=true to delete them too",
+        )
+    ts = utcnow()
+    if cascade:
+        site_ids = await _stamp(session, Site, Site.publisher_id, [publisher_id], ts)
+        au_ids = await _stamp(session, AdUnit, AdUnit.site_id, site_ids, ts)
+        await _stamp(session, Placement, Placement.ad_unit_id, au_ids, ts)
+    pub.deleted_at = ts
     await session.commit()
+
+
+@router.post("/publishers/{publisher_id}/restore", response_model=PublisherOut)
+async def restore_publisher(publisher_id: str, session: AsyncSession = SessionDep):
+    """Un-delete a publisher. Children stay deleted; restore them individually."""
+    pub = await session.get(Publisher, publisher_id)
+    if pub is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "publisher not found")
+    if pub.deleted_at is not None:
+        pub.deleted_at = None
+        await session.commit()
+        await session.refresh(pub)
+    return pub
 
 
 # --- sites ----------------------------------------------------------------
@@ -122,7 +191,11 @@ async def create_site(publisher_id: str, body: SiteCreate, session: AsyncSession
 @router.get("/publishers/{publisher_id}/sites", response_model=list[SiteOut])
 async def list_sites(publisher_id: str, session: AsyncSession = SessionDep):
     rows = (
-        (await session.execute(select(Site).where(Site.publisher_id == publisher_id)))
+        (
+            await session.execute(
+                select(Site).where(Site.publisher_id == publisher_id, Site.deleted_at.is_(None))
+            )
+        )
         .scalars()
         .all()
     )
@@ -145,10 +218,36 @@ async def update_site(site_id: str, body: SiteUpdate, session: AsyncSession = Se
 
 
 @router.delete("/sites/{site_id}", status_code=204)
-async def delete_site(site_id: str, session: AsyncSession = SessionDep):
+async def delete_site(
+    site_id: str,
+    cascade: bool = Query(False, description="also soft-delete all child ad-units/placements"),
+    session: AsyncSession = SessionDep,
+):
     site = await _get_or_404(session, Site, site_id, "site")
-    await session.delete(site)
+    children = await _count_live_children(session, AdUnit, AdUnit.site_id, site_id)
+    if children and not cascade:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"site has {children} live ad-unit(s); pass ?cascade=true to delete them too",
+        )
+    ts = utcnow()
+    if cascade:
+        au_ids = await _stamp(session, AdUnit, AdUnit.site_id, [site_id], ts)
+        await _stamp(session, Placement, Placement.ad_unit_id, au_ids, ts)
+    site.deleted_at = ts
     await session.commit()
+
+
+@router.post("/sites/{site_id}/restore", response_model=SiteOut)
+async def restore_site(site_id: str, session: AsyncSession = SessionDep):
+    site = await session.get(Site, site_id)
+    if site is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "site not found")
+    if site.deleted_at is not None:
+        site.deleted_at = None
+        await session.commit()
+        await session.refresh(site)
+    return site
 
 
 # --- ad units -------------------------------------------------------------
@@ -166,7 +265,15 @@ async def create_ad_unit(site_id: str, body: AdUnitCreate, session: AsyncSession
 
 @router.get("/sites/{site_id}/ad-units", response_model=list[AdUnitOut])
 async def list_ad_units(site_id: str, session: AsyncSession = SessionDep):
-    rows = (await session.execute(select(AdUnit).where(AdUnit.site_id == site_id))).scalars().all()
+    rows = (
+        (
+            await session.execute(
+                select(AdUnit).where(AdUnit.site_id == site_id, AdUnit.deleted_at.is_(None))
+            )
+        )
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -186,10 +293,35 @@ async def update_ad_unit(ad_unit_id: str, body: AdUnitUpdate, session: AsyncSess
 
 
 @router.delete("/ad-units/{ad_unit_id}", status_code=204)
-async def delete_ad_unit(ad_unit_id: str, session: AsyncSession = SessionDep):
+async def delete_ad_unit(
+    ad_unit_id: str,
+    cascade: bool = Query(False, description="also soft-delete all child placements"),
+    session: AsyncSession = SessionDep,
+):
     au = await _get_or_404(session, AdUnit, ad_unit_id, "ad_unit")
-    await session.delete(au)
+    children = await _count_live_children(session, Placement, Placement.ad_unit_id, ad_unit_id)
+    if children and not cascade:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"ad_unit has {children} live placement(s); pass ?cascade=true to delete them too",
+        )
+    ts = utcnow()
+    if cascade:
+        await _stamp(session, Placement, Placement.ad_unit_id, [ad_unit_id], ts)
+    au.deleted_at = ts
     await session.commit()
+
+
+@router.post("/ad-units/{ad_unit_id}/restore", response_model=AdUnitOut)
+async def restore_ad_unit(ad_unit_id: str, session: AsyncSession = SessionDep):
+    au = await session.get(AdUnit, ad_unit_id)
+    if au is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "ad_unit not found")
+    if au.deleted_at is not None:
+        au.deleted_at = None
+        await session.commit()
+        await session.refresh(au)
+    return au
 
 
 # --- placements -----------------------------------------------------------
@@ -216,7 +348,13 @@ async def create_placement(
 @router.get("/ad-units/{ad_unit_id}/placements", response_model=list[PlacementOut])
 async def list_placements(ad_unit_id: str, session: AsyncSession = SessionDep):
     rows = (
-        (await session.execute(select(Placement).where(Placement.ad_unit_id == ad_unit_id)))
+        (
+            await session.execute(
+                select(Placement).where(
+                    Placement.ad_unit_id == ad_unit_id, Placement.deleted_at.is_(None)
+                )
+            )
+        )
         .scalars()
         .all()
     )
@@ -248,5 +386,17 @@ async def update_placement(
 @router.delete("/placements/{placement_id}", status_code=204)
 async def delete_placement(placement_id: str, session: AsyncSession = SessionDep):
     plc = await _get_or_404(session, Placement, placement_id, "placement")
-    await session.delete(plc)
+    plc.deleted_at = utcnow()
     await session.commit()
+
+
+@router.post("/placements/{placement_id}/restore", response_model=PlacementOut)
+async def restore_placement(placement_id: str, session: AsyncSession = SessionDep):
+    plc = await session.get(Placement, placement_id)
+    if plc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "placement not found")
+    if plc.deleted_at is not None:
+        plc.deleted_at = None
+        await session.commit()
+        await session.refresh(plc)
+    return _placement_out(plc)

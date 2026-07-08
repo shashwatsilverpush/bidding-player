@@ -54,6 +54,7 @@ class PublisherOut(ORMModel):
     name: str
     gam_network_code: str | None
     status: str
+    deleted_at: datetime | None = None
 
 
 # --- site -----------------------------------------------------------------
@@ -74,6 +75,7 @@ class SiteOut(ORMModel):
     publisher_id: str
     domain: str
     app_bundle: str | None
+    deleted_at: datetime | None = None
 
 
 # --- ad unit --------------------------------------------------------------
@@ -94,6 +96,7 @@ class AdUnitOut(ORMModel):
     site_id: str
     gam_ad_unit_path: str
     format: str
+    deleted_at: datetime | None = None
 
 
 # --- placement ------------------------------------------------------------
@@ -120,6 +123,7 @@ class PlacementOut(ORMModel):
     engine_channel: str
     config: PlacementConfig
     active: bool
+    deleted_at: datetime | None = None
 
 
 # --- demand partner catalog ----------------------------------------------
@@ -163,3 +167,24 @@ class PublisherDemandOut(ORMModel):
     params: dict
     floor: float | None
     enabled: bool
+
+
+# --- audit / history log --------------------------------------------------
+
+
+class AuditLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    action: str
+    entity_type: str
+    entity_id: str
+    actor: str | None
+    ip: str | None
+    user_agent: str | None
+    method: str | None
+    path: str | None
+    request_id: str | None
+    before: dict | None
+    after: dict | None
+    changed_fields: list[str] | None
+    created_at: datetime

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from functools import partial
 from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -34,6 +35,10 @@ class Publisher(Base):
     gam_network_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # status: active | paused
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    # soft delete: NULL = live; set = removed (hidden from lists + config, restorable)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     account: Mapped[Account] = relationship(back_populates="publishers")
     sites: Mapped[list[Site]] = relationship(
@@ -53,6 +58,9 @@ class Site(Base):
     )
     domain: Mapped[str] = mapped_column(String(255), nullable=False)
     app_bundle: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     publisher: Mapped[Publisher] = relationship(back_populates="sites")
     ad_units: Mapped[list[AdUnit]] = relationship(
@@ -70,6 +78,9 @@ class AdUnit(Base):
     gam_ad_unit_path: Mapped[str] = mapped_column(String(500), nullable=False)
     # format: video | banner
     format: Mapped[str] = mapped_column(String(20), nullable=False, default="video")
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     site: Mapped[Site] = relationship(back_populates="ad_units")
     placements: Mapped[list[Placement]] = relationship(
@@ -90,5 +101,8 @@ class Placement(Base):
     # engine knobs; validated against PlacementConfig on write
     config_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     ad_unit: Mapped[AdUnit] = relationship(back_populates="placements")

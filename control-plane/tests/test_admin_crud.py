@@ -30,9 +30,18 @@ async def test_patch_publisher(client: AsyncClient, auth_headers: dict[str, str]
 
 async def test_delete_cascades(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     ids = await build_chain(client, auth_headers)
-    r = await client.delete(f"/v1/admin/publishers/{ids['publisher_id']}", headers=auth_headers)
+    # a parent with live children requires the explicit cascade flag
+    blocked = await client.delete(
+        f"/v1/admin/publishers/{ids['publisher_id']}", headers=auth_headers
+    )
+    assert blocked.status_code == 409
+    r = await client.delete(
+        f"/v1/admin/publishers/{ids['publisher_id']}",
+        headers=auth_headers,
+        params={"cascade": "true"},
+    )
     assert r.status_code == 204
-    # child placement is gone
+    # child placement is gone (soft-deleted)
     r2 = await client.get(f"/v1/admin/placements/{ids['placement_id']}", headers=auth_headers)
     assert r2.status_code == 404
 

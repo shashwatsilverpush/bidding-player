@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -79,6 +79,29 @@ async def update_partner(
     await session.commit()
     await session.refresh(dp)
     return dp
+
+
+@router.delete("/demand-partners/{partner_id}", status_code=204)
+async def delete_partner(partner_id: str, session: AsyncSession = SessionDep):
+    """Hard-delete a catalog partner. Refuses (409) while any publisher still has it
+    enabled — remove those enablements first."""
+    dp = await session.get(DemandPartner, partner_id)
+    if dp is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "demand partner not found")
+    in_use = int(
+        (
+            await session.execute(
+                select(func.count()).where(PublisherDemand.demand_partner_id == partner_id)
+            )
+        ).scalar_one()
+    )
+    if in_use:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"demand partner is enabled for {in_use} publisher(s); remove those first",
+        )
+    await session.delete(dp)
+    await session.commit()
 
 
 # --- per-publisher enablement --------------------------------------------

@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
 
 from app.routers import (
+    admin_audit,
     admin_demand,
     admin_publishers,
     analytics,
@@ -18,6 +19,10 @@ from app.routers import (
     stats,
     tags,
 )
+
+# Importing this module registers the SQLAlchemy session listeners that write the
+# admin change history — must be imported for auditing to happen.
+from app.services import audit as _audit  # noqa: F401
 from app.settings import get_settings
 
 settings = get_settings()
@@ -106,6 +111,7 @@ async def health() -> dict[str, str]:
 app.include_router(auth.router)
 app.include_router(admin_publishers.router)
 app.include_router(admin_demand.router)
+app.include_router(admin_audit.router)
 app.include_router(tags.router)
 app.include_router(analytics.router)
 app.include_router(stats.router)
