@@ -114,7 +114,7 @@
   // the auction/render path; no-op unless the tag carries data-beacon-url +
   // data-account + data-placement-id. sendBeacon first (text/plain → no CORS
   // preflight), fetch keepalive fallback. Honours data-sample-rate.
-  var ENGINE_VERSION = "2.6.0";
+  var ENGINE_VERSION = "2.6.1";
   var TELE_ON = !!(cfg.beaconUrl && cfg.account && cfg.placementId);
   var SESSION_ID = (function () {
     try { return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10); }

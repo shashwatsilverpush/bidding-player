@@ -21,7 +21,7 @@
   var MANIFEST = CDN + "@main/engine/channel.json";
   // Known-good engine used if the manifest can't be reached. Bump on release
   // only when the engine itself changes in a way the loader must floor to.
-  var FALLBACK = "2.6.0";
+  var FALLBACK = "2.6.1";
   var TIMEOUT_MS = 1500;
 
   // jsDelivr serves @main refs with a 7-day browser cache (max-age=604800), which
