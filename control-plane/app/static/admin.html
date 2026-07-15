@@ -24,6 +24,17 @@
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:16px;}
   .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 12px;}
   label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;}
+  .tip{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;
+    border:1px solid var(--muted);color:var(--muted);font-size:10px;line-height:1;cursor:help;position:relative;
+    margin-left:5px;vertical-align:middle;font-style:normal;font-weight:700;user-select:none;}
+  .tip:hover,.tip:focus{border-color:var(--accent);color:var(--accent);outline:none;}
+  .tip .bub{position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);width:250px;max-width:72vw;
+    background:var(--ink);color:#fff;font-size:11.5px;font-weight:400;line-height:1.45;text-transform:none;letter-spacing:0;
+    text-align:left;padding:8px 10px;border-radius:7px;box-shadow:0 8px 24px rgba(40,43,69,.28);opacity:0;visibility:hidden;
+    transition:opacity .12s;z-index:60;pointer-events:none;white-space:normal;}
+  .tip .bub code{background:rgba(255,255,255,.16);color:#fff;}
+  .tip .bub::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--ink);}
+  .tip:hover .bub,.tip:focus .bub{opacity:1;visibility:visible;}
   input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px 10px;font:inherit;}
   textarea{font-family:ui-monospace,Menlo,monospace;font-size:12px;} input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);}
   button.btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer;margin-top:12px;}
@@ -88,6 +99,9 @@ const S={top:"publishers",pub:null,sub:"properties",site:null,au:null,plc:null,p
 const $=s=>document.querySelector(s);
 function toast(m,k="ok"){const t=document.createElement("div");t.className="toast "+k;t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),3400);}
 function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+// Inline help marker: a "?" chip that reveals an explanatory bubble on hover/focus.
+// `t` may contain <code> markup (trusted, authored below), so it is NOT escaped.
+function tip(t){return `<span class="tip" tabindex="0" role="note" aria-label="${esc(t.replace(/<[^>]+>/g,""))}">?<span class="bub">${t}</span></span>`;}
 // Spec-driven modal form. fields:[{key,label,type?,value?,placeholder?,options?,hint?}]. onSubmit(values) may throw to keep open.
 function openForm(opts){
   const bg=document.createElement("div");bg.className="modal-bg";
@@ -265,15 +279,15 @@ async function panePrebid(el){
   const [p,dem]=await Promise.all([getPlc(),api(`/v1/admin/publishers/${S.pub.id}/demand`)]);
   const c=p.config;const on=dem.filter(d=>d.enabled);
   el.innerHTML=`<div class="grid2">
-    <div class="card"><h2>Demand partners bidding</h2>
-      ${on.length?`<table><thead><tr><th>SSP</th><th>Floor</th></tr></thead><tbody>`+
+    <div class="card"><h2>Demand partners bidding ${tip("The SSPs (header-bidding demand) that fire real-time bid requests for this placement. The set is enabled per-publisher on the Demand tab and flows into every placement's tag automatically.")}</h2>
+      ${on.length?`<table><thead><tr><th>SSP</th><th>Floor ${tip("Per-SSP minimum bid this partner is asked to meet, as configured at the publisher level. “—” means no partner-specific floor (the placement's Floor min still applies).")}</th></tr></thead><tbody>`+
         on.map(e=>`<tr><td><b>${esc(e.demand_partner_code)}</b></td><td>${e.floor!=null?'$'+e.floor:'—'}</td></tr>`).join("")+`</tbody></table>`
         :'<div class="empty">No SSPs enabled for this publisher yet.</div>'}
       <p class="muted" style="margin-top:10px">These are the bidders that fire header-bidding requests. Manage them (and their credentials) at the publisher level → <a href="#" id="goDemand" style="color:var(--accent)">Demand tab</a>.</p></div>
     <div class="card"><h2>Auction settings</h2>
-      <div class="row"><div><label>Bidder timeout (ms)</label><input id="pTo"/></div><div><label>Floor bias ($)</label><input id="pBias"/></div></div>
-      <div class="row"><div><label>Floor min ($, optional)</label><input id="pFmin" placeholder="none"/></div><div><label>Floor max ($, optional)</label><input id="pFmax" placeholder="none"/></div></div>
-      <label>Prebid cache URL</label><input id="pCache"/>
+      <div class="row"><div><label>Bidder timeout (ms) ${tip("How long the auction waits for SSPs to respond before it closes and sends the best bid to GAM. Too low starves slower bidders; too high delays the ad. Typical range 800–1500 ms.")}</label><input id="pTo"/></div><div><label>Floor bias ($) ${tip("A small amount added to the winning CPM before it is bucketed into <code>hb_pb</code>, so your price-priority GAM line items edge out direct-sold at the same price. Use <code>0.00</code> to disable — an empty value reverts the engine to its 0.10 default.")}</label><input id="pBias"/></div></div>
+      <div class="row"><div><label>Floor min ($, optional) ${tip("Reject any winning bid below this CPM — the impression then falls through to your GAM house/direct line item instead of serving the low bid. Leave blank to accept any bid.")}</label><input id="pFmin" placeholder="none"/></div><div><label>Floor max ($, optional) ${tip("Cap the winning CPM at this value before bias + bucketing, so a runaway high bid can't overshoot your highest GAM line-item bucket. Leave blank for no cap.")}</label><input id="pFmax" placeholder="none"/></div></div>
+      <label>Prebid cache URL ${tip("Prebid cache endpoint that stores the winning bidder's VAST XML; GAM/IMA fetches the creative from here via <code>hb_uuid</code>. Leave blank to use the platform default.")}</label><input id="pCache"/>
       <button class="btn" id="pSave">Save Prebid settings</button>
       <p class="muted" style="margin-top:8px">Govern the header-bidding auction: how long to wait for bids, and the floor/bias applied before the winning price is bucketed into <code>hb_pb</code> for GAM.</p></div></div>`;
   $("#pTo").value=c.timeout??1200;$("#pBias").value=c.bias??"0.10";$("#pFmin").value=c.floorMin??"";$("#pFmax").value=c.floorMax??"";$("#pCache").value=c.cacheUrl||"";
@@ -284,17 +298,17 @@ async function panePrebid(el){
 
 async function paneTag(el){const p=await getPlc();const c=p.config;
   el.innerHTML=`<div class="grid2"><div>
-      <div class="row"><div><label>Engine delivery</label><select id="tCh"><option value="auto">auto-update (loader)</option><option value="pinned">pinned</option></select></div>
-      <div><label>Content video URL (instream)</label><input id="tVid"/></div></div>
-      <div class="row"><div><label>Mount div id</label><input id="tDiv" placeholder="bp-video-slot"/></div>
-      <div><label>Preload</label><select id="tPre"><option>metadata</option><option>auto</option><option>none</option></select></div>
-      <div><label>VPAID</label><select id="tVp"><option>insecure</option><option>secure</option><option>disabled</option></select></div></div>
+      <div class="row"><div><label>Engine delivery ${tip("<b>auto-update (loader)</b>: the tag loads a tiny loader that always resolves the current stable engine from the release channel — ship engine updates with no re-integration. <b>pinned</b>: bakes one exact engine version into the tag (only changes when you regenerate it).")}</label><select id="tCh"><option value="auto">auto-update (loader)</option><option value="pinned">pinned</option></select></div>
+      <div><label>Content video URL (instream) ${tip("The publisher's content video the ad plays against. IMA pauses this to play the ad, then resumes it. <b>Required for instream</b>; ignored for outstream, which has no content video.")}</label><input id="tVid"/></div></div>
+      <div class="row"><div><label>Mount div id ${tip("The id of the <code>&lt;div&gt;</code> the player mounts into on the publisher page. If no element with this id exists, the engine auto-creates one at the script tag's position.")}</label><input id="tDiv" placeholder="bp-video-slot"/></div>
+      <div><label>Preload ${tip("How much of the content video the browser fetches before playback: <code>metadata</code> (dimensions/duration only), <code>auto</code> (buffer ahead), or <code>none</code>. Instream only.")}</label><select id="tPre"><option>metadata</option><option>auto</option><option>none</option></select></div>
+      <div><label>VPAID ${tip("Execution mode for interactive VPAID ad creatives. <code>insecure</code> runs VPAID in the page context (most compatible), <code>secure</code> sandboxes it in an iframe, <code>disabled</code> rejects VPAID and plays plain VAST only.")}</label><select id="tVp"><option>insecure</option><option>secure</option><option>disabled</option></select></div></div>
       <div class="row" style="margin-top:8px">
-      <label style="flex:0 0 auto"><input type="checkbox" id="tAp" style="width:auto"> autoplay</label>
-      <label style="flex:0 0 auto"><input type="checkbox" id="tMu" style="width:auto"> muted</label>
-      <label style="flex:0 0 auto"><input type="checkbox" id="tFl" style="width:auto"> fluid</label>
-      <label style="flex:0 0 auto"><input type="checkbox" id="tLo" style="width:auto"> loop</label>
-      <label style="flex:0 0 auto"><input type="checkbox" id="tSt" style="width:auto"> sticky</label></div>
+      <label style="flex:0 0 auto"><input type="checkbox" id="tAp" style="width:auto"> autoplay ${tip("Start the content video automatically on load (instream). Browsers only allow autoplay without a user gesture when the video is also muted.")}</label>
+      <label style="flex:0 0 auto"><input type="checkbox" id="tMu" style="width:auto"> muted ${tip("Start muted. Required for autoplay without a click — outstream always starts muted and surfaces a tap-for-sound control.")}</label>
+      <label style="flex:0 0 auto"><input type="checkbox" id="tFl" style="width:auto"> fluid ${tip("Responsive sizing — the player scales to its container width at a 16:9 ratio instead of a fixed pixel size.")}</label>
+      <label style="flex:0 0 auto"><input type="checkbox" id="tLo" style="width:auto"> loop ${tip("Loop the content video when it ends (instream only; never applied to outstream, where it would restart the ad creative).")}</label>
+      <label style="flex:0 0 auto"><input type="checkbox" id="tSt" style="width:auto"> sticky ${tip("When the player scrolls out of view it floats to the bottom-right corner and keeps playing, with a ✕ to dismiss (instream only).")}</label></div>
       <button class="btn" id="tSave">Save & regenerate</button></div>
     <div><label>Embed tag <span class="muted">(share with publisher)</span></label>
       <textarea id="tOut" rows="15" readonly></textarea>
@@ -334,7 +348,7 @@ async function preflight(){const cfg=window._cfg||(await api(`/v1/admin/placemen
 async function paneGam(el){const c=(await getPlc()).config;
   el.innerHTML=`<div class="grid2">
     <div class="card"><h2>GAM ad request</h2>
-    <label>GAM VAST tag URL <span class="muted">(data-tag)</span></label><textarea id="gTag" rows="5" placeholder="https://pubads.g.doubleclick.net/gampad/ads?iu=/NETWORK/ad_unit&sz=640x480&output=vast&..."></textarea>
+    <label>GAM VAST tag URL <span class="muted">(data-tag)</span> ${tip("Your Google Ad Manager video ad tag (must be <code>output=vast</code>). The engine injects the header-bidding result (<code>hb_pb</code>, <code>hb_bidder</code>, <code>hb_uuid</code>…) into this tag's <code>cust_params</code>, then hands the final VAST URL to the IMA SDK to request and render the ad.")}</label><textarea id="gTag" rows="5" placeholder="https://pubads.g.doubleclick.net/gampad/ads?iu=/NETWORK/ad_unit&sz=640x480&output=vast&..."></textarea>
     <button class="btn" id="gSave">Save GAM tag</button>
     <p class="muted" style="margin-top:8px">The engine stitches the Prebid result (<code>hb_pb</code>, <code>hb_bidder</code>) into this tag's <code>cust_params</code> and hands the final VAST request to IMA.</p></div>
     <div class="card"><h2>Key-values to target in GAM</h2>
