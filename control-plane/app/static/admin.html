@@ -186,9 +186,16 @@ async function renderPublishers(m){const pubs=await api("/v1/admin/publishers");
 // ---- publisher detail ----
 async function renderPublisher(m){const p=S.pub;
   crumb([{t:"Publishers",go:()=>go({pub:null})},{t:p.name}]);
-  m.innerHTML=`<div class="card"><div class="hdr"><h2>${esc(p.name)}</h2><button class="btn small danger" id="pubDel" style="margin:0">Delete publisher</button></div>
+  m.innerHTML=`<div class="card"><div class="hdr"><h2>${esc(p.name)}</h2><span><button class="btn small" id="pubEdit" style="margin:0">Edit</button> <button class="btn small danger" id="pubDel" style="margin:0">Delete publisher</button></span></div>
     <div class="subtabs">${["properties","demand","overview"].map(s=>`<button data-s="${s}" class="${S.sub===s?'active':''}">${s[0].toUpperCase()+s.slice(1)}</button>`).join("")}</div>
     <div id="sub"></div></div>`;
+  $("#pubEdit").onclick=()=>openForm({title:"Edit publisher",submitLabel:"Save",
+    fields:[{key:"name",label:"Name",value:p.name},
+      {key:"gam",label:"GAM network code",value:p.gam_network_code||""},
+      {key:"status",label:"Status",type:"select",value:p.status,options:[{value:"active",label:"active"},{value:"paused",label:"paused (stops serving config)"}]}],
+    onSubmit:async v=>{if(!v.name.trim())throw new Error("Name required");
+      const up=await api(`/v1/admin/publishers/${p.id}`,{method:"PATCH",body:{name:v.name.trim(),gam_network_code:v.gam.trim()||null,status:v.status}});
+      toast("Publisher updated");S.pub=up;go({});}});
   $("#pubDel").onclick=()=>askDelete({kind:"publisher",path:`/v1/admin/publishers/${p.id}`,name:p.name,
     cascadeLabel:"Also delete all sites, ad units & placements",after:()=>go({pub:null})});
   m.querySelectorAll("[data-s]").forEach(b=>b.onclick=()=>go({sub:b.dataset.s,site:null,au:null,plc:null}));
@@ -209,8 +216,13 @@ async function subProperties(el){const sites=await api(`/v1/admin/publishers/${S
   el.innerHTML=`<div class="hdr"><span class="muted">Sites</span><button class="btn small" id="sNew">+ New site</button></div><ul class="list" id="sl"></ul>`;
   const ul=$("#sl");if(!sites.length)ul.innerHTML='<div class="empty">No sites yet — click “+ New site”.</div>';
   sites.forEach(s=>{const li=document.createElement("li");
-    li.innerHTML=`<span>🌐 ${esc(s.domain)}</span><span><button class="btn small danger" data-del style="margin:0">Delete</button> <span class="id">${s.id} ›</span></span>`;
+    li.innerHTML=`<span>🌐 ${esc(s.domain)}</span><span><button class="btn small" data-edit style="margin:0">Edit</button> <button class="btn small danger" data-del style="margin:0">Delete</button> <span class="id">${s.id} ›</span></span>`;
     li.onclick=()=>go({site:s,au:null,plc:null});
+    li.querySelector("[data-edit]").onclick=e=>{e.stopPropagation();openForm({title:"Edit site",submitLabel:"Save",
+      fields:[{key:"domain",label:"Domain",value:s.domain},{key:"bundle",label:"App bundle (optional)",value:s.app_bundle||""}],
+      onSubmit:async v=>{if(!v.domain.trim())throw new Error("Domain required");
+        await api(`/v1/admin/sites/${s.id}`,{method:"PATCH",body:{domain:v.domain.trim(),app_bundle:v.bundle.trim()||null}});
+        toast("Site updated");await subProperties(el);}});};
     li.querySelector("[data-del]").onclick=e=>{e.stopPropagation();askDelete({kind:"site",path:`/v1/admin/sites/${s.id}`,name:s.domain,
       cascadeLabel:"Also delete its ad units & placements",after:()=>subProperties(el)});};
     ul.appendChild(li);});
@@ -224,8 +236,14 @@ async function renderSite(m){crumb([{t:"Publishers",go:()=>go({pub:null})},{t:S.
   m.innerHTML=`<div class="card"><div class="hdr"><h2>Ad units · ${esc(S.site.domain)}</h2><button class="btn small" id="aNew">+ New ad unit</button></div><ul class="list" id="al"></ul></div>`;
   const ul=$("#al");if(!aus.length)ul.innerHTML='<div class="empty">No ad units yet — click “+ New ad unit”.</div>';
   aus.forEach(a=>{const li=document.createElement("li");
-    li.innerHTML=`<span>📐 ${esc(a.gam_ad_unit_path)} <span class="pill">${a.format}</span></span><span><button class="btn small danger" data-del style="margin:0">Delete</button> <span class="id">${a.id} ›</span></span>`;
+    li.innerHTML=`<span>📐 ${esc(a.gam_ad_unit_path)} <span class="pill">${a.format}</span></span><span><button class="btn small" data-edit style="margin:0">Edit</button> <button class="btn small danger" data-del style="margin:0">Delete</button> <span class="id">${a.id} ›</span></span>`;
     li.onclick=()=>go({au:a,plc:null});
+    li.querySelector("[data-edit]").onclick=e=>{e.stopPropagation();openForm({title:"Edit ad unit",submitLabel:"Save",
+      fields:[{key:"path",label:"GAM ad unit path",value:a.gam_ad_unit_path},
+        {key:"format",label:"Format",type:"select",value:a.format,options:[{value:"video",label:"video"},{value:"banner",label:"banner"}]}],
+      onSubmit:async v=>{if(!v.path.trim())throw new Error("Path required");
+        await api(`/v1/admin/ad-units/${a.id}`,{method:"PATCH",body:{gam_ad_unit_path:v.path.trim(),format:v.format}});
+        toast("Ad unit updated");await renderSite(m);}});};
     li.querySelector("[data-del]").onclick=e=>{e.stopPropagation();askDelete({kind:"ad unit",path:`/v1/admin/ad-units/${a.id}`,name:a.gam_ad_unit_path,
       cascadeLabel:"Also delete its placements",after:()=>renderSite(m)});};
     ul.appendChild(li);});
@@ -242,8 +260,15 @@ async function renderAdUnit(m){crumb([{t:"Publishers",go:()=>go({pub:null})},{t:
   m.innerHTML=`<div class="card"><div class="hdr"><h2>Placements · ${esc(S.au.gam_ad_unit_path)}</h2><button class="btn small" id="cNew">+ New placement</button></div><ul class="list" id="ql"></ul></div>`;
   const ul=$("#ql");if(!plcs.length)ul.innerHTML='<div class="empty">No placements yet — click “+ New placement”.</div>';
   plcs.forEach(p=>{const st=readiness(p,demandOn);const li=document.createElement("li");
-    li.innerHTML=`<span>▶ ${esc(p.name)} <span class="pill">${p.config.placement}</span></span><span><span class="pill ${st.cls}">${st.label}</span> <button class="btn small danger" data-del style="margin:0">Delete</button> <span class="id">›</span></span>`;
+    li.innerHTML=`<span>▶ ${esc(p.name)} <span class="pill">${p.config.placement}</span>${p.active?"":' <span class="pill warn">paused</span>'}</span><span><span class="pill ${st.cls}">${st.label}</span> <button class="btn small" data-edit style="margin:0">Edit</button> <button class="btn small danger" data-del style="margin:0">Delete</button> <span class="id">›</span></span>`;
     li.onclick=()=>go({plc:p,plcTab:"prebid"});
+    li.querySelector("[data-edit]").onclick=e=>{e.stopPropagation();openForm({title:"Edit placement",submitLabel:"Save",
+      note:"Placement type, bidders, floors and the VAST tag are edited inside the placement (Prebid / GAM / Player Tag tabs).",
+      fields:[{key:"name",label:"Name",value:p.name},
+        {key:"active",type:"checkbox",label:"Active (serves config; unchecked = paused → config 404)",value:p.active}],
+      onSubmit:async v=>{if(!v.name.trim())throw new Error("Name required");
+        await api(`/v1/admin/placements/${p.id}`,{method:"PATCH",body:{name:v.name.trim(),active:v.active}});
+        toast("Placement updated");await renderAdUnit(m);}});};
     li.querySelector("[data-del]").onclick=e=>{e.stopPropagation();askDelete({kind:"placement",path:`/v1/admin/placements/${p.id}`,name:p.name,after:()=>renderAdUnit(m)});};
     ul.appendChild(li);});
   $("#cNew").onclick=()=>openForm({title:"New placement",submitLabel:"Create",
