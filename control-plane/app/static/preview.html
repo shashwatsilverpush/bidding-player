@@ -856,6 +856,15 @@
     const src = tmp.querySelector("script");
     const s = document.createElement("script");
     for (const attr of src.attributes) s.setAttribute(attr.name, attr.value);
+    // Always fetch the engine/loader fresh in this preview tool. jsDelivr serves
+    // @2/loader.js (and @main refs) with a 7-day browser cache, so a returning
+    // tester would keep running a stale loader — and thus a stale engine — even
+    // after a release, and hard-reload doesn't refetch a JS-injected script. A
+    // cache-buster on the injected src sidesteps the browser cache so "Test in
+    // browser" always exercises the current engine. Only the loader/engine src
+    // is busted; the loader skips `src` when copying attrs, so the resolved
+    // @vX.Y.Z/player.js stays a clean, cacheable URL.
+    if (s.src) s.src += (s.src.indexOf("?") === -1 ? "?" : "&") + "_cb=" + Date.now();
     if (!s.src && src.textContent) s.textContent = src.textContent;
     el("#playerHost").appendChild(s);
   }
