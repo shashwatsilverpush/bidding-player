@@ -24,6 +24,12 @@
   var FALLBACK = "2.6.0";
   var TIMEOUT_MS = 1500;
 
+  // jsDelivr serves @main refs with a 7-day browser cache (max-age=604800), which
+  // would otherwise let a stale channel.json pin an old engine for a week and
+  // defeat the whole point of the manifest (instant rollback/rollforward). We
+  // always fetch it with cache:"no-store" so every load sees the current pointer.
+  var MANIFEST_FETCH = { cache: "no-store" };
+
   var me = document.currentScript || document.getElementById("adtech-player-core");
   if (!me) { (window.console || {}).warn && console.warn("[AdTechLoader] no anchor script found."); return; }
 
@@ -68,7 +74,8 @@
   try {
     var ctrl = ("AbortController" in window) ? new AbortController() : null;
     var to = setTimeout(function () { if (ctrl) try { ctrl.abort(); } catch (_) {} boot(FALLBACK); }, TIMEOUT_MS);
-    var opts = ctrl ? { signal: ctrl.signal } : {};
+    var opts = { cache: MANIFEST_FETCH.cache };
+    if (ctrl) opts.signal = ctrl.signal;
     window.fetch(MANIFEST, opts)
       .then(function (r) { return r && r.ok ? r.json() : null; })
       .then(function (m) { clearTimeout(to); boot(m ? pickVersion(m) : FALLBACK); })

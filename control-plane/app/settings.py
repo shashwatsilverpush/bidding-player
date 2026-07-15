@@ -39,14 +39,14 @@ class Settings(BaseSettings):
     # per-env secret. Set it only to force a specific base (e.g. local dev).
     public_base_url: str | None = None
     default_prebid_url: str = (
-        "https://cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@v2.5.2/prebid/prebid.js"
+        "https://cdn.jsdelivr.net/gh/shashwatsilverpush/bidding-player@v2.6.1/prebid/prebid.js"
     )
     default_sample_rate: float = 1.0
 
     # Engine tag generation (mirrors index.html buildEngineFile). The engine CDN
     # artifact currently lives under shashwatsilverpush; override if it moves.
     engine_repo: str = "shashwatsilverpush/bidding-player"
-    default_engine_version: str = "v2.5.2"
+    default_engine_version: str = "v2.6.1"
     # Local-dev override: when set (e.g. http://localhost:8080), generated tags
     # load engine/player.js + prebid/prebid.js from THIS base instead of jsDelivr,
     # so you can test unreleased engine changes locally before cutting a release.
