@@ -22,7 +22,13 @@ The dashboard (`index.html`) lets AdOps generate production tags, run sandbox si
 
 ## 2. Current Version
 
-**VERSION:** `2.5.0`  
+**VERSION:** `2.6.1` (see the `VERSION` file — this doc drifted to 2.5.0 through the
+2.6.x line; the release history below is likewise behind. Use `git log` for 2.6.x.)
+Release with `./scripts/release.sh X.Y.Z` — it bumps `VERSION`, the engine's
+`ENGINE_VERSION`, the loader `FALLBACK`, and every `@vX.Y.Z` reference together.
+Do **not** hand-edit those, or `version-check.yml` will fail.
+
+
 All `@vX.Y.Z` CDN references in `index.html` and `demo/publisher-test.html` **must** match this value.
 The `version-check.yml` CI workflow enforces this — it will fail the build if they drift.
 
@@ -75,6 +81,11 @@ To release a new version:
 | `data-floor-max` | none | Cap the winning CPM at this value before bias + bucketing. Disabled when absent/non-numeric |
 | `data-placement` | `instream` | `instream` plays the ad against content video via IMA pause/resume. `outstream` has no content video — slot stays collapsed until ≥50% in view, autoplays muted, collapses on completion/error |
 | `data-video` | required (instream only) | MP4 content video URL. Ignored/omitted for outstream |
+| `data-ad-tags` | none | JSON array of `{url,label,timeoutMs}` — the **ad-server waterfall**, tried in order. The next tag is called only on empty VAST / IMA error / silence past `timeoutMs` (default 3000). Prebid targeting is stitched onto **every** tag. The whole chain is ONE ad opportunity: it shares one `auctionId` and each attempt carries `tagIndex`. Absent → `data-tag` is promoted to a one-entry chain, so existing tags are unaffected |
+| `data-lazy` | `true` | Instream only. Hold the auction until the mount is ≥50% in view, then run it and start playback. Keeps the cached VAST fresh at render time and lifts viewability. `"false"` restores the old load-immediately behaviour. Outstream is unaffected — it already gates `mgr.start()` on its own visibility check |
+| `data-refresh` | `false` | Instream only. Run a NEW auction after each ad completes/skips/errors. Gated on (slot ≥50% visible **or** sticky-docked) **and** the tab being in the foreground; exponential backoff on no-fill; cancelled when the sticky player is dismissed |
+| `data-refresh-interval` | `30` | Seconds between ad breaks. **Floored at 30s in the engine** regardless of the value, to stay inside IAB/GAM refresh guidance |
+| `data-refresh-max` | `10` | Hard cap on refresh cycles per page load |
 | `data-sticky` | `false` | Instream only. `true` makes the player float to the bottom-right corner when it scrolls out of view (keeps playing, ✕ to dismiss) and reflows the live IMA ad via `adsManager.resize()`. Ignored for outstream |
 | `data-prebid-url` | required | jsDelivr URL to the Prebid.js bundle |
 | `data-autoplay` | `true` | Autoplay the content video |
@@ -354,6 +365,16 @@ The bundle is built via GitHub Actions (`build-prebid-bundle.yml`, manual dispat
 
 ## 14. Common Gotchas
 
+0. **Ad refresh reuses the IMA loader — never rebuild it.** `setupPlayer` checks
+   `container.__atpAds` and, on a refresh cycle, calls `loader.contentComplete()`
+   + `requestAdsInto()` instead of constructing a new `AdDisplayContainer`.
+   Rebuilding would append another overlay div to the mount and leak an
+   `AdsLoader` per cycle. `adc.initialize()` must run exactly once (IMA binds it
+   to the mobile user-gesture context). Two related traps in the same path:
+   `pbjs.onEvent` handlers are registered behind a `pbjsHooked` flag (they append,
+   so re-registering makes refresh #N emit N copies of every `bid_response`), and
+   `setupPlayer` only calls `player.src()` when the source actually changed
+   (otherwise the content video restarts from 0:00 behind every ad break).
 1. **Bias = zero must be `"0.00"` string** — empty `data-bias` or missing attribute reverts to 0.10 default
 2. **CSS specificity on inline labels** — always use `.adops-field label.adops-inline-label` not just `.adops-inline-label`
 3. **VERSION file** — always bump it alongside the `@vX.Y.Z` URL changes; CI will catch drift but it's cleaner to do both in the same commit

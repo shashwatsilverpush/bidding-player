@@ -138,7 +138,13 @@ function askDelete({kind,path,name,cascadeLabel,after}){
     }});
 }
 async function api(path,{method="GET",body=null,auth=true}={}){const h={"Content-Type":"application/json"};if(auth&&TOKEN)h.Authorization="Bearer "+TOKEN;
-  const r=await fetch(path,{method,headers:h,body:body?JSON.stringify(body):null});if(r.status===401){logout();throw new Error("Session expired");}
+  const r=await fetch(path,{method,headers:h,body:body?JSON.stringify(body):null});
+  // Only an AUTHENTICATED call can have an expired session. The login endpoint
+  // also answers 401 — for bad credentials — and blanket-treating that as expiry
+  // showed "Session expired" to someone who had simply mistyped their password,
+  // while logout() wiped the token they never had. Let those fall through to the
+  // server's own message ("Invalid credentials").
+  if(r.status===401&&auth){logout();throw new Error("Session expired — please log in again");}
   const t=await r.text();const d=t?JSON.parse(t):null;if(!r.ok){const e=d&&d.detail;throw new Error(typeof e==="string"?e:JSON.stringify(e||d));}return d;}
 
 // ---- auth ----
@@ -334,7 +340,12 @@ async function paneTag(el){const p=await getPlc();const c=p.config;
       <label style="flex:0 0 auto"><input type="checkbox" id="tMu" style="width:auto"> muted ${tip("Start muted. Required for autoplay without a click — outstream always starts muted and surfaces a tap-for-sound control.")}</label>
       <label style="flex:0 0 auto"><input type="checkbox" id="tFl" style="width:auto"> fluid ${tip("Responsive sizing — the player scales to its container width at a 16:9 ratio instead of a fixed pixel size.")}</label>
       <label style="flex:0 0 auto"><input type="checkbox" id="tLo" style="width:auto"> loop ${tip("Loop the content video when it ends (instream only; never applied to outstream, where it would restart the ad creative).")}</label>
-      <label style="flex:0 0 auto"><input type="checkbox" id="tSt" style="width:auto"> sticky ${tip("When the player scrolls out of view it floats to the bottom-right corner and keeps playing, with a ✕ to dismiss (instream only).")}</label></div>
+      <label style="flex:0 0 auto"><input type="checkbox" id="tSt" style="width:auto"> sticky ${tip("When the player scrolls out of view it floats to the bottom-right corner and keeps playing, with a ✕ to dismiss (instream only).")}</label>
+      <label style="flex:0 0 auto"><input type="checkbox" id="tLz" style="width:auto"> lazy ${tip("Hold the auction until the slot is at least 50% on screen, then start. Lifts viewability and keeps the cached VAST response fresh at the moment the ad renders. Turn off only for players that sit above the fold on every page.")}</label></div>
+      <div class="row" style="margin-top:8px;align-items:flex-end">
+      <label style="flex:0 0 auto"><input type="checkbox" id="tRf" style="width:auto"> refresh ads ${tip("Run a NEW auction after each ad finishes, is skipped, or errors, so a long session monetises more than once. Only fires while the slot is viewable (or floating) and the tab is in the foreground; no-fill backs off exponentially. <b>Check your GAM contract and direct deals before enabling — some forbid refreshed inventory.</b>")}</label>
+      <div style="max-width:180px"><label>Refresh interval (s) ${tip("Seconds between the end of one ad and the next auction. The engine floors this at 30s regardless of the value here, to stay inside IAB/GAM refresh guidance.")}</label><input id="tRfI" type="number" min="30" max="600" step="5"/></div>
+      <div style="max-width:180px"><label>Max refreshes / load ${tip("Hard cap on refresh cycles per page load, so a tab left open all day cannot bill thousands of unseen requests.")}</label><input id="tRfM" type="number" min="1" max="100" step="1"/></div></div>
       <button class="btn" id="tSave">Save & regenerate</button></div>
     <div><label>Embed tag <span class="muted">(share with publisher)</span></label>
       <textarea id="tOut" rows="15" readonly></textarea>
@@ -345,11 +356,17 @@ async function paneTag(el){const p=await getPlc();const c=p.config;
   $("#tCh").value=p.engine_channel==="auto"?"auto":"pinned";$("#tVid").value=c.video||"";$("#tDiv").value=c.divId||"";
   $("#tPre").value=c.preload||"metadata";$("#tVp").value=c.vpaid||"insecure";
   $("#tAp").checked=c.autoplay!==false;$("#tMu").checked=c.muted!==false;$("#tFl").checked=c.fluid!==false;$("#tLo").checked=!!c.loop;$("#tSt").checked=!!c.sticky;
+  $("#tLz").checked=c.lazy!==false;$("#tRf").checked=!!c.refresh;$("#tRfI").value=c.refreshInterval??30;$("#tRfM").value=c.refreshMax??10;
+  // Refresh cadence inputs are meaningless while refresh is off — dim them.
+  const syncRf=()=>{const on=$("#tRf").checked;$("#tRfI").disabled=!on;$("#tRfM").disabled=!on;};
+  $("#tRf").onchange=syncRf;syncRf();
   await genTag();
   $("#tSave").onclick=async()=>{try{const cur=(await getPlc()).config;
     await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{engine_channel:$("#tCh").value,
       config:{...cur,video:$("#tVid").value.trim()||null,divId:$("#tDiv").value.trim()||null,preload:$("#tPre").value,vpaid:$("#tVp").value,
-        autoplay:$("#tAp").checked,muted:$("#tMu").checked,fluid:$("#tFl").checked,loop:$("#tLo").checked,sticky:$("#tSt").checked}}});
+        autoplay:$("#tAp").checked,muted:$("#tMu").checked,fluid:$("#tFl").checked,loop:$("#tLo").checked,sticky:$("#tSt").checked,
+        lazy:$("#tLz").checked,refresh:$("#tRf").checked,
+        refreshInterval:Math.max(30,parseInt($("#tRfI").value||"30",10)),refreshMax:Math.max(1,parseInt($("#tRfM").value||"10",10))}}});
     toast("Saved");await genTag();}catch(e){toast(e.message,"err");}};
   $("#tCopy").onclick=()=>{navigator.clipboard.writeText($("#tOut").value);toast("Copied");};
   $("#tCheck").onclick=preflight;
@@ -374,18 +391,69 @@ async function preflight(){const cfg=window._cfg||(await api(`/v1/admin/placemen
 async function paneGam(el){const c=(await getPlc()).config;
   el.innerHTML=`<div class="grid2">
     <div class="card"><h2>GAM ad request</h2>
-    <label>GAM VAST tag URL <span class="muted">(data-tag)</span> ${tip("Your Google Ad Manager video ad tag (must be <code>output=vast</code>). The engine injects the header-bidding result (<code>hb_pb</code>, <code>hb_bidder</code>, <code>hb_uuid</code>…) into this tag's <code>cust_params</code>, then hands the final VAST URL to the IMA SDK to request and render the ad.")}</label><textarea id="gTag" rows="5" placeholder="https://pubads.g.doubleclick.net/gampad/ads?iu=/NETWORK/ad_unit&sz=640x480&output=vast&..."></textarea>
-    <button class="btn" id="gSave">Save GAM tag</button>
-    <p class="muted" style="margin-top:8px">The engine stitches the Prebid result (<code>hb_pb</code>, <code>hb_bidder</code>) into this tag's <code>cust_params</code> and hands the final VAST request to IMA.</p></div>
+    <label>Ad tag waterfall ${tip("Tags are tried <b>in order</b>. The next one is called only when the previous returns empty VAST, errors, or goes quiet past its timeout — so an opportunity nobody bought can still be filled by a backfill partner or your house tag. Every tag in the chain receives the full header-bidding result (<code>hb_pb</code>, <code>hb_bidder</code>, <code>hb_uuid</code>…) in its <code>cust_params</code>. The whole chain is <b>one</b> ad opportunity, however many tags it takes to fill.")}</label>
+    <p class="muted" style="margin:0 0 8px">Tried top to bottom. Put your house / passback tag last.</p>
+    <div id="gTags"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn ghost" id="gAdd">+ Add tag</button><button class="btn" id="gSave">Save waterfall</button></div>
+    <p class="muted" style="margin-top:8px">Each tag must be a VAST endpoint (<code>output=vast</code> for GAM). The final VAST URL is handed to the IMA SDK.</p></div>
     <div class="card"><h2>Key-values to target in GAM</h2>
     <p class="muted" style="margin:0 0 8px">Create price-priority line items in Google Ad Manager keyed on these:</p>
     <table><thead><tr><th>Key</th><th>Meaning</th></tr></thead><tbody>
     <tr><td><code>hb_pb</code></td><td>Winning price bucket (post floor-bias)</td></tr><tr><td><code>hb_bidder</code></td><td>Winning SSP</td></tr>
     <tr><td><code>hb_pb_&lt;bidder&gt;</code></td><td>Per-bidder price (send-all-bids)</td></tr><tr><td><code>hb_bidder_&lt;bidder&gt;</code></td><td>Per-bidder code</td></tr></tbody></table>
     <p class="muted" style="margin-top:10px">No-demand fallback calls GAM with <code>hb_pb=0.00</code> so your house line item serves. Line items/creatives are set up in GAM itself (GAM-API automation is a later phase).</p></div></div>`;
-  $("#gTag").value=c.adTag||"";
-  $("#gSave").onclick=async()=>{const cur=(await getPlc()).config;
-    try{await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{config:{...cur,adTag:$("#gTag").value.trim()||null}}});toast("GAM tag saved");}catch(e){toast(e.message,"err");}};}
+  // Seed from adTags; fall back to promoting a legacy single adTag so a
+  // placement saved before the waterfall existed opens as a one-row chain.
+  let rows=(c.adTags&&c.adTags.length)?c.adTags.map(t=>({url:t.url||"",label:t.label||"",timeoutMs:t.timeoutMs||3000}))
+          :(c.adTag?[{url:c.adTag,label:"primary",timeoutMs:3000}]:[{url:"",label:"primary",timeoutMs:3000}]);
+
+  function drawTags(){
+    $("#gTags").innerHTML=rows.map((t,i)=>`
+      <div class="card" style="padding:10px;margin-bottom:8px" data-i="${i}">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+          <b style="min-width:18px">${i+1}</b>
+          <input data-f="label" value="${esc(t.label||"")}" placeholder="label (e.g. Primary GAM, House)" style="flex:1"/>
+          <button class="ghost small" data-up ${i===0?"disabled":""} title="Move up" style="margin:0">↑</button>
+          <button class="ghost small" data-down ${i===rows.length-1?"disabled":""} title="Move down" style="margin:0">↓</button>
+          <button class="ghost small danger" data-del ${rows.length===1?"disabled":""} title="Remove" style="margin:0">✕</button>
+        </div>
+        <textarea data-f="url" rows="3" placeholder="https://pubads.g.doubleclick.net/gampad/ads?iu=/NETWORK/ad_unit&sz=640x480&output=vast&...">${esc(t.url||"")}</textarea>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+          <span class="muted">timeout</span><input data-f="timeoutMs" type="number" min="500" max="15000" step="500" value="${t.timeoutMs||3000}" style="max-width:110px"/><span class="muted">ms</span>
+          ${i===rows.length-1?'<span class="pill" style="margin-left:auto">last resort</span>':""}
+        </div>
+      </div>`).join("");
+    // Read edits straight back into `rows` so reordering never loses uncommitted typing.
+    $("#gTags").querySelectorAll("[data-i]").forEach(card=>{
+      const i=+card.dataset.i;
+      card.querySelectorAll("[data-f]").forEach(inp=>inp.oninput=()=>{
+        rows[i][inp.dataset.f]=inp.dataset.f==="timeoutMs"?(parseInt(inp.value,10)||3000):inp.value;
+        if(inp.dataset.f==="timeoutMs")return; });
+      const mv=(a,b)=>{const t=rows[a];rows[a]=rows[b];rows[b]=t;drawTags();};
+      const up=card.querySelector("[data-up]"),dn=card.querySelector("[data-down]"),del=card.querySelector("[data-del]");
+      if(up)up.onclick=()=>mv(i,i-1);
+      if(dn)dn.onclick=()=>mv(i,i+1);
+      if(del)del.onclick=()=>{if(rows.length>1){rows.splice(i,1);drawTags();}};
+    });
+  }
+  drawTags();
+  $("#gAdd").onclick=()=>{rows.push({url:"",label:"",timeoutMs:3000});drawTags();};
+
+  $("#gSave").onclick=async()=>{
+    const clean=rows.map(t=>({url:(t.url||"").trim(),label:(t.label||"").trim()||null,timeoutMs:t.timeoutMs||3000}))
+                    .filter(t=>t.url);
+    if(!clean.length){toast("Add at least one tag URL","err");return;}
+    const bad=clean.find(t=>!/^https?:\/\//.test(t.url));
+    if(bad){toast("Tag URL must start with http:// or https://","err");return;}
+    const cur=(await getPlc()).config;
+    // adTag is intentionally omitted — the server mirrors entry #1 into it, so
+    // sending a stale value here could contradict the new waterfall order.
+    const {adTag,...rest}=cur;
+    try{await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{config:{...rest,adTags:clean}}});
+      toast(`Waterfall saved (${clean.length} tag${clean.length>1?"s":""})`);
+      rows=clean.map(t=>({url:t.url,label:t.label||"",timeoutMs:t.timeoutMs}));drawTags();
+    }catch(e){toast(e.message,"err");}};}
 
 async function paneAnalytics(el){const pid=S.plc.id;
   el.innerHTML=`<div class="row" style="align-items:flex-end"><div style="flex:0 0 auto"><label>Range</label>
@@ -394,19 +462,40 @@ async function paneAnalytics(el){const pid=S.plc.id;
     <div style="flex:0 0 auto"><label>Demo data (dev)</label><div style="display:flex;gap:6px"><input id="anN" value="300" style="width:90px"/><button class="ghost small" id="anSeed" style="margin:0">Generate</button></div></div></div>
     <div id="anBody" style="margin-top:14px"></div>`;
   const load=async()=>{const rp=(()=>{const d=parseInt($("#anR").value,10);return d?`&from=${encodeURIComponent(new Date(Date.now()-d*864e5).toISOString())}`:"";})();
-    const [s,ts,bd,kv]=await Promise.all([api(`/v1/admin/analytics/summary?placement_id=${pid}${rp}`),api(`/v1/admin/analytics/timeseries?placement_id=${pid}&bucket=day${rp}`),
-      api(`/v1/admin/analytics/bidders?placement_id=${pid}${rp}`),api(`/v1/admin/analytics/key-values?placement_id=${pid}${rp}`)]);
+    const [s,ts,bd,kv,tp]=await Promise.all([api(`/v1/admin/analytics/summary?placement_id=${pid}${rp}`),api(`/v1/admin/analytics/timeseries?placement_id=${pid}&bucket=day${rp}`),
+      api(`/v1/admin/analytics/bidders?placement_id=${pid}${rp}`),api(`/v1/admin/analytics/key-values?placement_id=${pid}${rp}`),
+      api(`/v1/admin/analytics/tag-positions?placement_id=${pid}${rp}`)]);
     const money=v=>v==null?"—":"$"+Number(v).toFixed(2),pct=v=>v==null?"—":(v*100).toFixed(1)+"%";
-    const kpis=[["Player loads",s.loads,""],["Bid requests",s.requests,""],["Win rate",pct(s.winRate),`${s.wins} wins`],["Fill rate",pct(s.fillRate),`${s.impressions} imps`],
+    const basis=s.fillRateBasis==="ad_request"?`of ${s.adOpportunities} opportunities`:`of ${s.requests} bid reqs (legacy)`;
+    const kpis=[["Player loads",s.loads,s.views!=null?`${s.views} viewable`:""],["Bid requests",s.requests,"Prebid auctions"],
+      ["Ad requests",s.adRequests,s.waterfallDepth?`${s.waterfallDepth} tags/opportunity`:"VAST calls to GAM"],
+      ["Win rate",pct(s.winRate),`${s.wins} wins`],["Fill rate",pct(s.fillRate),basis],["Ads / load",s.adsPerLoad??"—","refresh multiplier"],
       ["eCPM raw",money(s.avgCpmRaw),"actual bid"],["eCPM biased",money(s.avgCpmBiased),s.biasUpliftPct!=null?`+${s.biasUpliftPct}% to GAM`:""],["Completes",s.completes,pct(s.completeRate)],["No-demand/errors",s.noDemand+s.errors,""]];
-    const steps=[["Load",s.loads],["Bid request",s.requests],["Win",s.wins],["Impression",s.impressions],["Complete",s.completes]];const fmax=Math.max(1,...steps.map(x=>x[1]));
+    // Two funnels, deliberately NOT one. Load/Viewable are counted per page load;
+    // everything from the bid request down is counted per ad opportunity, and
+    // refresh makes one load yield several. Stacking them in a single bar chart
+    // would show later steps overtaking earlier ones — the exact "intertwined
+    // metrics" confusion this split exists to prevent.
+    const pageSteps=[["Load",s.loads],["Viewable",s.views]];
+    // "Ad opportunity" (distinct auction_id), not raw ad_request attempts — a
+    // waterfall fires several attempts per opportunity, which would otherwise
+    // make this step overshoot the win count above it.
+    const oppSteps=[["Bid request",s.requests],["Win",s.wins],["Ad opportunity",s.adOpportunities],["Impression",s.impressions],["Complete",s.completes]];
+    const pmax=Math.max(1,...pageSteps.map(x=>x[1])),omax=Math.max(1,...oppSteps.map(x=>x[1]));
+    const fbar=(arr,mx)=>arr.map(([l,v])=>`<div><div class="flabel"><span>${l}</span><span>${v}</span></div><div class="bar"><i style="width:${((v||0)/mx*100).toFixed(1)}%"></i></div></div>`).join("");
     const wins={};ts.filter(r=>r.event==="auction_win").forEach(r=>wins[r.ts.slice(0,10)]=r.count);const days=Object.keys(wins).sort();const smax=Math.max(1,...days.map(d=>wins[d]));
     const bars=arr=>{const mx=Math.max(1,...arr.map(x=>x.count));return arr.map(x=>`<div><div class="flabel"><span>${esc(x.value)}</span><span>${x.count}</span></div><div class="bar"><i style="width:${(x.count/mx*100).toFixed(1)}%"></i></div></div>`).join("")||'<p class="muted">no data</p>';};
     $("#anBody").innerHTML=`<div class="card"><h2>Overview</h2><div class="kpis">${kpis.map(([l,v,sub])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v??"—"}</div><div class="s">${sub||""}</div></div>`).join("")}</div></div>
-      <div class="grid2"><div class="card"><h2>Funnel</h2><div class="funnel">${steps.map(([l,v])=>`<div><div class="flabel"><span>${l}</span><span>${v}</span></div><div class="bar"><i style="width:${(v/fmax*100).toFixed(1)}%"></i></div></div>`).join("")}</div></div>
+      <div class="grid2"><div class="card"><h2>Funnel</h2>
+        <p class="muted" style="margin:0 0 6px">Per page load</p><div class="funnel">${fbar(pageSteps,pmax)}</div>
+        <p class="muted" style="margin:14px 0 6px">Per ad opportunity ${tip("Counted once per ad opportunity, not per page load. With ad refresh on, a single page load produces several opportunities, so these totals can legitimately exceed the load count.")}</p><div class="funnel">${fbar(oppSteps,omax)}</div></div>
       <div class="card"><h2>Wins over time</h2><div class="spark">${days.map(d=>`<i style="height:${(wins[d]/smax*100).toFixed(0)}%" title="${d}: ${wins[d]}"></i>`).join("")||'<span class="muted">no data</span>'}</div></div></div>
       <div class="card"><h2>Per-bidder performance</h2>${bd.length?`<table><thead><tr><th>Bidder</th><th>Bids</th><th>No-bid</th><th>Timeout</th><th>Error</th><th>Avg CPM</th><th>Latency</th><th>Wins</th></tr></thead><tbody>`+
         bd.map(r=>`<tr><td><b>${esc(r.bidder)}</b></td><td>${r.bid}</td><td>${r['no-bid']}</td><td>${r.timeout}</td><td>${r.error}</td><td>${money(r.avgCpm)}</td><td>${r.avgLatencyMs!=null?r.avgLatencyMs+' ms':'—'}</td><td>${r.wins}</td></tr>`).join("")+`</tbody></table>`:'<p class="muted">no bid data yet — generate demo data or wait for traffic</p>'}</div>
+      <div class="card"><h2>Ad tag waterfall</h2>${tp.length?`<p class="muted" style="margin:0 0 8px">Which position actually fills. Deeper tags are only reached when the ones above them fail.</p>
+        <table><thead><tr><th>#</th><th>Tag</th><th>Reached</th><th>Filled</th><th>Fill rate</th></tr></thead><tbody>`+
+        tp.map(r=>`<tr><td>${r.position}</td><td><b>${esc(r.label)}</b></td><td>${r.reached}</td><td>${r.filled}</td><td>${pct(r.fillRate)}</td></tr>`).join("")+`</tbody></table>`
+        :'<p class="muted">No waterfall data yet — needs traffic from engine 2.7.0+ (older engines send no tagIndex).</p>'}</div>
       <div class="grid2"><div class="card"><h2>hb_pb buckets → GAM</h2><div class="funnel">${bars(kv.hb_pb)}</div></div><div class="card"><h2>Winning bidder</h2><div class="funnel">${bars(kv.hb_bidder)}</div></div></div>`;};
   $("#anRef").onclick=load;$("#anR").onchange=load;
   $("#anSeed").onclick=async()=>{try{const r=await api("/v1/admin/analytics/dev/seed",{method:"POST",body:{placement_id:pid,sessions:parseInt($("#anN").value||"300",10)}});toast(`Seeded ${r.total} events`);load();}catch(e){toast(e.message,"err");}};
@@ -446,14 +535,21 @@ async function renderAnalyticsSection(m){
       api("/v1/admin/analytics/summary"+q),
       api("/v1/admin/analytics/timeseries?bucket=day"+rp),
       api("/v1/admin/analytics/breakdown?dimension="+dim+rp)]);
-    $("#anKpis").innerHTML=[["Player loads",s.loads],["Bid requests",s.requests],["Win rate",pct(s.winRate)],["Fill rate",pct(s.fillRate)],["eCPM raw",money(s.avgCpmRaw)],["eCPM biased",money(s.avgCpmBiased)]].map(([l,v])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v??"—"}</div></div>`).join("");
-    const steps=[["Load",s.loads],["Bid request",s.requests],["Win",s.wins],["Impression",s.impressions],["Complete",s.completes]];const fmax=Math.max(1,...steps.map(x=>x[1]));
-    $("#anFunnel").innerHTML=steps.map(([l,v])=>`<div><div class="flabel"><span>${l}</span><span>${v}</span></div><div class="bar"><i style="width:${(v/fmax*100).toFixed(1)}%"></i></div></div>`).join("");
+    $("#anKpis").innerHTML=[["Player loads",s.loads],["Bid requests",s.requests],["Ad requests",s.adRequests],["Win rate",pct(s.winRate)],["Fill rate",pct(s.fillRate)],["Ads / load",s.adsPerLoad],["eCPM raw",money(s.avgCpmRaw)],["eCPM biased",money(s.avgCpmBiased)]].map(([l,v])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v??"—"}</div></div>`).join("");
+    // Split per-load from per-opportunity steps — see the placement Analytics tab.
+    const pageSteps=[["Load",s.loads],["Viewable",s.views]];
+    // "Ad opportunity" (distinct auction_id), not raw ad_request attempts — a
+    // waterfall fires several attempts per opportunity, which would otherwise
+    // make this step overshoot the win count above it.
+    const oppSteps=[["Bid request",s.requests],["Win",s.wins],["Ad opportunity",s.adOpportunities],["Impression",s.impressions],["Complete",s.completes]];
+    const pmax=Math.max(1,...pageSteps.map(x=>x[1])),omax=Math.max(1,...oppSteps.map(x=>x[1]));
+    const fbar=(arr,mx)=>arr.map(([l,v])=>`<div><div class="flabel"><span>${l}</span><span>${v}</span></div><div class="bar"><i style="width:${((v||0)/mx*100).toFixed(1)}%"></i></div></div>`).join("");
+    $("#anFunnel").innerHTML=`<p class="muted" style="margin:0 0 6px">Per page load</p>${fbar(pageSteps,pmax)}<p class="muted" style="margin:14px 0 6px">Per ad opportunity</p>${fbar(oppSteps,omax)}`;
     const wins={};ts.filter(r=>r.event==="auction_win").forEach(r=>wins[r.ts.slice(0,10)]=r.count);const dys=Object.keys(wins).sort();const smax=Math.max(1,...dys.map(x=>wins[x]));
     $("#anSpark").innerHTML=dys.map(x=>`<i style="height:${(wins[x]/smax*100).toFixed(0)}%" title="${x}: ${wins[x]}"></i>`).join("")||'<span class="muted">no data</span>';
     $("#anSparkLbl").textContent=dys.length?`${dys[0]} → ${dys[dys.length-1]}`:"";
-    $("#anBreak").innerHTML=br.length?`<table><thead><tr><th>${esc(dim)}</th><th>Loads</th><th>Requests</th><th>Wins</th><th>Imps</th><th>Fill</th><th>eCPM raw</th><th>eCPM biased</th></tr></thead><tbody>`+
-      br.map(r=>`<tr><td><b>${esc(r.key)}</b></td><td>${r.loads}</td><td>${r.requests}</td><td>${r.wins}</td><td>${r.impressions}</td><td>${pct(r.fillRate)}</td><td>${money(r.avgCpmRaw)}</td><td>${money(r.avgCpmBiased)}</td></tr>`).join("")+`</tbody></table>`
+    $("#anBreak").innerHTML=br.length?`<table><thead><tr><th>${esc(dim)}</th><th>Loads</th><th>Bid reqs</th><th>Ad reqs</th><th>Wins</th><th>Imps</th><th>Fill</th><th>Ads/load</th><th>eCPM raw</th><th>eCPM biased</th></tr></thead><tbody>`+
+      br.map(r=>`<tr><td><b>${esc(r.key)}</b></td><td>${r.loads}</td><td>${r.requests}</td><td>${r.adRequests}</td><td>${r.wins}</td><td>${r.impressions}</td><td>${pct(r.fillRate)}</td><td>${r.adsPerLoad??"—"}</td><td>${money(r.avgCpmRaw)}</td><td>${money(r.avgCpmBiased)}</td></tr>`).join("")+`</tbody></table>`
       :'<div class="empty">No data yet — generate demo data on a placement, or wait for live traffic.</div>';
   };
   $("#anRef").onclick=load;$("#anDim").onchange=load;$("#anR").onchange=load;

@@ -10,7 +10,29 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+class AdTagEntry(BaseModel):
+    """One step of the ad-server waterfall.
+
+    ``timeoutMs`` bounds how long the engine waits for this tag to produce a
+    creative before moving on — a dead endpoint that never errors would
+    otherwise hold the break open and starve every tag behind it.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    url: str
+    label: str | None = None
+    timeoutMs: int = Field(default=3000, ge=500, le=15000)
+
+    @field_validator("url")
+    @classmethod
+    def _url_is_http(cls, v: str) -> str:
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("ad tag url must start with http:// or https://")
+        return v
 
 
 class PlacementConfig(BaseModel):
@@ -32,7 +54,12 @@ class PlacementConfig(BaseModel):
     floorMax: float | None = None
 
     # --- GAM / ad serving ---
-    adTag: str | None = None  # GAM VAST tag URL -> data-tag
+    # Ad-server waterfall, tried in order until one fills. When set it is the
+    # source of truth; `adTag` is kept in sync with entry #1 (see
+    # `sync_ad_tags`) so engines older than 2.7.0 — which only read `data-tag` —
+    # still receive a working primary tag instead of nothing.
+    adTags: list[AdTagEntry] | None = None
+    adTag: str | None = None  # GAM VAST tag URL -> data-tag (waterfall entry #1)
     cacheUrl: str | None = None  # Prebid cache endpoint -> data-cache
     prebidUrl: str | None = None  # Prebid bundle URL -> data-prebid-url
     divId: str | None = None  # mount div id -> data-div-id
@@ -40,6 +67,18 @@ class PlacementConfig(BaseModel):
     # --- player behavior ---
     video: str | None = None  # instream content video -> data-video
     sticky: bool = False
+    # Hold the auction until the slot is >=50% in view. On by default: it lifts
+    # viewability and keeps the cached VAST fresh at render time.
+    lazy: bool = True
+    # Re-auction after each ad break. OFF by default — refresh is a commercial
+    # policy decision (some direct deals and GAM contracts forbid it), so it must
+    # be opted into per placement rather than inherited silently.
+    refresh: bool = False
+    # Seconds between ad breaks. The engine independently floors this at 30s to
+    # stay inside IAB/GAM refresh guidance, so a lower value here cannot burn
+    # the publisher's inventory.
+    refreshInterval: int = Field(default=30, ge=30, le=600)
+    refreshMax: int = Field(default=10, ge=1, le=100)
     autoplay: bool = True
     muted: bool = True
     fluid: bool = True
@@ -62,6 +101,22 @@ class PlacementConfig(BaseModel):
             raise ValueError("bias must be a numeric string, e.g. '0.00'") from exc
         return v
 
+    @model_validator(mode="after")
+    def _sync_ad_tags(self) -> PlacementConfig:
+        """Keep `adTag` and `adTags` from ever disagreeing.
+
+        Two directions, both needed:
+        - waterfall set → mirror entry #1 into `adTag`, so a pinned older engine
+          (and `readiness`/`preflight`, which check `adTag`) still see a tag.
+        - only `adTag` set → promote it to a one-entry waterfall, so every
+          consumer downstream can assume the list exists.
+        """
+        if self.adTags:
+            self.adTag = self.adTags[0].url
+        elif self.adTag:
+            self.adTags = [AdTagEntry(url=self.adTag, label="primary")]
+        return self
+
 
 class Bidder(BaseModel):
     bidder: str
@@ -78,8 +133,13 @@ class RuntimeConfig(BaseModel):
     floorMin: float | None
     floorMax: float | None
     adTag: str | None
+    adTags: list[AdTagEntry]
     video: str | None
     sticky: bool
+    lazy: bool
+    refresh: bool
+    refreshInterval: int
+    refreshMax: int
     autoplay: bool
     muted: bool
     fluid: bool

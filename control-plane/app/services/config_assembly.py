@@ -82,6 +82,14 @@ async def assemble_config(
         adTag=cfg.adTag,
         video=cfg.video,
         sticky=cfg.sticky,
+        # `_sync_ad_tags` guarantees adTags is populated whenever adTag is, so
+        # the engine always receives a list — even for placements written before
+        # the waterfall existed.
+        adTags=cfg.adTags or [],
+        lazy=cfg.lazy,
+        refresh=cfg.refresh,
+        refreshInterval=cfg.refreshInterval,
+        refreshMax=cfg.refreshMax,
         autoplay=cfg.autoplay,
         muted=cfg.muted,
         fluid=cfg.fluid,

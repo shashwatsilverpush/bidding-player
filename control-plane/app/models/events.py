@@ -11,7 +11,7 @@ from datetime import datetime
 from functools import partial
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Index, Numeric, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Index, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -42,6 +42,14 @@ class Event(Base):
     page_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     session_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     engine_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    # Ad-opportunity identity. A session (one page load) can produce many
+    # opportunities once refresh is on, so session_id cannot join an impression
+    # to the request that caused it — auction_id can. refresh_index is 0 for the
+    # first opportunity on the page and increments per refresh cycle, which is
+    # what lets reporting separate initial fill from refresh fill.
+    auction_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    refresh_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # consent
     gdpr_applies: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

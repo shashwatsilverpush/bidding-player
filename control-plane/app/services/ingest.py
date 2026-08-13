@@ -65,6 +65,8 @@ async def ingest_event(
         "placement_id": event.placementId,
         "ad_unit_path": event.adUnitPath,
         "session_id": event.sessionId,
+        "auction_id": event.auctionId,
+        "refresh_index": event.refreshIndex,
         "engine_version": event.engineVersion,
         "gdpr_applies": event.consent.gdpr if event.consent else None,
         "props": props,

@@ -26,10 +26,11 @@ This backend delivers:
 6. A single-page **admin dashboard** at `/admin` (`app/static/admin.html`):
    Publishers · Properties · Demand · Player Tag · GAM · Analytics.
 
-> **Engine wiring status:** the engine is NOT yet instrumented, so analytics
-> populate only via the dev seeder (`POST /v1/admin/analytics/dev/seed`) or once
-> `docs/engine-instrumentation.md` is applied. Generated tags are "baked" and work
-> with the current engine today.
+> **Engine wiring status:** the engine IS instrumented (`engine/player.js` emits
+> the full beacon set) and generated tags are thin/dynamic — they carry only
+> `data-config-url` + `data-placement-id` and fetch `RuntimeConfig` at boot. The
+> dev seeder (`POST /v1/admin/analytics/dev/seed`) still exists for populating
+> dashboards without live traffic.
 
 ## 2. Stack & conventions
 
@@ -123,6 +124,29 @@ Capture is automatic in `app/services/audit.py` via SQLAlchemy session listeners
 
 ## 6. Critical domain facts (don't regress)
 
+- **Three funnel levels, never interchangeable.** `player_load`/`player_view` are
+  counted **per page load**; `bid_request`/`ad_request`/`impression` are counted
+  **per ad opportunity**. Ad refresh makes one load yield many opportunities, so
+  any ratio mixing the two is meaningless and can exceed 100%. The dashboard
+  deliberately renders them as two separate funnels.
+- **`bid_request` ≠ `ad_request`.** A bid request is a Prebid auction; an ad
+  request is the VAST call to the ad server. The fallback paths (Prebid failed to
+  load, sub-floor rejection, no demand) fire an ad request with **no** auction, so
+  **fill = impressions / ad_requests**, never / loads and never / bid_requests.
+- **A waterfall is one opportunity, N attempts.** `adTags` fires one `ad_request`
+  per tag tried, all sharing the opportunity's `auction_id`. Fill therefore
+  divides by `COUNT(DISTINCT auction_id)` (`adOpportunities`), never by raw
+  `adRequests` — a 3-deep chain that fills on its last tag is 100% fill, not 33%.
+  `adRequests / adOpportunities` is `waterfallDepth`.
+- **`adTag` mirrors `adTags[0]`**, enforced by `PlacementConfig._sync_ad_tags` in
+  both directions. Never write one without the other: pinned pre-2.7.0 engines and
+  `readiness()`/`preflight()` read only `adTag`, so a drifting mirror silently
+  serves the wrong primary tag.
+- **`auction_id` is the funnel join key**, not `session_id`. A session spans the
+  whole page load; only `auction_id` ties an impression to the request that
+  produced it. `refresh_index` is 0 for the first opportunity, +1 per refresh.
+  Both are nullable — pre-2.7.0 rows predate them and cannot be backfilled, which
+  is why `summary()` restricts the modern fill basis to `auction_id IS NOT NULL`.
 - **Raw vs biased CPM:** the engine adds a floor bias and inflates the `hb_pb`
   sent to GAM. `auction_win` MUST carry both `cpmRaw` and `cpmBiased`; they are
   stored in separate columns. Never collapse them.

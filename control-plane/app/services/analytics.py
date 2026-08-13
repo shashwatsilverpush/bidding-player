@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Float, func, select
+from sqlalchemy import Float, Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -56,8 +56,19 @@ async def summary(
     avg_raw = float(win_stats[0]) if win_stats[0] is not None else None
     avg_biased = float(win_stats[1]) if win_stats[1] is not None else None
 
+    # Three distinct funnel levels that must never be used interchangeably:
+    #   loads       - the tag booted (once per page load)
+    #   views       - the slot became viewable and released the auction
+    #   requests    - Prebid auctions run  (0 when Prebid fails to load)
+    #   adRequests  - VAST calls to the ad server (fires on EVERY render path,
+    #                 including the fallbacks that skip the auction entirely)
+    # With ad refresh on, one load produces many requests/adRequests/impressions,
+    # so any ratio that mixes a per-load numerator with a per-opportunity
+    # denominator (or vice versa) is meaningless and can exceed 100%.
     loads = counts.get("player_load", 0)
+    views = counts.get("player_view", 0)
     requests = counts.get("bid_request", 0)
+    ad_requests = counts.get("ad_request", 0)
     wins = counts.get("auction_win", 0)
     impressions = counts.get("impression", 0)
     completes = counts.get("ad_complete", 0)
@@ -71,18 +82,63 @@ async def summary(
     if avg_raw and avg_biased and avg_raw > 0:
         uplift = round((avg_biased - avg_raw) / avg_raw * 100, 2)
 
+    # Fill = impressions per AD request. Engines older than 2.7.0 never emitted
+    # ad_request, so for windows containing only legacy rows we fall back to the
+    # bid-request denominator and say so, rather than reporting a blank.
+    #
+    # During the rollout a window holds BOTH kinds of row. Dividing every
+    # impression (legacy + new) by only the new engines' ad requests would
+    # overstate fill badly, so the modern basis counts numerator and denominator
+    # over the same population: rows carrying an auction_id, which is exactly the
+    # set of engines that also emit ad_request.
+    if ad_requests:
+        modern_impressions = (
+            await session.execute(
+                select(func.count()).where(
+                    *conds, Event.event_type == "impression", Event.auction_id.isnot(None)
+                )
+            )
+        ).scalar_one()
+        # An ad-tag waterfall fires one ad_request PER TAG TRIED, but the whole
+        # chain is a single ad opportunity sharing one auction_id. Counting raw
+        # attempts here would report a 3-deep waterfall that filled on its last
+        # tag as 33% fill instead of 100%. Count distinct opportunities instead.
+        ad_opportunities = (
+            await session.execute(
+                select(func.count(func.distinct(Event.auction_id))).where(
+                    *conds, Event.event_type == "ad_request", Event.auction_id.isnot(None)
+                )
+            )
+        ).scalar_one()
+        fill_rate, fill_basis = rate(modern_impressions, ad_opportunities), "ad_request"
+    else:
+        ad_opportunities = 0
+        fill_rate, fill_basis = rate(impressions, requests), "bid_request(legacy)"
+
     return {
         "counts": counts,
         "loads": loads,
+        "views": views,
         "requests": requests,
+        # adRequests = raw VAST calls (one per waterfall tag tried).
+        # adOpportunities = distinct chances to serve. Fill divides by the latter;
+        # the ratio between them is the waterfall's average depth.
+        "adRequests": ad_requests,
+        "adOpportunities": ad_opportunities,
+        "waterfallDepth": (round(ad_requests / ad_opportunities, 2) if ad_opportunities else None),
         "wins": wins,
         "impressions": impressions,
         "completes": completes,
         "errors": errors,
         "noDemand": no_demand,
+        "viewRate": rate(views, loads),
         "winRate": rate(wins, requests),
-        "fillRate": rate(impressions, loads),
+        "fillRate": fill_rate,
+        "fillRateBasis": fill_basis,
         "completeRate": rate(completes, impressions),
+        # How many ad opportunities each page load actually produced. This is the
+        # metric that shows refresh working; it is NOT a rate and can exceed 1.
+        "adsPerLoad": round(impressions / loads, 3) if loads else None,
         "avgCpmRaw": round(avg_raw, 4) if avg_raw is not None else None,
         "avgCpmBiased": round(avg_biased, 4) if avg_biased is not None else None,
         "biasUpliftPct": uplift,
@@ -165,6 +221,70 @@ async def by_bidder(
         agg[b]["wins"] = n
 
     return sorted(agg.values(), key=lambda r: (-r["wins"], -r["bid"]))
+
+
+async def by_tag_position(
+    session: AsyncSession,
+    *,
+    placement_id: str | None,
+    ts_from: datetime | None,
+    ts_to: datetime | None,
+) -> list[dict[str, Any]]:
+    """Waterfall performance per position: how often each tag was reached, and
+    how often it was the one that filled.
+
+    'Reached' is the count of ad_requests at that position. 'Filled' is the
+    number of those opportunities that produced an impression — attributed by
+    joining on auction_id and taking the DEEPEST position reached for that
+    opportunity, since the engine stops the chain as soon as a tag fills.
+    """
+    conds = _filters(placement_id, ts_from, ts_to)
+    idx = Event.props["tagIndex"].astext.cast(Integer)
+    label = Event.props["tagLabel"].astext
+
+    reached_rows = (
+        await session.execute(
+            select(idx.label("idx"), func.min(label).label("label"), func.count().label("n"))
+            .where(*conds, Event.event_type == "ad_request", idx.isnot(None))
+            .group_by(idx)
+            .order_by(idx)
+        )
+    ).all()
+
+    # Deepest tag position per opportunity == the tag that ended the chain.
+    last_pos = (
+        select(Event.auction_id.label("aid"), func.max(idx).label("idx"))
+        .where(*conds, Event.event_type == "ad_request", Event.auction_id.isnot(None))
+        .group_by(Event.auction_id)
+        .subquery()
+    )
+    filled_aids = (
+        select(Event.auction_id)
+        .where(*conds, Event.event_type == "impression", Event.auction_id.isnot(None))
+        .subquery()
+    )
+    filled_rows = (
+        await session.execute(
+            select(last_pos.c.idx, func.count())
+            .join(filled_aids, filled_aids.c.auction_id == last_pos.c.aid)
+            .group_by(last_pos.c.idx)
+        )
+    ).all()
+    filled: dict[int, int] = {int(i): int(n) for i, n in filled_rows if i is not None}
+
+    out: list[dict[str, Any]] = []
+    for i, lbl, n in reached_rows:
+        f = filled.get(i, 0)
+        out.append(
+            {
+                "position": (i or 0) + 1,
+                "label": lbl or f"tag {(i or 0) + 1}",
+                "reached": n,
+                "filled": f,
+                "fillRate": round(f / n, 4) if n else None,
+            }
+        )
+    return out
 
 
 async def timeseries(
@@ -258,6 +378,7 @@ async def breakdown(
             dim.label("key"),
             cnt("player_load").label("loads"),
             cnt("bid_request").label("requests"),
+            cnt("ad_request").label("ad_requests"),
             cnt("auction_win").label("wins"),
             cnt("impression").label("impressions"),
             func.avg(Event.cpm_raw).label("avg_raw"),
@@ -274,15 +395,20 @@ async def breakdown(
     )
     rows = (await session.execute(stmt)).all()
     out: list[dict[str, Any]] = []
-    for key, loads, requests, wins, imps, avg_raw, avg_biased in rows:
+    for key, loads, requests, ad_requests, wins, imps, avg_raw, avg_biased in rows:
+        # Same denominator rule as summary(): fill is per ad request, with a
+        # legacy fallback to bid requests for pre-2.7.0 rows.
+        denom = ad_requests or requests
         out.append(
             {
                 "key": key,
                 "loads": loads,
                 "requests": requests,
+                "adRequests": ad_requests,
                 "wins": wins,
                 "impressions": imps,
-                "fillRate": round(imps / loads, 4) if loads else None,
+                "fillRate": round(imps / denom, 4) if denom else None,
+                "adsPerLoad": round(imps / loads, 3) if loads else None,
                 "avgCpmRaw": round(float(avg_raw), 4) if avg_raw is not None else None,
                 "avgCpmBiased": round(float(avg_biased), 4) if avg_biased is not None else None,
             }

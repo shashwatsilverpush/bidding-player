@@ -25,6 +25,11 @@
     bidderHost:  currentScript.getAttribute("data-host")    || "ads-jbi003.rtba.bidsxchange.com",
 
     adTagUrl:    currentScript.getAttribute("data-tag") || "",
+    // Ad-server waterfall. JSON array of {url,label,timeoutMs}, tried in order:
+    // the next tag is called only when the previous one returns no fill, errors,
+    // or goes quiet. Absent → the single `data-tag` becomes a one-entry
+    // waterfall, so every tag already deployed behaves exactly as before.
+    adTagsJson:  currentScript.getAttribute("data-ad-tags") || "",
     timeout:     parseInt(currentScript.getAttribute("data-timeout"), 10) || 1200,
     // An explicit data-bias="0" (or "0.00") means "no strategic bias" and must
     // be honoured — a plain `|| 0.10` would wrongly coerce 0 back to the default.
@@ -45,6 +50,26 @@
     // shrinks and docks to a screen corner (with a close button) so the video —
     // and any ad on it — keeps playing. Lifts viewability and completed views.
     sticky:      currentScript.getAttribute("data-sticky") === "true",
+    // Lazy (viewport-gated) start. The auction is held until the slot is at
+    // least LAZY_THRESHOLD visible, so the bid — and the VAST response cached
+    // against it — is fresh at the moment the ad actually renders. Requesting on
+    // page load and rendering minutes later wastes the bid (Prebid cache TTL)
+    // and books an unviewable impression. Defaults ON; data-lazy="false" opts
+    // out for above-the-fold players that are visible immediately anyway.
+    lazy:        currentScript.getAttribute("data-lazy") !== "false",
+    // ─── Ad refresh ───────────────────────────────────────────────
+    // When on, the engine runs a NEW auction after each ad finishes, is
+    // skipped, or errors — so a session that stays on the page monetises more
+    // than once. Off by default: refresh is a policy decision (some GAM
+    // contracts and direct deals forbid it) and must be opted into.
+    refresh:     currentScript.getAttribute("data-refresh") === "true",
+    // Seconds between the end of one ad and the start of the next auction.
+    // Floored at REFRESH_MIN_SEC to stay inside IAB/GAM refresh guidance —
+    // faster than that reads as ad fraud to buyers and gets inventory blocked.
+    refreshSec:  (function (v) { return isNaN(v) ? 30 : v; })(parseFloat(currentScript.getAttribute("data-refresh-interval"))),
+    // Hard cap on refresh cycles per page load. Prevents a tab left open all day
+    // from billing thousands of unseen requests against the publisher's account.
+    refreshMax:  (function (v) { return isNaN(v) ? 10 : v; })(parseInt(currentScript.getAttribute("data-refresh-max"), 10)),
     videoUrl:    currentScript.getAttribute("data-video") || "",
     autoplay:    currentScript.getAttribute("data-autoplay") === "true",
     muted:       currentScript.getAttribute("data-muted") === "true",
@@ -102,6 +127,49 @@
   }
   cfg.bidders = resolveBidders();
 
+  // Default per-tag patience. A tag that neither fills nor errors (a dead
+  // endpoint, or a wrapper chain that never resolves) would otherwise hold the
+  // whole break open forever and the later tags would never get their turn.
+  var TAG_TIMEOUT_MS = 3000;
+
+  // Coerce a mixed list of strings / {url,label,timeoutMs} objects into the
+  // uniform shape the waterfall runs on, dropping anything without a url.
+  function normalizeTags(list) {
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var t = list[i];
+      if (!t) continue;
+      var url = (typeof t === "string") ? t : t.url;
+      if (!url) continue;
+      var ms = parseInt(t && t.timeoutMs, 10);
+      out.push({
+        url: String(url),
+        label: (t && t.label) || ("tag " + (out.length + 1)),
+        timeoutMs: (isNaN(ms) || ms <= 0) ? TAG_TIMEOUT_MS : ms
+      });
+    }
+    return out;
+  }
+
+  // `data-ad-tags` wins; otherwise the legacy single `data-tag` is promoted to a
+  // one-entry waterfall so the delivery path downstream has exactly one shape.
+  function resolveAdTags() {
+    if (cfg.adTagsJson) {
+      try {
+        var parsed = JSON.parse(cfg.adTagsJson);
+        if (Array.isArray(parsed) && parsed.length) {
+          var norm = normalizeTags(parsed);
+          if (norm.length) return norm;
+        }
+        warn("data-ad-tags must be a non-empty JSON array of tags; falling back to data-tag.");
+      } catch (e) {
+        warn("data-ad-tags JSON parse error (" + e.message + "); falling back to data-tag.");
+      }
+    }
+    return cfg.adTagUrl ? normalizeTags([{ url: cfg.adTagUrl, label: "primary" }]) : [];
+  }
+  cfg.adTags = resolveAdTags();
+
   var DEBUG = /[?&]debug=true/i.test((window.location && window.location.search) || "");
   
   function step(n, m) { if (!DEBUG) return; try { console.log("%c STEP " + n + " %c " + m, "background:linear-gradient(90deg,#a370f7,#7c4dff);color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px;", "color:#4ade80;"); } catch (_) {} }
@@ -126,6 +194,30 @@
       var r = (Math.random() * 16) | 0, v = c === "x" ? r : (r & 0x3) | 0x8; return v.toString(16);
     });
   }
+
+  // Sampling is decided ONCE per session, not per beacon. Rolling the dice on
+  // every event would drop a load but keep its impression (or vice versa),
+  // which silently corrupts every funnel ratio downstream — reported fill rate
+  // would wander even though the true rate never moved. One decision per
+  // session means a sampled-in session reports its WHOLE funnel.
+  var SAMPLED_IN = (function () {
+    if (!(cfg.sampleRate < 1)) return true;
+    if (cfg.sampleRate <= 0) return false;
+    try { return Math.random() < cfg.sampleRate; } catch (_) { return true; }
+  })();
+
+  // Every ad opportunity gets its own id. One page load can now produce many
+  // (viewport-gated first play, then each refresh), so `sessionId` alone can no
+  // longer tie an impression back to the request that caused it. AUCTION_ID is
+  // the join key for the whole funnel; REFRESH_INDEX is 0 for the first
+  // opportunity and increments per refresh cycle.
+  var AUCTION_ID = uuid();
+  var REFRESH_INDEX = 0;
+  // Whether the ad request about to be sent carries a Prebid winner's targeting
+  // (vs. falling through to the house/direct line item). Stamped on ad_request
+  // so fill can be split by demand source without joining back to auction_win.
+  var lastAuctionWon = false;
+  function newAuctionCycle() { AUCTION_ID = uuid(); REFRESH_INDEX++; lastAuctionWon = false; }
   function teleConsent() {
     // Reuse whatever consent Prebid already resolved rather than re-querying a CMP.
     try {
@@ -144,11 +236,12 @@
   function beacon(event, props) {
     try {
       if (!TELE_ON) return;
-      if (cfg.sampleRate < 1 && Math.random() > cfg.sampleRate) return;
+      if (!SAMPLED_IN) return;
       var body = JSON.stringify({
         v: 1, event: event, ts: Date.now(), eventId: uuid(),
         account: cfg.account, placementId: cfg.placementId, adUnitPath: gamIu(),
         pageUrl: (window.location && window.location.href) || "", sessionId: SESSION_ID,
+        auctionId: AUCTION_ID, refreshIndex: REFRESH_INDEX,
         engineVersion: ENGINE_VERSION, consent: teleConsent(), props: props || {}
       });
       var sent = false;
@@ -173,6 +266,45 @@
         adDuration: ad.getDuration ? ad.getDuration() : undefined
       };
     } catch (_) { return {}; }
+  }
+
+  // Fraction of the slot that must be on screen before we treat it as a real,
+  // viewable ad opportunity. Matches the MRC/IAB video standard (50%) and the
+  // threshold the outstream renderer already uses to start its ad.
+  var LAZY_THRESHOLD = 0.5;
+
+  // Call `cb` once, as soon as `el` is at least `threshold` visible. Fires
+  // immediately when the element is already in view (IntersectionObserver
+  // delivers an initial entry on observe), and degrades to calling straight
+  // through on browsers without IntersectionObserver.
+  function whenVisible(el, threshold, cb) {
+    if (!el || typeof IntersectionObserver !== "function") { cb(); return function () {}; }
+    var done = false;
+    var io = new IntersectionObserver(function (entries) {
+      if (done) return;
+      for (var i = 0; i < entries.length; i++) {
+        if (entries[i].isIntersecting && entries[i].intersectionRatio >= threshold) {
+          done = true;
+          io.disconnect();
+          cb();
+          return;
+        }
+      }
+    }, { threshold: [0, threshold, 1] });
+    io.observe(el);
+    return function () { done = true; try { io.disconnect(); } catch (_) {} };
+  }
+
+  // Track whether the slot is currently viewable. Unlike whenVisible this keeps
+  // observing — the refresh controller needs the live state, not a one-shot.
+  var slotVisible = false;
+  function watchVisibility(el) {
+    if (!el || typeof IntersectionObserver !== "function") { slotVisible = true; return; }
+    new IntersectionObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        slotVisible = entries[i].isIntersecting && entries[i].intersectionRatio >= LAZY_THRESHOLD;
+      }
+    }, { threshold: [0, LAZY_THRESHOLD, 1] }).observe(el);
   }
 
   function roundGran(c) { return Math.floor(c / 0.10) * 0.10; }
@@ -289,12 +421,30 @@
     try {
       if (videojs.getPlayer(videoEl.id)) {
         player = videojs.getPlayer(videoEl.id);
-        player.src({ src: cfg.videoUrl, type: isHLS ? "application/x-mpegURL" : "video/mp4" });
+        // Only (re)load the source if it actually changed. On a refresh cycle
+        // this function runs again against the same content, and calling src()
+        // unconditionally would restart the video from 0:00 behind every ad
+        // break — the reader would watch the same opening clip over and over.
+        var curSrc = "";
+        try { curSrc = player.currentSrc() || ""; } catch (_) {}
+        if (curSrc !== cfg.videoUrl) {
+          player.src({ src: cfg.videoUrl, type: isHLS ? "application/x-mpegURL" : "video/mp4" });
+        }
         if (cfg.autoplay) player.autoplay(cfg.autoplay);
         player.muted(cfg.muted);
         player.loop(cfg.loop);
       } else {
-        player = videojs(videoEl, { autoplay: cfg.autoplay, muted: cfg.muted, controls: true, fluid: cfg.fluid, loop: cfg.loop, preload: cfg.preload, sources: [{ src: cfg.videoUrl, type: isHLS ? "application/x-mpegURL" : "video/mp4" }] });
+        player = videojs(videoEl, {
+          autoplay: cfg.autoplay, muted: cfg.muted, controls: true, fluid: cfg.fluid,
+          loop: cfg.loop, preload: cfg.preload,
+          // With autoplay on, video.js's big play button is a flash of UI the
+          // user never gets to click — it paints, then playback starts and it
+          // disappears. That "play icon then it auto-plays" stutter is exactly
+          // what the competitor's player doesn't have. Suppress it entirely;
+          // when autoplay is off it's still the only way to start, so keep it.
+          bigPlayButton: !cfg.autoplay,
+          sources: [{ src: cfg.videoUrl, type: isHLS ? "application/x-mpegURL" : "video/mp4" }]
+        });
       }
     } catch (e) { warn("player init: " + e.message); return; }
 
@@ -316,19 +466,35 @@
     } catch (e) { warn("vpaid: " + e.message); }
 
     player.ready(function () {
+      // On a refresh cycle the ad container, display container, loader and all
+      // their listeners already exist — rebuilding them would append a second
+      // overlay div to the mount on every cycle and leak an AdsLoader each time.
+      // IMA's documented refresh flow is to reuse the loader: signal that the
+      // previous ad break is finished, then requestAds() again.
+      if (container.__atpAds) {
+        try { container.__atpAds.loader.contentComplete(); } catch (_) {}
+        requestAdsInto(container, container.__atpAds.loader, finalTagUrl);
+        return;
+      }
+
       var adContainer = document.createElement("div");
       adContainer.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;z-index:-1;pointer-events:none;";
       container.style.position = container.style.position || "relative";
       container.appendChild(adContainer);
-      
+
       try {
         var adc = new google.ima.AdDisplayContainer(adContainer, videoEl);
         var loader = new google.ima.AdsLoader(adc);
+        container.__atpAds = { adContainer: adContainer, adc: adc, loader: loader };
         loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (e) {
           adContainer.style.zIndex = "-1";
           adContainer.style.pointerEvents = "none";
           beacon("ad_error", { phase: "ima_loader", errorCode: String((e && e.getError && e.getError()) || "") });
           try { player.play(); } catch (_) {}
+          // A loader error is usually an empty VAST response — exactly what the
+          // waterfall exists for. Try the next tag; only an exhausted chain
+          // counts as a genuine no-fill.
+          advanceWaterfall("no_fill");
         }, false);
         loader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, function (e) {
           var mgr = e.getAdsManager(videoEl);
@@ -342,9 +508,21 @@
             try { mgr.destroy(); } catch (_) {}
             beacon("ad_error", { phase: "ima", errorCode: String((e && e.getError && e.getError()) || "") });
             player.play().catch(function(){});
+            advanceWaterfall("error");
+          });
+          // LOADED (not STARTED) is the moment this tag is known to have filled:
+          // VAST resolved and a creative is ready. Stopping the chain here keeps
+          // a slow-rendering but valid ad from tripping its own tag timeout and
+          // being double-served alongside the next tag in the chain.
+          mgr.addEventListener(google.ima.AdEvent.Type.LOADED, function () {
+            onAdFilled();
           });
           mgr.addEventListener(google.ima.AdEvent.Type.STARTED, function (ev) {
+            onAdFilled();
             beacon("impression", imaAdInfo(ev));
+          });
+          mgr.addEventListener(google.ima.AdEvent.Type.SKIPPED, function () {
+            beacon("ad_complete", { viewedPct: 0, skipped: true });
           });
           mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_PAUSE_REQUESTED, function () {
             adContainer.style.zIndex = "10";
@@ -364,43 +542,79 @@
             adContainer.style.pointerEvents = "none";
             container.__atpMgr = null;
             try { mgr.destroy(); } catch (_) {}
+            scheduleRefresh("complete");
           });
           var w = container.offsetWidth || 640, h = container.offsetHeight || 360;
           mgr.init(w, h, google.ima.ViewMode.NORMAL); mgr.start();
         }, false);
 
-        var req = new google.ima.AdsRequest();
-        req.adTagUrl = finalTagUrl;
-        req.linearAdSlotWidth = container.offsetWidth || 640;
-        req.linearAdSlotHeight = container.offsetHeight || 360;
+        // initialize() must be called exactly once for the lifetime of the
+        // display container (IMA ties it to the user-gesture context on mobile),
+        // which is why it lives here and not in requestAdsInto().
         adc.initialize();
-        loader.requestAds(req);
-        step(6, "Dispatching VAST Request via Cloud Engine layer.");
+        requestAdsInto(container, loader, finalTagUrl);
       } catch (e) { warn("IMA setup: " + e.message); }
     });
+  }
+
+  // Issue one VAST request against an existing loader. Shared by the first
+  // auction and every refresh cycle.
+  function requestAdsInto(container, loader, finalTagUrl) {
+    try {
+      var req = new google.ima.AdsRequest();
+      req.adTagUrl = finalTagUrl;
+      var w = container.offsetWidth || 640;
+      req.linearAdSlotWidth = w;
+      // An outstream slot is collapsed to height:0 until an ad renders, so its
+      // measured height would advertise a 0-tall slot to the ad server. Derive
+      // the height it is about to expand to instead.
+      req.linearAdSlotHeight = isOutstream()
+        ? Math.round(w * 9 / 16)
+        : (container.offsetHeight || 360);
+      loader.requestAds(req);
+    } catch (e) { warn("requestAds: " + e.message); }
   }
 
   // Outstream renderer. No content video — IMA renders the ad directly into
   // the (collapsed) mount. The ad is started only once the slot scrolls into
   // view, and the slot collapses again the moment the ad finishes or errors.
+  // Slot sizing helpers, at module scope so the waterfall controller can collapse
+  // the slot when the whole chain is exhausted.
+  function outstreamCollapse() {
+    var c = document.getElementById(cfg.divId);
+    if (!c) return;
+    c.style.height = "0";
+    c.style.overflow = "hidden";
+  }
+  function outstreamExpand() {
+    var c = document.getElementById(cfg.divId);
+    if (!c) return;
+    c.style.height = "";
+    c.style.overflow = "";
+    c.style.aspectRatio = "16/9";
+  }
+  // The ads manager currently rendering, so the persistent sound button can
+  // address whichever manager the active waterfall attempt produced.
+  var outMgr = null;
+
   function setupOutstream(finalTagUrl) {
     var container = document.getElementById(cfg.divId);
     var videoEl   = document.getElementById(cfg.divId + "_video");
     if (!container || !videoEl) return;
 
-    function collapse() {
-      container.style.height = "0";
-      container.style.overflow = "hidden";
-    }
-    function expand() {
-      container.style.height = "";
-      container.style.overflow = "";
-      container.style.aspectRatio = "16/9";
-    }
+    var collapse = outstreamCollapse, expand = outstreamExpand;
 
     if (typeof google === "undefined" || !google.ima) {
       warn("Google IMA SDK blocked or not loaded. Outstream slot stays collapsed.");
       collapse();
+      return;
+    }
+
+    // Waterfall/refresh re-entry: the display container, loader and sound button
+    // already exist. Rebuilding them would stack a fresh overlay div and a fresh
+    // sound button onto the mount for every tag we fall through to.
+    if (container.__atpAds) {
+      requestAdsInto(container, container.__atpAds.loader, finalTagUrl);
       return;
     }
 
@@ -418,45 +632,55 @@
     try {
       var adc = new google.ima.AdDisplayContainer(adContainer, videoEl);
       var loader = new google.ima.AdsLoader(adc);
+      container.__atpAds = { adContainer: adContainer, adc: adc, loader: loader };
+
+      // Outstream autoplays muted (browser policy), so give viewers a clear
+      // tap-for-sound control — the one control outstream units are expected
+      // to surface. IMA does not provide a generic mute toggle, so we overlay
+      // our own. Built once for the life of the slot (not per ads manager), or
+      // each waterfall attempt would append another button to the mount.
+      var ICON_MUTED = '<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M16.5 9 21 15M21 9l-4.5 6" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
+      var ICON_SOUND = '<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8 8 0 0 1 0 12" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
+      var adMuted = !!cfg.muted;
+      var soundBtn = document.createElement("button");
+      soundBtn.setAttribute("aria-label", "Unmute ad");
+      soundBtn.innerHTML = ICON_MUTED;
+      soundBtn.style.cssText = "position:absolute;bottom:10px;left:10px;width:36px;height:36px;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.6);cursor:pointer;z-index:2147483647;display:none;align-items:center;justify-content:center;";
+      soundBtn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        adMuted = !adMuted;
+        // Addresses whichever manager the active attempt produced.
+        try { if (outMgr) outMgr.setVolume(adMuted ? 0 : 1); } catch (_) {}
+        try { videoEl.muted = adMuted; } catch (_) {}
+        soundBtn.innerHTML = adMuted ? ICON_MUTED : ICON_SOUND;
+        soundBtn.setAttribute("aria-label", adMuted ? "Unmute ad" : "Mute ad");
+      });
+      container.appendChild(soundBtn);
 
       loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (e) {
         warn("outstream loader error: " + ((e && e.getError && e.getError()) || "unknown"));
         beacon("ad_error", { phase: "ima_loader", errorCode: String((e && e.getError && e.getError()) || "") });
-        collapse();
+        // Don't collapse yet — a later tag in the chain may still fill. The slot
+        // is collapsed by advanceWaterfall() only once every tag has failed.
+        advanceWaterfall("no_fill");
       }, false);
 
       loader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, function (e) {
         var mgr = e.getAdsManager(videoEl);
-
-        // Outstream autoplays muted (browser policy), so give viewers a clear
-        // tap-for-sound control — the one control outstream units are expected
-        // to surface. IMA does not provide a generic mute toggle, so we overlay
-        // our own. It sits above the IMA ad container and toggles mgr volume.
-        var ICON_MUTED = '<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M16.5 9 21 15M21 9l-4.5 6" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
-        var ICON_SOUND = '<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8 8 0 0 1 0 12" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
-        var adMuted = !!cfg.muted;
-        var soundBtn = document.createElement("button");
-        soundBtn.setAttribute("aria-label", "Unmute ad");
-        soundBtn.innerHTML = ICON_MUTED;
-        soundBtn.style.cssText = "position:absolute;bottom:10px;left:10px;width:36px;height:36px;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.6);cursor:pointer;z-index:2147483647;display:none;align-items:center;justify-content:center;";
-        soundBtn.addEventListener("click", function (ev) {
-          ev.stopPropagation();
-          adMuted = !adMuted;
-          try { mgr.setVolume(adMuted ? 0 : 1); } catch (_) {}
-          try { videoEl.muted = adMuted; } catch (_) {}
-          soundBtn.innerHTML = adMuted ? ICON_MUTED : ICON_SOUND;
-          soundBtn.setAttribute("aria-label", adMuted ? "Unmute ad" : "Mute ad");
-        });
-        container.appendChild(soundBtn);
+        outMgr = mgr;
 
         mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (ev) {
           warn("outstream ad error: " + ((ev && ev.getError && ev.getError()) || "unknown"));
           beacon("ad_error", { phase: "ima", errorCode: String((ev && ev.getError && ev.getError()) || "") });
           soundBtn.style.display = "none";
-          collapse();
           try { mgr.destroy(); } catch (_) {}
+          advanceWaterfall("error");
+        });
+        mgr.addEventListener(google.ima.AdEvent.Type.LOADED, function () {
+          onAdFilled();
         });
         mgr.addEventListener(google.ima.AdEvent.Type.STARTED, function (ev) {
+          onAdFilled();
           beacon("impression", imaAdInfo(ev));
         });
         mgr.addEventListener(google.ima.AdEvent.Type.COMPLETE, function () {
@@ -470,6 +694,7 @@
         mgr.addEventListener(google.ima.AdEvent.Type.ALL_ADS_COMPLETED, function () {
           soundBtn.style.display = "none";
           collapse();
+          outMgr = null;
           try { mgr.destroy(); } catch (_) {}
         });
 
@@ -491,31 +716,13 @@
           } catch (e) { warn("outstream start: " + e.message); collapse(); }
         }
 
-        if (typeof IntersectionObserver === "function") {
-          var io = new IntersectionObserver(function (entries) {
-            for (var i = 0; i < entries.length; i++) {
-              if (entries[i].isIntersecting && entries[i].intersectionRatio >= 0.5) {
-                io.disconnect();
-                startAd();
-                break;
-              }
-            }
-          }, { threshold: [0, 0.5, 1] });
-          io.observe(container);
-        } else {
-          // No IntersectionObserver support — fall back to immediate start.
-          startAd();
-        }
+        whenVisible(container, LAZY_THRESHOLD, startAd);
         step(7, "Outstream ad loaded. Waiting for slot to enter viewport.");
       }, false);
 
-      var req = new google.ima.AdsRequest();
-      req.adTagUrl = finalTagUrl;
-      req.linearAdSlotWidth = container.offsetWidth || 640;
-      req.linearAdSlotHeight = Math.round((container.offsetWidth || 640) * 9 / 16);
+      // initialize() runs once per display container for the life of the slot.
       adc.initialize();
-      loader.requestAds(req);
-      step(6, "Dispatching outstream VAST request via Cloud Engine layer.");
+      requestAdsInto(container, loader, finalTagUrl);
     } catch (e) { warn("outstream IMA setup: " + e.message); collapse(); }
   }
 
@@ -562,6 +769,9 @@
         ";position:fixed;bottom:20px;right:20px;width:340px;max-width:42vw;height:auto;aspect-ratio:16/9;margin:0;z-index:2147483000;box-shadow:0 8px 30px rgba(0,0,0,.5);border-radius:8px;overflow:hidden;";
       closeBtn.style.display = "flex";
       stuck = true;
+      // A docked player is on screen by definition, so it keeps satisfying the
+      // refresh viewability gate even though its in-flow slot has scrolled away.
+      stickyDocked = true;
       resizeAd();
     }
     function undock() {
@@ -570,6 +780,7 @@
       wrapper.style.height = "";
       closeBtn.style.display = "none";
       stuck = false;
+      stickyDocked = false;
       resizeAd();
     }
 
@@ -579,6 +790,9 @@
       dismissed = true;
       undock();
       io.disconnect();
+      // Dismissing the floating player is an explicit "stop showing me this".
+      // Honour it for ads too — cancel any pending refresh and don't arm more.
+      cancelRefresh();
       try { var v = document.getElementById(cfg.divId + "_video"); if (v) v.pause(); } catch (_) {}
     });
 
@@ -594,15 +808,155 @@
     step("6.5", "Sticky player armed — will float on scroll-out.");
   }
 
-  // Dispatch the resolved ad tag to the correct renderer for this placement.
-  function render(finalTagUrl) {
-    if (isOutstream()) {
-      setupOutstream(finalTagUrl);
-    } else {
-      setupPlayer(finalTagUrl);
-      setupSticky();
-    }
+  // ─── Ad refresh controller ──────────────────────────────────────
+  // Runs a fresh auction after each ad break so a session that stays on the page
+  // monetises more than once. Every gate here exists to keep the refreshed
+  // impressions *viewable and billable*: refreshing a slot nobody is looking at
+  // manufactures requests that buyers will eventually claw back.
+  //
+  // GAM/IAB guidance puts the floor at 30s between refreshes on viewable
+  // inventory. REFRESH_MIN_SEC enforces it regardless of what the tag or the
+  // control plane asks for, so a misconfiguration cannot burn the account.
+  var REFRESH_MIN_SEC = 30;
+  var refreshTimer = null;
+  var refreshBackoff = 0;   // consecutive no-fills; doubles the wait each time
+  var refreshPending = false;
+  var refreshStopped = false;
+  var stickyDocked = false;
+
+  function cancelRefresh() {
+    refreshStopped = true;
+    refreshPending = false;
+    if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
   }
+
+  function refreshAllowed() {
+    if (!cfg.refresh || refreshStopped) return false;
+    if (isOutstream()) return false;   // outstream collapses when the ad ends; nothing to refresh into
+    if (REFRESH_INDEX >= cfg.refreshMax) return false;
+    return true;
+  }
+
+  // A refresh is only worth firing when someone can actually see it. The slot
+  // counts as watchable when it is >=50% on screen, OR when it is docked as a
+  // floating player (which is on screen by definition), and the tab is in the
+  // foreground — a background tab renders ads to nobody.
+  function refreshGateOpen() {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return false;
+    return slotVisible || stickyDocked;
+  }
+
+  function scheduleRefresh(reason) {
+    if (!refreshAllowed() || refreshPending) return;
+    if (reason === "no_fill" || reason === "error") refreshBackoff++;
+    var waitSec = Math.max(REFRESH_MIN_SEC, cfg.refreshSec) * Math.pow(2, Math.min(refreshBackoff, 4));
+    refreshPending = true;
+    step("8", "Refresh #" + (REFRESH_INDEX + 1) + " scheduled in " + waitSec + "s (" + reason + ").");
+    refreshTimer = setTimeout(function () { runRefresh(reason); }, waitSec * 1000);
+  }
+
+  function runRefresh(reason) {
+    refreshTimer = null;
+    if (!refreshAllowed()) { refreshPending = false; return; }
+    // Gate closed (scrolled away, or tab backgrounded) — don't fire into the
+    // void and don't burn a refresh slot. Re-arm and check again on the next
+    // interval; the cycle resumes the moment the reader comes back.
+    if (!refreshGateOpen()) {
+      step("8", "Refresh held — slot not viewable or tab hidden.");
+      refreshTimer = setTimeout(function () { runRefresh(reason); }, REFRESH_MIN_SEC * 1000);
+      return;
+    }
+    refreshPending = false;
+    // New ad opportunity: new auctionId, refreshIndex+1. Everything downstream
+    // (bid_request, ad_request, impression) is now attributable to this cycle
+    // rather than being smeared across the page load.
+    newAuctionCycle();
+    step("8", "Refresh #" + REFRESH_INDEX + " firing a new auction.");
+    runAuction();
+  }
+
+  // ─── Ad-server waterfall ────────────────────────────────────────
+  // One ad opportunity, N ad-server tags tried in order. The next tag is called
+  // only when the current one fails to deliver: empty VAST, an IMA error, or
+  // silence past its timeout. The last entry is conventionally the house tag,
+  // so an opportunity that no one bought still renders something.
+  //
+  // The whole chain shares ONE auctionId — it is a single opportunity, however
+  // many tags it takes to fill. Each attempt carries `tagIndex`, so reporting
+  // can show which position actually filled without ever mistaking three
+  // attempts for three opportunities.
+  var wfTags = [], wfIndex = 0, wfTargeting = null, wfFilled = false, wfTimer = null;
+
+  function clearWfTimer() { if (wfTimer) { clearTimeout(wfTimer); wfTimer = null; } }
+
+  // Every path into here means "the auction is settled, go call the ad server" —
+  // win, sub-floor rejection, no demand, and the Prebid-unavailable fallback
+  // alike. `ad_request` is therefore the honest basis for fill, and is
+  // deliberately NOT the same thing as `bid_request` (a Prebid auction): the
+  // fallback paths call the ad server without ever running an auction.
+  function beginAdDelivery(targeting) {
+    clearWfTimer();
+    wfTags = cfg.adTags.slice();
+    wfIndex = 0;
+    wfTargeting = targeting || noBidTargeting();
+    wfFilled = false;
+    if (!wfTags.length) {
+      warn("No ad tag configured (data-tag / data-ad-tags both empty) — nothing to request.");
+      return;
+    }
+    deliverCurrentTag();
+  }
+
+  function deliverCurrentTag() {
+    clearWfTimer();
+    var t = wfTags[wfIndex];
+    if (!t) return;
+    // Targeting is stitched onto EVERY tag in the chain, not just the first.
+    // A tag that inherits no hb_* params cannot monetise the bid we just won,
+    // which would silently throw the auction away at the exact moment the
+    // primary tag failed and the winning bid was the only thing left to serve.
+    var url = stitchTag(t.url, wfTargeting);
+    beacon("ad_request", {
+      placement: cfg.placement, wonBid: !!lastAuctionWon,
+      tagIndex: wfIndex, tagLabel: t.label
+    });
+    step(6, "Ad request " + (wfIndex + 1) + "/" + wfTags.length + " → " + t.label);
+    wfTimer = setTimeout(function () { advanceWaterfall("timeout"); }, t.timeoutMs);
+    if (isOutstream()) setupOutstream(url);
+    else { setupPlayer(url); setupSticky(); }
+  }
+
+  // Called when a tag fails to deliver. Moves to the next one, or ends the
+  // opportunity when the chain is exhausted.
+  function advanceWaterfall(reason) {
+    clearWfTimer();
+    // Already filled: this is a mid-play error, not a fill failure. The
+    // impression is counted and the break is over — go straight to refresh
+    // rather than re-entering the chain and double-serving.
+    if (wfFilled) { scheduleRefresh("error"); return; }
+
+    wfIndex++;
+    if (wfIndex < wfTags.length) {
+      step(6, "Tag " + wfIndex + " " + reason + " — falling through to " + wfTags[wfIndex].label + ".");
+      deliverCurrentTag();
+      return;
+    }
+    step(6, "Waterfall exhausted after " + wfTags.length + " tag(s) (" + reason + ").");
+    beacon("no_demand", { phase: "waterfall_exhausted", fallbackServed: false });
+    if (isOutstream()) outstreamCollapse();
+    scheduleRefresh("no_fill");
+  }
+
+  // A tag returned a playable creative. Stops the chain and the timeout.
+  function onAdFilled() {
+    if (wfFilled) return;
+    wfFilled = true;
+    clearWfTimer();
+    refreshBackoff = 0;  // real demand exists; drop any accumulated no-fill backoff
+    step(6, "Filled by " + ((wfTags[wfIndex] && wfTags[wfIndex].label) || "tag") + ".");
+  }
+
+  var pbjsHooked = false;
 
   function runAuction() {
     var bidderNames = cfg.bidders.map(function (b) { return b.bidder; }).join(", ");
@@ -610,7 +964,7 @@
     if (typeof pbjs === "undefined") {
       warn("Prebid failed network retrieval — Fallback active.");
       beacon("no_demand", { phase: "prebid_unavailable", fallbackServed: true });
-      render(stitchTag(cfg.adTagUrl, noBidTargeting()));
+      beginAdDelivery(noBidTargeting());
       return;
     }
     pbjs.que.push(function () {
@@ -657,7 +1011,10 @@
       var pw = (mountRect && mountRect.width)  ? Math.round(mountRect.width)  : 640;
       var ph = (mountRect && mountRect.height) ? Math.round(mountRect.height) : 360;
 
-      var code = "atp-" + Date.now();
+      // Keyed on the auction id rather than the clock: two refresh cycles that
+      // land in the same millisecond would otherwise share an ad unit code and
+      // read each other's targeting.
+      var code = "atp-" + AUCTION_ID;
       try {
         pbjs.addAdUnits([{
           code: code,
@@ -671,7 +1028,14 @@
       step(1.5, "Requesting video ad payload. Bidders: " + bidderNames + ". Player size: " + pw + "x" + ph);
 
       // Telemetry: capture per-bidder outcomes + the request itself.
-      try {
+      //
+      // Registered exactly once. pbjs.onEvent appends a listener each call, so
+      // re-registering per auction would make refresh #N emit N copies of every
+      // bid_response — the reported bid volume would grow quadratically with
+      // session length while the true volume grew linearly.
+      if (!pbjsHooked) {
+        pbjsHooked = true;
+        try {
         pbjs.onEvent("bidResponse", function (bid) {
           beacon("bid_response", { bidder: bid.bidderCode || bid.bidder, cpm: bid.cpm,
             currency: bid.currency, status: "bid", latencyMs: bid.timeToRespond });
@@ -685,7 +1049,8 @@
         pbjs.onEvent("bidderError", function (o) {
           beacon("bid_response", { bidder: (o && o.bidderRequest && o.bidderRequest.bidderCode) || "", status: "error" });
         });
-      } catch (_) {}
+        } catch (_) {}
+      }
       beacon("bid_request", { bidders: cfg.bidders.map(function (b) { return b.bidder; }), timeout: cfg.timeout });
 
       try {
@@ -694,7 +1059,7 @@
           bidsBackHandler: function () {
             var winner = null;
             try { winner = (pbjs.getHighestCpmBids(code) || [])[0]; } catch (e) { warn("getHighestCpmBids: " + e.message); }
-            var finalUrl;
+            var finalTargeting;
             if (winner) {
               // Floor min: reject the winning bid if it didn't meet the
               // publisher's minimum acceptable price. Falls through to the
@@ -702,7 +1067,7 @@
               if (cfg.floorMin !== null && winner.cpm < cfg.floorMin) {
                 noBidLog();
                 beacon("no_demand", { phase: "floor_min", fallbackServed: true });
-                finalUrl = stitchTag(cfg.adTagUrl, noBidTargeting());
+                finalTargeting = noBidTargeting();
               } else {
                 // Floor max: cap the raw CPM before bias and bucketing so
                 // a runaway high bid doesn't overshoot the highest line item.
@@ -727,7 +1092,8 @@
                 var bidderKey = "hb_pb_" + winner.bidder;
                 if (targeting[bidderKey]) targeting[bidderKey] = cpmStr;
 
-                finalUrl = stitchTag(cfg.adTagUrl, targeting);
+                finalTargeting = targeting;
+                lastAuctionWon = true;
                 beacon("auction_win", {
                   bidder: winner.bidder, cpmRaw: rawCpm, cpmBiased: finalCpm,
                   hbPb: cpmStr, floorApplied: (cfg.floorMax !== null && winner.cpm > cfg.floorMax)
@@ -736,15 +1102,15 @@
             } else {
               noBidLog();
               beacon("no_demand", { phase: "auction", fallbackServed: true });
-              finalUrl = stitchTag(cfg.adTagUrl, noBidTargeting());
+              finalTargeting = noBidTargeting();
             }
             try { if (pbjs.removeAdUnit) pbjs.removeAdUnit(code); } catch (_) {}
-            render(finalUrl);
+            beginAdDelivery(finalTargeting);
           }
         });
       } catch (e) {
         warn("requestBids execution break: " + e.message);
-        render(stitchTag(cfg.adTagUrl, noBidTargeting()));
+        beginAdDelivery(noBidTargeting());
       }
     });
   }
@@ -773,8 +1139,20 @@
     if (has("floorMin"))   cfg.floorMin = (function (v) { return isNaN(v) ? null : v; })(parseFloat(rc.floorMin));
     if (has("floorMax"))   cfg.floorMax = (function (v) { return isNaN(v) ? null : v; })(parseFloat(rc.floorMax));
     if (has("adTag"))      cfg.adTagUrl = rc.adTag || cfg.adTagUrl;
+    // adTags (the waterfall) wins when present; otherwise a control-plane adTag
+    // rebuilds the single-entry chain so the two stay consistent.
+    if (Array.isArray(rc.adTags) && rc.adTags.length) {
+      var nt = normalizeTags(rc.adTags);
+      if (nt.length) cfg.adTags = nt;
+    } else if (has("adTag") && cfg.adTagUrl) {
+      cfg.adTags = normalizeTags([{ url: cfg.adTagUrl, label: "primary" }]);
+    }
     if (has("video"))      cfg.videoUrl = rc.video || cfg.videoUrl;
     if (has("sticky"))     cfg.sticky = !!rc.sticky;
+    if (has("lazy"))       cfg.lazy = !!rc.lazy;
+    if (has("refresh"))    cfg.refresh = !!rc.refresh;
+    if (has("refreshInterval")) { var ri = parseFloat(rc.refreshInterval); if (!isNaN(ri)) cfg.refreshSec = ri; }
+    if (has("refreshMax"))      { var rm = parseInt(rc.refreshMax, 10);    if (!isNaN(rm)) cfg.refreshMax = rm; }
     if (has("autoplay"))   cfg.autoplay = !!rc.autoplay;
     if (has("muted"))      cfg.muted = !!rc.muted;
     if (has("fluid"))      cfg.fluid = !!rc.fluid;
@@ -827,11 +1205,29 @@
         referrer: (document && document.referrer) || "",
         viewport: (window.innerWidth || 0) + "x" + (window.innerHeight || 0)
       });
+      var mount = document.getElementById(cfg.divId);
+      watchVisibility(mount);
+
       Promise.all([
         loadScript("https://cdn.jsdelivr.net/npm/video.js@8/dist/video.min.js"),
         loadScript("https://imasdk.googleapis.com/js/sdkloader/ima3.js"),
         loadScript(cfg.prebidUrl)
-      ]).then(runAuction).catch(function (e) { warn("Dependency boot break: " + e.message); render(stitchTag(cfg.adTagUrl, noBidTargeting())); });
+      ]).then(function () {
+        // Dependencies load eagerly (cached CDN scripts, no ad call) so playback
+        // can start the instant the slot comes into view. Only the AUCTION is
+        // gated — that is the part whose freshness matters.
+        //
+        // Outstream is excluded: setupOutstream already holds mgr.start() behind
+        // its own viewport check, and its mount is collapsed to height:0 until
+        // an ad renders, which makes an intersection-ratio gate on it unreliable.
+        if (!cfg.lazy || isOutstream()) { runAuction(); return; }
+        var t0 = Date.now();
+        whenVisible(mount, LAZY_THRESHOLD, function () {
+          beacon("player_view", { placement: cfg.placement, delayMs: Date.now() - t0 });
+          step("0.7", "Slot entered viewport — releasing auction.");
+          runAuction();
+        });
+      }).catch(function (e) { warn("Dependency boot break: " + e.message); beginAdDelivery(noBidTargeting()); });
     });
   });
 })();

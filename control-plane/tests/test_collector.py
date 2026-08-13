@@ -48,14 +48,50 @@ async def test_all_event_types_accepted(client: AsyncClient, auth_headers: dict[
         _envelope("ad_complete", "e6", plc, viewedPct=100.0),
         _envelope("ad_error", "e7", plc, errorCode="900", phase="ima"),
         _envelope("no_demand", "e8", plc, fallbackServed=True),
+        _envelope("player_view", "e9", plc, placement="instream", delayMs=1200),
+        _envelope("ad_request", "e10", plc, placement="instream", wonBid=True),
     ]
     for ev in events:
         r = await client.post("/e", json=ev)
         assert r.status_code == 204, ev["event"]
 
     stats = await _stats(client, auth_headers)
-    assert stats["total"] == 8
+    assert stats["total"] == 10
     assert stats["counts"]["auction_win"] == 1
+    assert stats["counts"]["ad_request"] == 1
+
+
+async def test_auction_identity_is_persisted(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """auctionId/refreshIndex must survive ingestion — they are the only way to
+    tie an impression back to the request that produced it once refresh is on."""
+    from app.db import SessionLocal
+    from app.models import Event
+    from sqlalchemy import select
+
+    ids = await build_chain(client, auth_headers)
+    ev = _envelope("ad_request", "auc-1", ids["placement_id"], placement="instream", wonBid=True)
+    ev["auctionId"] = "auc-abc123"
+    ev["refreshIndex"] = 3
+    assert (await client.post("/e", json=ev)).status_code == 204
+
+    async with SessionLocal() as s:
+        row = (await s.execute(select(Event).where(Event.event_id == "auc-1"))).scalar_one()
+        assert row.auction_id == "auc-abc123"
+        assert row.refresh_index == 3
+
+
+async def test_legacy_envelope_without_auction_identity(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Engines older than 2.7.0 send neither field; they must still ingest."""
+    ids = await build_chain(client, auth_headers)
+    ev = _envelope("player_load", "legacy-1", ids["placement_id"])
+    assert "auctionId" not in ev
+    assert (await client.post("/e", json=ev)).status_code == 204
+    stats = await _stats(client, auth_headers)
+    assert stats["counts"]["player_load"] == 1
 
 
 async def test_sendbeacon_text_plain_body(

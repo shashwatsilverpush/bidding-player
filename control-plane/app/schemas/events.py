@@ -12,7 +12,9 @@ from pydantic import BaseModel, Field, TypeAdapter
 
 EventType = Literal[
     "player_load",
+    "player_view",
     "bid_request",
+    "ad_request",
     "bid_response",
     "auction_win",
     "impression",
@@ -38,9 +40,24 @@ class PlayerLoadProps(BaseModel):
     placement: str | None = None
 
 
+class PlayerViewProps(BaseModel):
+    """Slot crossed the viewability threshold and the auction was released."""
+
+    placement: str | None = None
+    delayMs: int | None = None  # time from player_load to the slot entering view
+
+
 class BidRequestProps(BaseModel):
     bidders: list[str] = []
     timeout: int | None = None
+
+
+class AdRequestProps(BaseModel):
+    """A VAST call to the ad server. Fired on EVERY render path, including the
+    fallbacks that never ran a Prebid auction — this is the fill denominator."""
+
+    placement: str | None = None
+    wonBid: bool | None = None  # carries Prebid targeting vs. house/direct fallthrough
 
 
 class BidResponseProps(BaseModel):
@@ -68,6 +85,9 @@ class ImpressionProps(BaseModel):
 class AdCompleteProps(BaseModel):
     viewedPct: float | None = None
     quartiles: list[int] | None = None
+    # A skipped ad still ends the break and still triggers a refresh cycle, but
+    # it is not a completed view — keep the two distinguishable in reporting.
+    skipped: bool | None = None
 
 
 class AdErrorProps(BaseModel):
@@ -88,6 +108,10 @@ class _Envelope(BaseModel):
     adUnitPath: str | None = None
     pageUrl: str | None = None
     sessionId: str | None = None
+    # Ad-opportunity identity. Optional so engines older than 2.7.0 (which emit
+    # neither) keep ingesting — their rows simply have a null auction_id.
+    auctionId: str | None = None
+    refreshIndex: int | None = None
     engineVersion: str | None = None
     consent: Consent | None = None
 
@@ -97,9 +121,19 @@ class PlayerLoadEvent(_Envelope):
     props: PlayerLoadProps = PlayerLoadProps()
 
 
+class PlayerViewEvent(_Envelope):
+    event: Literal["player_view"]
+    props: PlayerViewProps = PlayerViewProps()
+
+
 class BidRequestEvent(_Envelope):
     event: Literal["bid_request"]
     props: BidRequestProps = BidRequestProps()
+
+
+class AdRequestEvent(_Envelope):
+    event: Literal["ad_request"]
+    props: AdRequestProps = AdRequestProps()
 
 
 class BidResponseEvent(_Envelope):
@@ -134,7 +168,9 @@ class NoDemandEvent(_Envelope):
 
 AnyEvent = Annotated[
     PlayerLoadEvent
+    | PlayerViewEvent
     | BidRequestEvent
+    | AdRequestEvent
     | BidResponseEvent
     | AuctionWinEvent
     | ImpressionEvent

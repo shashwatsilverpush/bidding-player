@@ -41,6 +41,19 @@ async def bidders(
     return await analytics.by_bidder(session, placement_id=placement_id, ts_from=from_, ts_to=to)
 
 
+@router.get("/tag-positions")
+async def tag_positions(
+    session: AsyncSession = SessionDep,
+    placement_id: str | None = Query(default=None),
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None),
+) -> list[dict[str, Any]]:
+    """Ad-server waterfall performance per position: reached vs. filled."""
+    return await analytics.by_tag_position(
+        session, placement_id=placement_id, ts_from=from_, ts_to=to
+    )
+
+
 @router.get("/timeseries")
 async def timeseries(
     session: AsyncSession = SessionDep,

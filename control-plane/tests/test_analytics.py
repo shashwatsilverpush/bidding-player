@@ -29,6 +29,76 @@ async def test_demo_seed_and_summary(client: AsyncClient, auth_headers: dict[str
     assert s["avgCpmBiased"] >= s["avgCpmRaw"]
 
 
+async def test_fill_rate_is_per_ad_request_not_per_load(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Fill = impressions / ad requests. Because refresh makes one page load
+    produce several ad opportunities, dividing by loads can exceed 100% and is
+    not fill at all."""
+    ids = await build_chain(client, auth_headers)
+    plc = ids["placement_id"]
+    await _seed(client, auth_headers, plc, 150)
+
+    s = (
+        await client.get(f"/v1/admin/analytics/summary?placement_id={plc}", headers=auth_headers)
+    ).json()
+
+    assert s["fillRateBasis"] == "ad_request"
+    assert s["adRequests"] > 0
+    # Refresh means more opportunities than page loads.
+    assert s["adRequests"] > s["loads"]
+    assert s["fillRate"] == round(s["impressions"] / s["adRequests"], 4)
+    # A real rate never exceeds 1; the old impressions/loads ratio would here.
+    assert 0 < s["fillRate"] <= 1
+    assert s["adsPerLoad"] > 1
+    # Viewability gate: some loads never scroll into view, so views < loads.
+    assert 0 < s["views"] < s["loads"]
+
+
+async def test_waterfall_fill_counts_opportunities_not_attempts(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """A 3-deep waterfall fires 1-3 ad_requests per opportunity. Fill must divide
+    by distinct opportunities — dividing by raw attempts would report a chain
+    that filled on its last tag as 33% fill."""
+    ids = await build_chain(client, auth_headers)
+    plc = ids["placement_id"]
+    await client.patch(
+        f"/v1/admin/placements/{plc}",
+        headers=auth_headers,
+        json={
+            "config": {
+                "adTags": [
+                    {"url": "https://a.example/vast", "label": "Primary"},
+                    {"url": "https://b.example/vast", "label": "Backfill"},
+                    {"url": "https://c.example/house", "label": "House"},
+                ]
+            }
+        },
+    )
+    await _seed(client, auth_headers, plc, 150)
+
+    s = (
+        await client.get(f"/v1/admin/analytics/summary?placement_id={plc}", headers=auth_headers)
+    ).json()
+    # More raw attempts than opportunities => the waterfall really fell through.
+    assert s["adRequests"] > s["adOpportunities"] > 0
+    assert s["waterfallDepth"] > 1
+    assert s["fillRate"] == round(s["impressions"] / s["adOpportunities"], 4)
+    assert 0 < s["fillRate"] <= 1
+
+    pos = (
+        await client.get(
+            f"/v1/admin/analytics/tag-positions?placement_id={plc}", headers=auth_headers
+        )
+    ).json()
+    assert [p["position"] for p in pos] == [1, 2, 3]
+    assert [p["label"] for p in pos] == ["Primary", "Backfill", "House"]
+    # Deeper positions are reached less often — they only run when earlier ones fail.
+    assert pos[0]["reached"] > pos[1]["reached"] > pos[2]["reached"]
+    assert sum(p["filled"] for p in pos) == s["impressions"]
+
+
 async def test_bidders_and_keyvalues(client: AsyncClient, auth_headers: dict[str, str]) -> None:
     ids = await build_chain(client, auth_headers)
     plc = ids["placement_id"]
