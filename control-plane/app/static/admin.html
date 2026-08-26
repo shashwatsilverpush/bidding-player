@@ -48,6 +48,8 @@
   .pill.on{color:var(--good);border-color:var(--good);} .pill.warn{color:var(--warn);border-color:var(--warn);} .pill.bad{color:var(--bad);border-color:var(--bad);}
   pre{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,monospace;
     color:#33406b;max-height:360px;white-space:pre-wrap;word-break:break-all;}
+  .df-line{display:block;padding:0 4px;margin:0 -4px;border-radius:3px;}
+  .df-del{background:rgba(224,85,90,.16);color:#a83232;} .df-add{background:rgba(15,169,127,.16);color:#0c7a52;}
   .muted{color:var(--muted);font-size:12px;} .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;} @media(max-width:820px){.grid2{grid-template-columns:1fr;}}
   fieldset{border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0 0;} legend{font-size:11px;color:var(--muted);padding:0 6px;}
   .subtabs{display:flex;gap:4px;margin-bottom:14px;flex-wrap:wrap;} .subtabs button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
@@ -56,7 +58,8 @@
     max-width:380px;box-shadow:0 8px 30px rgba(0,0,0,.5);font-size:13px;z-index:50;} .toast.err{border-color:var(--bad);} .toast.ok{border-color:var(--good);}
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;} .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px;}
   .kpi .v{font-size:22px;font-weight:700;} .kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;} .kpi .s{font-size:11px;color:var(--muted);margin-top:2px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;} th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);overflow-wrap:anywhere;word-break:break-word;} th{color:var(--muted);font-size:11px;text-transform:uppercase;}
+  table{width:100%;border-collapse:collapse;font-size:13px;} th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);overflow-wrap:anywhere;word-break:break-word;} th{color:var(--muted);font-size:11px;text-transform:uppercase;white-space:nowrap;}
+  td.nowrap{white-space:nowrap;}
   .tblwrap{overflow-x:auto;}
   .bar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;} .bar>i{display:block;height:100%;background:var(--accent);}
   .funnel .flabel{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;} .funnel>div{margin-bottom:8px;}
@@ -68,7 +71,7 @@
   .modal-bg{position:fixed;inset:0;background:rgba(40,43,69,.35);backdrop-filter:blur(2px);display:flex;
     align-items:flex-start;justify-content:center;padding:60px 16px;z-index:100;}
   .modal{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px;width:100%;max-width:440px;
-    box-shadow:0 20px 60px rgba(40,43,69,.25);} .modal h3{margin:0 0 14px;font-size:15px;}
+    box-shadow:0 20px 60px rgba(40,43,69,.25);} .modal h3{margin:0 0 14px;font-size:15px;} .modal.wide{max-width:820px;}
   .modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
 </style>
 </head>
@@ -124,6 +127,38 @@ function openForm(opts){
     const v={};bg.querySelectorAll("[data-k]").forEach(i=>{v[i.dataset.k]=i.type==="checkbox"?i.checked:i.value;});
     try{await opts.onSubmit(v);close();}catch(e){toast(e.message,"err");}
   };
+}
+// Line-level LCS diff (classic O(n*m) DP — fine for the small pretty-printed JSON blobs
+// this is used on). Returns {before,after}, each a list of {t:"same"|"del"|"add",l:line}.
+function diffLines(a,b){
+  const n=a.length,m=b.length;
+  if(n*m>250000)return{before:a.map(l=>({t:"same",l})),after:b.map(l=>({t:"same",l}))};
+  const dp=Array.from({length:n+1},()=>new Array(m+1).fill(0));
+  for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)
+    dp[i][j]=a[i]===b[j]?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+  let i=0,j=0;const before=[],after=[];
+  while(i<n&&j<m){
+    if(a[i]===b[j]){before.push({t:"same",l:a[i]});after.push({t:"same",l:b[j]});i++;j++;}
+    else if(dp[i+1][j]>=dp[i][j+1]){before.push({t:"del",l:a[i]});i++;}
+    else{after.push({t:"add",l:b[j]});j++;}
+  }
+  while(i<n){before.push({t:"del",l:a[i]});i++;}
+  while(j<m){after.push({t:"add",l:b[j]});j++;}
+  return{before,after};
+}
+function diffLinesHtml(lines){
+  return lines.map(x=>`<span class="df-line df-${x.t}">${esc(x.l)}</span>`).join("\n");
+}
+// Read-only popup for content too large to inline (e.g. a JSON diff). `bodyHtml` is trusted/pre-escaped by the caller.
+function openViewer(title,bodyHtml){
+  const bg=document.createElement("div");bg.className="modal-bg";
+  bg.innerHTML=`<div class="modal wide"><h3>${esc(title)}</h3><div>${bodyHtml}</div>
+    <div class="actions"><button class="btn ghost" data-x>Close</button></div></div>`;
+  document.body.appendChild(bg);
+  const close=()=>bg.remove();
+  bg.addEventListener("click",e=>{if(e.target===bg)close();});
+  document.addEventListener("keydown",function esc2(e){if(e.key==="Escape"){close();document.removeEventListener("keydown",esc2);}});
+  bg.querySelector("[data-x]").onclick=close;
 }
 // Soft-delete confirm. For parents pass cascadeLabel -> a checkbox that adds
 // ?cascade=true; leaving it unchecked and hitting a 409 keeps the modal open with
@@ -569,9 +604,17 @@ async function renderHistory(m){
   const fmtt=t=>{try{return new Date(t).toLocaleString();}catch(e){return t;}};
   const fmtv=v=>v==null?"∅":(typeof v==="object"?JSON.stringify(v):String(v));
   const pillCls=a=>({create:"on",update:"",delete:"bad",restore:"warn"}[a]||"");
-  const detail=r=>{
+  // A changed field whose value is an object (config_json, params_json, ...) is shown
+  // as a "View changes" button instead of inline JSON — inlining it dwarfs every other
+  // column and can push the table wider than its container (see history-overflow fix).
+  const isObj=v=>v!=null&&typeof v==="object";
+  const detail=(r,idx)=>{
     if(r.action==="update"&&r.changed_fields&&r.changed_fields.length)
-      return r.changed_fields.map(f=>`<b>${esc(f)}</b>: ${esc(fmtv(r.before&&r.before[f]))} → ${esc(fmtv(r.after&&r.after[f]))}`).join("<br>");
+      return r.changed_fields.map(f=>{
+        const b=r.before&&r.before[f],a=r.after&&r.after[f];
+        if(isObj(b)||isObj(a))return `<b>${esc(f)}</b>: <button class="btn small ghost" data-jsondiff="${idx}" data-field="${esc(f)}" style="margin:0">View changes</button>`;
+        return `<b>${esc(f)}</b>: ${esc(fmtv(b))} → ${esc(fmtv(a))}`;
+      }).join("<br>");
     return `<span class="muted">${esc(r.action)}d</span>`;
   };
   const load=async()=>{
@@ -580,10 +623,21 @@ async function renderHistory(m){
     const rows=await api("/v1/admin/audit-log?"+qs.join("&"));
     if(!rows.length){$("#hBody").innerHTML='<div class="empty">No changes recorded for this filter.</div>';return;}
     $("#hBody").innerHTML=`<div class="tblwrap"><table><thead><tr><th>Time</th><th>Action</th><th>Entity</th><th>Name</th><th>Actor</th><th>IP</th><th>Agent</th><th>Details</th></tr></thead><tbody>`+
-      rows.map(r=>`<tr><td>${esc(fmtt(r.created_at))}</td><td><span class="pill ${pillCls(r.action)}">${esc(r.action)}</span></td>
-        <td>${esc(r.entity_type)}</td><td title="${esc(r.entity_id)}">${esc(r.entity_label||r.entity_id)}</td><td>${esc(r.actor||"—")}</td>
-        <td class="id">${esc(r.ip||"—")}</td><td class="muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.user_agent||"")}">${esc(r.user_agent||"—")}</td>
-        <td class="muted" style="font-size:12px;max-width:420px">${detail(r)}</td></tr>`).join("")+`</tbody></table></div>`;
+      rows.map((r,idx)=>`<tr><td class="nowrap">${esc(fmtt(r.created_at))}</td><td class="nowrap"><span class="pill ${pillCls(r.action)}">${esc(r.action)}</span></td>
+        <td class="nowrap">${esc(r.entity_type)}</td><td style="max-width:280px" title="${esc(r.entity_id)}">${esc(r.entity_label||r.entity_id)}</td><td class="nowrap">${esc(r.actor||"—")}</td>
+        <td class="id nowrap">${esc(r.ip||"—")}</td><td class="muted nowrap" style="max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${esc(r.user_agent||"")}">${esc(r.user_agent||"—")}</td>
+        <td class="muted" style="font-size:12px;max-width:260px">${detail(r,idx)}</td></tr>`).join("")+`</tbody></table></div>`;
+    $("#hBody").onclick=e=>{
+      const btn=e.target.closest("[data-jsondiff]");if(!btn)return;
+      const r=rows[+btn.dataset.jsondiff],f=btn.dataset.field;
+      const before=r.before&&r.before[f],after=r.after&&r.after[f];
+      const beforeLines=(before===undefined?"∅":JSON.stringify(before,null,2)).split("\n");
+      const afterLines=(after===undefined?"∅":JSON.stringify(after,null,2)).split("\n");
+      const d=diffLines(beforeLines,afterLines);
+      openViewer(`${f} — ${r.entity_label||r.entity_id}`,
+        `<div class="grid2"><div><label>Before</label><pre>${diffLinesHtml(d.before)}</pre></div>
+         <div><label>After</label><pre>${diffLinesHtml(d.after)}</pre></div></div>`);
+    };
   };
   $("#hRef").onclick=load;$("#hAct").onchange=load;$("#hEnt").onchange=load;
   await load();
