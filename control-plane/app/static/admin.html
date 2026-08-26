@@ -56,7 +56,8 @@
     max-width:380px;box-shadow:0 8px 30px rgba(0,0,0,.5);font-size:13px;z-index:50;} .toast.err{border-color:var(--bad);} .toast.ok{border-color:var(--good);}
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;} .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px;}
   .kpi .v{font-size:22px;font-weight:700;} .kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;} .kpi .s{font-size:11px;color:var(--muted);margin-top:2px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;} th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);} th{color:var(--muted);font-size:11px;text-transform:uppercase;}
+  table{width:100%;border-collapse:collapse;font-size:13px;} th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);overflow-wrap:anywhere;word-break:break-word;} th{color:var(--muted);font-size:11px;text-transform:uppercase;}
+  .tblwrap{overflow-x:auto;}
   .bar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;} .bar>i{display:block;height:100%;background:var(--accent);}
   .funnel .flabel{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;} .funnel>div{margin-bottom:8px;}
   .spark{display:flex;align-items:flex-end;gap:2px;height:80px;} .spark i{flex:1;background:var(--accent);border-radius:2px 2px 0 0;min-height:2px;}
@@ -548,8 +549,8 @@ async function renderAnalyticsSection(m){
     const wins={};ts.filter(r=>r.event==="auction_win").forEach(r=>wins[r.ts.slice(0,10)]=r.count);const dys=Object.keys(wins).sort();const smax=Math.max(1,...dys.map(x=>wins[x]));
     $("#anSpark").innerHTML=dys.map(x=>`<i style="height:${(wins[x]/smax*100).toFixed(0)}%" title="${x}: ${wins[x]}"></i>`).join("")||'<span class="muted">no data</span>';
     $("#anSparkLbl").textContent=dys.length?`${dys[0]} → ${dys[dys.length-1]}`:"";
-    $("#anBreak").innerHTML=br.length?`<table><thead><tr><th>${esc(dim)}</th><th>Loads</th><th>Bid reqs</th><th>Ad reqs</th><th>Wins</th><th>Imps</th><th>Fill</th><th>Ads/load</th><th>eCPM raw</th><th>eCPM biased</th></tr></thead><tbody>`+
-      br.map(r=>`<tr><td><b>${esc(r.key)}</b></td><td>${r.loads}</td><td>${r.requests}</td><td>${r.adRequests}</td><td>${r.wins}</td><td>${r.impressions}</td><td>${pct(r.fillRate)}</td><td>${r.adsPerLoad??"—"}</td><td>${money(r.avgCpmRaw)}</td><td>${money(r.avgCpmBiased)}</td></tr>`).join("")+`</tbody></table>`
+    $("#anBreak").innerHTML=br.length?`<div class="tblwrap"><table><thead><tr><th>${esc(dim)}</th><th>Loads</th><th>Bid reqs</th><th>Ad reqs</th><th>Wins</th><th>Imps</th><th>Fill</th><th>Ads/load</th><th>eCPM raw</th><th>eCPM biased</th></tr></thead><tbody>`+
+      br.map(r=>`<tr><td style="max-width:260px"><b>${esc(r.key)}</b></td><td>${r.loads}</td><td>${r.requests}</td><td>${r.adRequests}</td><td>${r.wins}</td><td>${r.impressions}</td><td>${pct(r.fillRate)}</td><td>${r.adsPerLoad??"—"}</td><td>${money(r.avgCpmRaw)}</td><td>${money(r.avgCpmBiased)}</td></tr>`).join("")+`</tbody></table></div>`
       :'<div class="empty">No data yet — generate demo data on a placement, or wait for live traffic.</div>';
   };
   $("#anRef").onclick=load;$("#anDim").onchange=load;$("#anR").onchange=load;
@@ -578,11 +579,11 @@ async function renderHistory(m){
     if(a)qs.push("action="+encodeURIComponent(a));if(e)qs.push("entity_type="+encodeURIComponent(e));
     const rows=await api("/v1/admin/audit-log?"+qs.join("&"));
     if(!rows.length){$("#hBody").innerHTML='<div class="empty">No changes recorded for this filter.</div>';return;}
-    $("#hBody").innerHTML=`<table><thead><tr><th>Time</th><th>Action</th><th>Entity</th><th>Name</th><th>Actor</th><th>IP</th><th>Agent</th><th>Details</th></tr></thead><tbody>`+
+    $("#hBody").innerHTML=`<div class="tblwrap"><table><thead><tr><th>Time</th><th>Action</th><th>Entity</th><th>Name</th><th>Actor</th><th>IP</th><th>Agent</th><th>Details</th></tr></thead><tbody>`+
       rows.map(r=>`<tr><td>${esc(fmtt(r.created_at))}</td><td><span class="pill ${pillCls(r.action)}">${esc(r.action)}</span></td>
         <td>${esc(r.entity_type)}</td><td title="${esc(r.entity_id)}">${esc(r.entity_label||r.entity_id)}</td><td>${esc(r.actor||"—")}</td>
         <td class="id">${esc(r.ip||"—")}</td><td class="muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.user_agent||"")}">${esc(r.user_agent||"—")}</td>
-        <td class="muted" style="font-size:12px">${detail(r)}</td></tr>`).join("")+`</tbody></table>`;
+        <td class="muted" style="font-size:12px;max-width:420px">${detail(r)}</td></tr>`).join("")+`</tbody></table></div>`;
   };
   $("#hRef").onclick=load;$("#hAct").onchange=load;$("#hEnt").onchange=load;
   await load();
