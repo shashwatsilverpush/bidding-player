@@ -101,6 +101,21 @@
     configUrl:   currentScript.getAttribute("data-config-url") || ""
   };
 
+  // Some ad-ops workflows require the tag to live in <head> to satisfy their
+  // trafficking system, and — not realizing data-div-id (or a config-supplied
+  // divId) already lets that one tag mount into an arbitrary <body> div —
+  // paste a SECOND copy at the intended video location "for placement". Two
+  // copies would each run their own auction, IMA session and beacons against
+  // the same placement/div, double-billing impressions and fighting over one
+  // mount point. Guard: only the first tag per placement (or per divId, in
+  // static mode) runs; any later duplicate on the page is a no-op.
+  var dedupeKey = "__atpBooted_" + (cfg.placementId || cfg.divId);
+  if (window[dedupeKey]) {
+    console.warn("[AdTechPlayer] Duplicate player tag for \"" + (cfg.placementId || cfg.divId) + "\" ignored — this placement is already booted by another tag on the page. Keep one <script> tag (wherever your ad system requires) and mark the display spot with an empty <div id=\"" + cfg.divId + "\"></div> — the engine mounts into it automatically.");
+    return;
+  }
+  window[dedupeKey] = true;
+
   // Resolve the bidder list for this auction. New tags use `data-bidders`
   // JSON; older tags fall through to the legacy single-bidder Limelight
   // shape built from data-host / data-pub-id / data-adunit-id. Either way,
