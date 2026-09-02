@@ -393,12 +393,21 @@
     video.style.cssText = "width:100%;height:100%;";
     container.appendChild(video);
 
-    if (currentScript && currentScript.parentNode) {
+    // Publishers sometimes paste the tag into a CMS/GTM "head scripts" field.
+    // <head>'s UA-stylesheet display:none collapses the whole subtree, so a
+    // container inserted next to a script parented there would exist in the
+    // DOM (dependencies load, auctions run, beacons fire) but never paint.
+    // Detect that and fall back to <body> instead of mounting invisibly.
+    var head = document.head;
+    var scriptInHead = !!(head && currentScript && (currentScript === head || head.contains(currentScript)));
+    if (currentScript && currentScript.parentNode && !scriptInHead) {
       currentScript.parentNode.insertBefore(container, currentScript.nextSibling);
+      step("0.5", "Mount point #" + cfg.divId + " auto-created at script position.");
     } else {
       (document.body || document.documentElement).appendChild(container);
+      if (scriptInHead) warn("Player tag is inside <head> (invisible there) — mounted #" + cfg.divId + " into <body> instead.");
+      step("0.5", "Mount point #" + cfg.divId + " auto-created" + (scriptInHead ? " in <body> (script tag is in <head>)." : "."));
     }
-    step("0.5", "Mount point #" + cfg.divId + " auto-created at script position.");
     return container;
   }
 
