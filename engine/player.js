@@ -371,57 +371,71 @@
 
   function ensureMount() {
     var container = document.getElementById(cfg.divId);
-    if (container) return container;
-    container = document.createElement("div");
-    container.id = cfg.divId;
-    
-    // Outstream slots reserve no space until an ad actually renders — they
-    // start collapsed (height:0) and expand to 16:9 only when the ad begins,
-    // then collapse again on completion/error (see setupOutstream).
-    var containerStyle;
-    if (isOutstream()) {
-      containerStyle = "max-width:960px;width:100%;margin:0 auto;position:relative;background:#000;height:0;overflow:hidden;";
-    } else {
-      containerStyle = cfg.fluid
-        ? "max-width:960px;width:100%;margin:0 auto;position:relative;background:#000;aspect-ratio:16/9;"
-        : "width:640px;height:480px;margin:0 auto;position:relative;background:#000;";
+    var isNewContainer = !container;
+    if (isNewContainer) {
+      container = document.createElement("div");
+      container.id = cfg.divId;
+
+      // Outstream slots reserve no space until an ad actually renders — they
+      // start collapsed (height:0) and expand to 16:9 only when the ad begins,
+      // then collapse again on completion/error (see setupOutstream).
+      var containerStyle;
+      if (isOutstream()) {
+        containerStyle = "max-width:960px;width:100%;margin:0 auto;position:relative;background:#000;height:0;overflow:hidden;";
+      } else {
+        containerStyle = cfg.fluid
+          ? "max-width:960px;width:100%;margin:0 auto;position:relative;background:#000;aspect-ratio:16/9;"
+          : "width:640px;height:480px;margin:0 auto;position:relative;background:#000;";
+      }
+      container.style.cssText = containerStyle;
     }
-    container.style.cssText = containerStyle;
 
-    var video = document.createElement("video");
-    video.id = cfg.divId + "_video";
-    video.className = "video-js vjs-default-skin vjs-big-play-centered";
-    video.setAttribute("playsinline", "");
-    // Outstream is a standalone ad — no content controls. Instream keeps the
-    // content player controls visible.
-    if (!isOutstream()) video.setAttribute("controls", "");
-    video.setAttribute("preload", cfg.preload);
-    // `loop` is a CONTENT-video setting (instream only). Never set it for
-    // outstream: there is no content video, and IMA renders the ad through
-    // this same element — a loop attribute makes the ad creative restart and,
-    // combined with the ALL_ADS_COMPLETED collapse, flicker the slot.
-    if (cfg.loop && !isOutstream()) video.setAttribute("loop", "");
-    // Outstream starts on scroll (no user gesture), so the ad must be muted for
-    // the browser to allow autoplay. Mute the element up front; the ads manager
-    // volume is also set to 0 at start time (see setupOutstream).
-    if (isOutstream() && cfg.muted) { video.muted = true; video.setAttribute("muted", ""); }
-    video.style.cssText = "width:100%;height:100%;";
-    container.appendChild(video);
+    // A publisher-authored placeholder div (per our own "just add an empty
+    // <div id=...> where the video should appear" guidance) has no <video>
+    // child — only a container we build from scratch did, previously. Build
+    // the video element whenever it's missing, not only when we also created
+    // the container, so a plain placeholder div works exactly like an
+    // auto-created one instead of silently mounting nothing into it.
+    if (!document.getElementById(cfg.divId + "_video")) {
+      var video = document.createElement("video");
+      video.id = cfg.divId + "_video";
+      video.className = "video-js vjs-default-skin vjs-big-play-centered";
+      video.setAttribute("playsinline", "");
+      // Outstream is a standalone ad — no content controls. Instream keeps the
+      // content player controls visible.
+      if (!isOutstream()) video.setAttribute("controls", "");
+      video.setAttribute("preload", cfg.preload);
+      // `loop` is a CONTENT-video setting (instream only). Never set it for
+      // outstream: there is no content video, and IMA renders the ad through
+      // this same element — a loop attribute makes the ad creative restart and,
+      // combined with the ALL_ADS_COMPLETED collapse, flicker the slot.
+      if (cfg.loop && !isOutstream()) video.setAttribute("loop", "");
+      // Outstream starts on scroll (no user gesture), so the ad must be muted for
+      // the browser to allow autoplay. Mute the element up front; the ads manager
+      // volume is also set to 0 at start time (see setupOutstream).
+      if (isOutstream() && cfg.muted) { video.muted = true; video.setAttribute("muted", ""); }
+      video.style.cssText = "width:100%;height:100%;";
+      container.appendChild(video);
+    }
 
-    // Publishers sometimes paste the tag into a CMS/GTM "head scripts" field.
-    // <head>'s UA-stylesheet display:none collapses the whole subtree, so a
-    // container inserted next to a script parented there would exist in the
-    // DOM (dependencies load, auctions run, beacons fire) but never paint.
-    // Detect that and fall back to <body> instead of mounting invisibly.
-    var head = document.head;
-    var scriptInHead = !!(head && currentScript && (currentScript === head || head.contains(currentScript)));
-    if (currentScript && currentScript.parentNode && !scriptInHead) {
-      currentScript.parentNode.insertBefore(container, currentScript.nextSibling);
-      step("0.5", "Mount point #" + cfg.divId + " auto-created at script position.");
+    if (isNewContainer) {
+      // Publishers sometimes paste the tag into a CMS/GTM "head scripts" field.
+      // <head>'s UA-stylesheet display:none collapses the whole subtree, so a
+      // container inserted next to a script parented there would exist in the
+      // DOM (dependencies load, auctions run, beacons fire) but never paint.
+      // Detect that and fall back to <body> instead of mounting invisibly.
+      var head = document.head;
+      var scriptInHead = !!(head && currentScript && (currentScript === head || head.contains(currentScript)));
+      if (currentScript && currentScript.parentNode && !scriptInHead) {
+        currentScript.parentNode.insertBefore(container, currentScript.nextSibling);
+        step("0.5", "Mount point #" + cfg.divId + " auto-created at script position.");
+      } else {
+        (document.body || document.documentElement).appendChild(container);
+        if (scriptInHead) warn("Player tag is inside <head> (invisible there) — mounted #" + cfg.divId + " into <body> instead.");
+        step("0.5", "Mount point #" + cfg.divId + " auto-created" + (scriptInHead ? " in <body> (script tag is in <head>)." : "."));
+      }
     } else {
-      (document.body || document.documentElement).appendChild(container);
-      if (scriptInHead) warn("Player tag is inside <head> (invisible there) — mounted #" + cfg.divId + " into <body> instead.");
-      step("0.5", "Mount point #" + cfg.divId + " auto-created" + (scriptInHead ? " in <body> (script tag is in <head>)." : "."));
+      step("0.5", "Mount point #" + cfg.divId + " reused an existing publisher-placed element.");
     }
     return container;
   }
