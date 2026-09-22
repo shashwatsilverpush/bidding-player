@@ -35,6 +35,28 @@ async def test_lazy_and_refresh_defaults(client: AsyncClient, auth_headers: dict
     assert cfg["refreshMax"] == 10
 
 
+async def test_ad_controls_default_on_and_can_be_turned_off(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Ad-time play/pause + mute is on unless a placement opts out.
+
+    IMA supplies no such controls and its ad layer covers the content player's
+    control bar for the length of the break, so a placement that inherits the
+    default must still ship controls.
+    """
+    ids = await build_chain(client, auth_headers)
+    plc = ids["placement_id"]
+    assert (await client.get(f"/v1/config/{plc}")).json()["adControls"] is True
+
+    r = await client.patch(
+        f"/v1/admin/placements/{plc}",
+        headers=auth_headers,
+        json={"config": {"adControls": False}},
+    )
+    assert r.status_code == 200
+    assert (await client.get(f"/v1/config/{plc}")).json()["adControls"] is False
+
+
 async def test_refresh_interval_floor_is_enforced(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:

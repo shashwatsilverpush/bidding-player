@@ -75,6 +75,13 @@
     muted:       currentScript.getAttribute("data-muted") === "true",
     fluid:       currentScript.getAttribute("data-fluid") !== "false",
     loop:        currentScript.getAttribute("data-loop") === "true",
+    // Overlay our own play/pause + mute buttons for the duration of an ad.
+    // IMA only renders the UI the creative itself carries (ad label, countdown,
+    // "why this ad", skip) — it has no generic play/pause or mute control — and
+    // during an instream break the IMA overlay covers the video.js control bar,
+    // so the player looks like it has no controls at all. Defaults ON;
+    // data-ad-controls="false" opts out (e.g. a creative that ships its own).
+    adControls:  currentScript.getAttribute("data-ad-controls") !== "false",
     preload:     currentScript.getAttribute("data-preload") || "metadata",
     vpaidMode:   currentScript.getAttribute("data-vpaid") || "insecure",
     divId:       currentScript.getAttribute("data-div-id") || "comparos-video-placement",
@@ -418,6 +425,18 @@
       container.appendChild(video);
     }
 
+    // An outstream slot must reserve NO space until an ad actually renders —
+    // that is the contract the expand/collapse cycle is built on. A container we
+    // create gets height:0 from its cssText above, but a publisher-placed
+    // placeholder div keeps its own styles, so the injected <video> (150px of
+    // intrinsic height) left a permanent empty gap in the page on a slot that
+    // never filled. Apply the collapsed invariant to a reused container too;
+    // outstreamExpand() clears it when the ad starts.
+    if (!isNewContainer && isOutstream()) {
+      container.style.height = "0";
+      container.style.overflow = "hidden";
+    }
+
     if (isNewContainer) {
       // Publishers sometimes paste the tag into a CMS/GTM "head scripts" field.
       // <head>'s UA-stylesheet display:none collapses the whole subtree, so a
@@ -443,6 +462,130 @@
   function ready(fn) {
     if (document.readyState === "complete" || document.readyState === "interactive") setTimeout(fn, 0);
     else document.addEventListener("DOMContentLoaded", fn);
+  }
+
+  // ─── Ad-time controls ─────────────────────────────────────────────
+  // IMA renders only the UI the creative itself carries — ad label, countdown,
+  // "why this ad", skip. There is no generic play/pause or mute button, and
+  // during an instream break the IMA ad container sits ABOVE the video.js
+  // control bar (z-index:10, pointer-events:auto), so the content player's own
+  // controls are simultaneously hidden and unclickable. What a publisher sees
+  // is a player with NO controls for the whole ad break. Overlay our own pair.
+  //
+  // Built once per slot and cached on the container — never per ads manager, or
+  // every waterfall attempt and refresh cycle would stack another copy of the
+  // buttons onto the mount.
+  function createAdControls(container, videoEl) {
+    if (container.__atpCtl) return container.__atpCtl;
+    if (!cfg.adControls) return { show: function () {}, hide: function () {}, bind: function () {} };
+
+    var ICON_PLAY  = '<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+    var ICON_PAUSE = '<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff" aria-hidden="true"><path d="M7 5h3.2v14H7zM13.8 5H17v14h-3.2z"/></svg>';
+    var ICON_MUTED = '<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M16.5 9 21 15M21 9l-4.5 6" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
+    var ICON_SOUND = '<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8 8 0 0 1 0 12" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
+
+    var mgr = null;
+    var paused = false;
+    var muted = !!cfg.muted;
+
+    function mkBtn(html, label) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.innerHTML = html;
+      b.setAttribute("aria-label", label);
+      b.style.cssText = "width:36px;height:36px;padding:0;margin:0;border:none;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;";
+      return b;
+    }
+
+    var bar = document.createElement("div");
+    bar.setAttribute("data-atp-ad-controls", "1");
+    // Bottom-LEFT: IMA places the countdown, "why this ad" and skip button on
+    // the bottom-right and top edges of the creative, so the left corner is the
+    // one spot that never collides with the SDK's own ad UI.
+    // Max z-index clears the ad container (z-index:10 while an ad plays).
+    bar.style.cssText = "position:absolute;bottom:10px;left:10px;display:none;gap:8px;z-index:2147483647;";
+
+    // The bar is absolutely positioned inside the mount, and so is the IMA ad
+    // container. A publisher-placed placeholder div carries no position of its
+    // own (position:static), which would anchor both to the nearest positioned
+    // ancestor — i.e. somewhere else on the page — instead of to the player.
+    try { if (window.getComputedStyle(container).position === "static") container.style.position = "relative"; } catch (_) {}
+
+    var playBtn  = mkBtn(ICON_PAUSE, "Pause ad");
+    var soundBtn = mkBtn(ICON_MUTED, "Unmute ad");
+    bar.appendChild(playBtn);
+    bar.appendChild(soundBtn);
+    container.appendChild(bar);
+
+    function syncPlay() {
+      playBtn.innerHTML = paused ? ICON_PLAY : ICON_PAUSE;
+      playBtn.setAttribute("aria-label", paused ? "Play ad" : "Pause ad");
+    }
+    function syncSound() {
+      soundBtn.innerHTML = muted ? ICON_MUTED : ICON_SOUND;
+      soundBtn.setAttribute("aria-label", muted ? "Unmute ad" : "Mute ad");
+    }
+    // The live ad volume, not cfg.muted: outstream mutes the manager at start()
+    // for autoplay policy, and instream leaves IMA's default in place, so only
+    // the manager knows the truth.
+    function readMuted() {
+      try { if (mgr && typeof mgr.getVolume === "function") return mgr.getVolume() === 0; } catch (_) {}
+      return muted;
+    }
+
+    playBtn.addEventListener("click", function (ev) {
+      // Never let a control click reach the creative — that would fire the ad
+      // clickthrough and navigate the reader away mid-ad.
+      ev.stopPropagation(); ev.preventDefault();
+      paused = !paused;
+      // adsManager.pause()/resume() — not videoEl.pause() — is the correct
+      // control: it also holds the ad's progress and quartile timers, so a
+      // paused ad does not keep reporting itself as playing.
+      try { if (mgr) { if (paused) mgr.pause(); else mgr.resume(); } } catch (_) {}
+      syncPlay();
+    });
+
+    soundBtn.addEventListener("click", function (ev) {
+      ev.stopPropagation(); ev.preventDefault();
+      muted = !muted;
+      try { if (mgr) mgr.setVolume(muted ? 0 : 1); } catch (_) {}
+      // For instream the ad renders over the content element, so mirroring the
+      // element keeps content audio consistent with the choice made during the
+      // ad instead of snapping back on CONTENT_RESUME_REQUESTED.
+      try { videoEl.muted = muted; } catch (_) {}
+      syncSound();
+    });
+
+    function on(m, type, fn) {
+      if (!type) return;
+      try { m.addEventListener(type, fn); } catch (_) {}
+    }
+
+    var api = {
+      // Bind to the manager of the current attempt. Managers are destroyed at
+      // the end of every break/error, so their listeners die with them.
+      bind: function (m) {
+        mgr = m;
+        paused = false;
+        var T = (window.google && google.ima && google.ima.AdEvent && google.ima.AdEvent.Type) || {};
+        // A VPAID creative's own controls (and IMA's autoplay-recovery path) can
+        // pause or mute without going through our buttons — mirror those events
+        // so the icons never contradict what the ad is actually doing.
+        on(m, T.PAUSED,         function () { paused = true;  syncPlay(); });
+        on(m, T.RESUMED,        function () { paused = false; syncPlay(); });
+        on(m, T.VOLUME_MUTED,   function () { muted = true;   syncSound(); });
+        on(m, T.VOLUME_CHANGED, function () { muted = readMuted(); syncSound(); });
+        syncPlay();
+      },
+      show: function () {
+        muted = readMuted();
+        syncSound(); syncPlay();
+        bar.style.display = "flex";
+      },
+      hide: function () { bar.style.display = "none"; }
+    };
+    container.__atpCtl = api;
+    return api;
   }
 
   function setupPlayer(finalTagUrl) {
@@ -524,9 +667,11 @@
         var adc = new google.ima.AdDisplayContainer(adContainer, videoEl);
         var loader = new google.ima.AdsLoader(adc);
         container.__atpAds = { adContainer: adContainer, adc: adc, loader: loader };
+        var ctl = createAdControls(container, videoEl);
         loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (e) {
           adContainer.style.zIndex = "-1";
           adContainer.style.pointerEvents = "none";
+          ctl.hide();
           beacon("ad_error", { phase: "ima_loader", errorCode: String((e && e.getError && e.getError()) || "") });
           try { player.play(); } catch (_) {}
           // A loader error is usually an empty VAST response — exactly what the
@@ -539,9 +684,11 @@
           // Expose the manager so the sticky/floating logic can call mgr.resize()
           // and reflow the live ad creative when the player docks/undocks.
           container.__atpMgr = mgr;
+          ctl.bind(mgr);
           mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (e) {
             adContainer.style.zIndex = "-1";
             adContainer.style.pointerEvents = "none";
+            ctl.hide();
             container.__atpMgr = null;
             try { mgr.destroy(); } catch (_) {}
             beacon("ad_error", { phase: "ima", errorCode: String((e && e.getError && e.getError()) || "") });
@@ -566,10 +713,14 @@
             adContainer.style.zIndex = "10";
             adContainer.style.pointerEvents = "auto";
             player.pause();
+            // The break starts here — the video.js control bar is now behind the
+            // ad container, so our own controls take over for its duration.
+            ctl.show();
           });
           mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_RESUME_REQUESTED, function () {
             adContainer.style.zIndex = "-1";
             adContainer.style.pointerEvents = "none";
+            ctl.hide();
             player.play().catch(function(){});
           });
           mgr.addEventListener(google.ima.AdEvent.Type.COMPLETE, function () {
@@ -578,6 +729,7 @@
           mgr.addEventListener(google.ima.AdEvent.Type.ALL_ADS_COMPLETED, function () {
             adContainer.style.zIndex = "-1";
             adContainer.style.pointerEvents = "none";
+            ctl.hide();
             container.__atpMgr = null;
             try { mgr.destroy(); } catch (_) {}
             scheduleRefresh("complete");
@@ -631,9 +783,6 @@
     c.style.overflow = "";
     c.style.aspectRatio = "16/9";
   }
-  // The ads manager currently rendering, so the persistent sound button can
-  // address whichever manager the active waterfall attempt produced.
-  var outMgr = null;
 
   function setupOutstream(finalTagUrl) {
     var container = document.getElementById(cfg.divId);
@@ -672,28 +821,11 @@
       var loader = new google.ima.AdsLoader(adc);
       container.__atpAds = { adContainer: adContainer, adc: adc, loader: loader };
 
-      // Outstream autoplays muted (browser policy), so give viewers a clear
-      // tap-for-sound control — the one control outstream units are expected
-      // to surface. IMA does not provide a generic mute toggle, so we overlay
-      // our own. Built once for the life of the slot (not per ads manager), or
-      // each waterfall attempt would append another button to the mount.
-      var ICON_MUTED = '<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M16.5 9 21 15M21 9l-4.5 6" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
-      var ICON_SOUND = '<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8 8 0 0 1 0 12" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
-      var adMuted = !!cfg.muted;
-      var soundBtn = document.createElement("button");
-      soundBtn.setAttribute("aria-label", "Unmute ad");
-      soundBtn.innerHTML = ICON_MUTED;
-      soundBtn.style.cssText = "position:absolute;bottom:10px;left:10px;width:36px;height:36px;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.6);cursor:pointer;z-index:2147483647;display:none;align-items:center;justify-content:center;";
-      soundBtn.addEventListener("click", function (ev) {
-        ev.stopPropagation();
-        adMuted = !adMuted;
-        // Addresses whichever manager the active attempt produced.
-        try { if (outMgr) outMgr.setVolume(adMuted ? 0 : 1); } catch (_) {}
-        try { videoEl.muted = adMuted; } catch (_) {}
-        soundBtn.innerHTML = adMuted ? ICON_MUTED : ICON_SOUND;
-        soundBtn.setAttribute("aria-label", adMuted ? "Unmute ad" : "Mute ad");
-      });
-      container.appendChild(soundBtn);
+      // Outstream autoplays muted (browser policy), so a tap-for-sound control
+      // is mandatory here — and the same overlay gives the viewer play/pause,
+      // which IMA does not provide either. Built once for the life of the slot,
+      // or each waterfall attempt would append another copy to the mount.
+      var ctl = createAdControls(container, videoEl);
 
       loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (e) {
         warn("outstream loader error: " + ((e && e.getError && e.getError()) || "unknown"));
@@ -705,12 +837,12 @@
 
       loader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, function (e) {
         var mgr = e.getAdsManager(videoEl);
-        outMgr = mgr;
+        ctl.bind(mgr);
 
         mgr.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (ev) {
           warn("outstream ad error: " + ((ev && ev.getError && ev.getError()) || "unknown"));
           beacon("ad_error", { phase: "ima", errorCode: String((ev && ev.getError && ev.getError()) || "") });
-          soundBtn.style.display = "none";
+          ctl.hide();
           try { mgr.destroy(); } catch (_) {}
           advanceWaterfall("error");
         });
@@ -727,12 +859,11 @@
         // No content to pause/resume — just size the slot to the ad.
         mgr.addEventListener(google.ima.AdEvent.Type.CONTENT_PAUSE_REQUESTED, function () {
           expand();
-          soundBtn.style.display = "flex";
+          ctl.show();
         });
         mgr.addEventListener(google.ima.AdEvent.Type.ALL_ADS_COMPLETED, function () {
-          soundBtn.style.display = "none";
+          ctl.hide();
           collapse();
-          outMgr = null;
           try { mgr.destroy(); } catch (_) {}
         });
 
@@ -1195,6 +1326,7 @@
     if (has("muted"))      cfg.muted = !!rc.muted;
     if (has("fluid"))      cfg.fluid = !!rc.fluid;
     if (has("loop"))       cfg.loop = !!rc.loop;
+    if (has("adControls")) cfg.adControls = !!rc.adControls;
     if (has("preload"))    cfg.preload = rc.preload || cfg.preload;
     if (has("vpaid"))      cfg.vpaidMode = rc.vpaid || cfg.vpaidMode;
     if (has("divId"))      cfg.divId = rc.divId || cfg.divId;

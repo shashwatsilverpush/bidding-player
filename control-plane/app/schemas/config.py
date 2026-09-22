@@ -85,6 +85,11 @@ class PlacementConfig(BaseModel):
     loop: bool = False
     preload: str = "metadata"
     vpaid: str = "insecure"
+    # Overlay play/pause + mute buttons while an ad plays. On by default: IMA
+    # supplies no such controls, and during an instream break its ad container
+    # covers the content player's own control bar — without this the player has
+    # no controls at all for the length of the ad.
+    adControls: bool = True
 
     sampleRate: float | None = Field(default=None, ge=0.0, le=1.0)
 
@@ -146,6 +151,7 @@ class RuntimeConfig(BaseModel):
     loop: bool
     preload: str
     vpaid: str
+    adControls: bool
     divId: str
     cacheUrl: str
     bidders: list[Bidder]

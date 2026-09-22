@@ -377,7 +377,8 @@ async function paneTag(el){const p=await getPlc();const c=p.config;
       <label style="flex:0 0 auto"><input type="checkbox" id="tFl" style="width:auto"> fluid ${tip("Responsive sizing — the player scales to its container width at a 16:9 ratio instead of a fixed pixel size.")}</label>
       <label style="flex:0 0 auto"><input type="checkbox" id="tLo" style="width:auto"> loop ${tip("Loop the content video when it ends (instream only; never applied to outstream, where it would restart the ad creative).")}</label>
       <label style="flex:0 0 auto"><input type="checkbox" id="tSt" style="width:auto"> sticky ${tip("When the player scrolls out of view it floats to the bottom-right corner and keeps playing, with a ✕ to dismiss (instream only).")}</label>
-      <label style="flex:0 0 auto"><input type="checkbox" id="tLz" style="width:auto"> lazy ${tip("Hold the auction until the slot is at least 50% on screen, then start. Lifts viewability and keeps the cached VAST response fresh at the moment the ad renders. Turn off only for players that sit above the fold on every page.")}</label></div>
+      <label style="flex:0 0 auto"><input type="checkbox" id="tLz" style="width:auto"> lazy ${tip("Hold the auction until the slot is at least 50% on screen, then start. Lifts viewability and keeps the cached VAST response fresh at the moment the ad renders. Turn off only for players that sit above the fold on every page.")}</label>
+      <label style="flex:0 0 auto"><input type="checkbox" id="tAc" style="width:auto"> ad controls ${tip("Overlay play/pause and mute buttons on the ad while it plays. The IMA SDK renders only the controls a creative itself carries (countdown, skip, “why this ad”), and during an instream break its ad layer covers the content player's control bar — so without this the player shows no controls for the whole ad.")}</label></div>
       <div class="row" style="margin-top:8px;align-items:flex-end">
       <label style="flex:0 0 auto"><input type="checkbox" id="tRf" style="width:auto"> refresh ads ${tip("Run a NEW auction after each ad finishes, is skipped, or errors, so a long session monetises more than once. Only fires while the slot is viewable (or floating) and the tab is in the foreground; no-fill backs off exponentially. <b>Check your GAM contract and direct deals before enabling — some forbid refreshed inventory.</b>")}</label>
       <div style="max-width:180px"><label>Refresh interval (s) ${tip("Seconds between the end of one ad and the next auction. The engine floors this at 30s regardless of the value here, to stay inside IAB/GAM refresh guidance.")}</label><input id="tRfI" type="number" min="30" max="600" step="5"/></div>
@@ -392,6 +393,7 @@ async function paneTag(el){const p=await getPlc();const c=p.config;
   $("#tCh").value=p.engine_channel==="auto"?"auto":"pinned";$("#tVid").value=c.video||"";$("#tDiv").value=c.divId||"";
   $("#tPre").value=c.preload||"metadata";$("#tVp").value=c.vpaid||"insecure";
   $("#tAp").checked=c.autoplay!==false;$("#tMu").checked=c.muted!==false;$("#tFl").checked=c.fluid!==false;$("#tLo").checked=!!c.loop;$("#tSt").checked=!!c.sticky;
+  $("#tAc").checked=c.adControls!==false;
   $("#tLz").checked=c.lazy!==false;$("#tRf").checked=!!c.refresh;$("#tRfI").value=c.refreshInterval??30;$("#tRfM").value=c.refreshMax??10;
   // Refresh cadence inputs are meaningless while refresh is off — dim them.
   const syncRf=()=>{const on=$("#tRf").checked;$("#tRfI").disabled=!on;$("#tRfM").disabled=!on;};
@@ -401,7 +403,7 @@ async function paneTag(el){const p=await getPlc();const c=p.config;
     await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{engine_channel:$("#tCh").value,
       config:{...cur,video:$("#tVid").value.trim()||null,divId:$("#tDiv").value.trim()||null,preload:$("#tPre").value,vpaid:$("#tVp").value,
         autoplay:$("#tAp").checked,muted:$("#tMu").checked,fluid:$("#tFl").checked,loop:$("#tLo").checked,sticky:$("#tSt").checked,
-        lazy:$("#tLz").checked,refresh:$("#tRf").checked,
+        lazy:$("#tLz").checked,adControls:$("#tAc").checked,refresh:$("#tRf").checked,
         refreshInterval:Math.max(30,parseInt($("#tRfI").value||"30",10)),refreshMax:Math.max(1,parseInt($("#tRfM").value||"10",10))}}});
     toast("Saved");await genTag();}catch(e){toast(e.message,"err");}};
   $("#tCopy").onclick=()=>{navigator.clipboard.writeText($("#tOut").value);toast("Copied");};

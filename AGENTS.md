@@ -87,6 +87,7 @@ To release a new version:
 | `data-refresh-interval` | `30` | Seconds between ad breaks. **Floored at 30s in the engine** regardless of the value, to stay inside IAB/GAM refresh guidance |
 | `data-refresh-max` | `10` | Hard cap on refresh cycles per page load |
 | `data-sticky` | `false` | Instream only. `true` makes the player float to the bottom-right corner when it scrolls out of view (keeps playing, ✕ to dismiss) and reflows the live IMA ad via `adsManager.resize()`. Ignored for outstream |
+| `data-ad-controls` | `true` | Overlay a play/pause + mute button pair on the ad for the duration of the break (both placements). IMA renders only the UI a creative itself carries — countdown, ad label, "why this ad", skip — and never a generic play/pause or mute; for instream its ad container also covers the video.js control bar, so without this the player shows **no** controls while an ad plays. `"false"` opts out |
 | `data-prebid-url` | required | jsDelivr URL to the Prebid.js bundle |
 | `data-autoplay` | `true` | Autoplay the content video |
 | `data-muted` | `true` | Mute on load |
@@ -253,6 +254,28 @@ Final log line: `Final hb_pb value: $X.XX`
 
 ## 10. Release History
 
+### Unreleased (on `dev`, after v2.6.1)
+- **Ad-time player controls (`data-ad-controls`, default on)** — a play/pause +
+  mute overlay for the length of every ad break, on **both** placements. IMA has
+  no generic play/pause or mute of its own, and for instream its ad container
+  covers the video.js control bar, so publishers saw a player with no controls
+  during ads (kurzy.cz, 2026-09-22). New `createAdControls()` in the engine,
+  shared by `setupPlayer()` and `setupOutstream()` — it replaces the outstream-only
+  sound toggle added in v2.4.3 (and the `outMgr` variable it needed) and adds
+  play/pause everywhere. Control-plane parity: `adControls` on `PlacementConfig`
+  + `RuntimeConfig` and an "ad controls" checkbox in the Player Tag tab, so the
+  thin dynamic tag can switch it per placement.
+- **Outstream placeholder-div collapse fix** — a publisher-placed mount div never
+  received the collapsed `height:0` cssText, so an outstream slot that no-filled
+  left a ~154px empty gap in the page. See gotcha 9.
+- Earlier on this line (see `git log`): viewport-gated start, ad refresh, the
+  ad-tag waterfall and per-opportunity analytics (`3d5e2b8`), plus the three
+  `ensureMount`/duplicate-tag fixes from the kurzy.cz incident (gotcha 7).
+- **Publisher-facing docs are deliberately NOT updated yet** — `docs.html` /
+  `publisher-guide.html` attribute tables still describe v2.6.1 (they also lack
+  `data-lazy`, `data-refresh*`, `data-ad-tags`). Bring all of them forward in one
+  pass at the release commit, which also triggers `pdf-regen.yml`.
+
 ### v2.5.0 (current)
 - **Auto-updating engine tag (loader + channel manifest)** — new `engine/loader.js` + `engine/channel.json`. Publishers can embed the loader instead of pinning an engine version; it fetches the channel manifest, resolves the engine version (stable, with optional sticky canary % rollout), and injects the pinned `@v{version}/engine/player.js` — copying through all `data-*` and substituting a `__VER__` token (so `data-prebid-url` tracks the engine). Falls back to a baked-in known-good version (`2.4.3`) if the manifest is unreachable (1.5 s timeout). Engine unchanged — it already self-discovers via `document.currentScript || getElementById("adtech-player-core")`, so the injected script resolves correctly (loader frees its own id first).
 - **Dashboard "Engine Delivery" selector** — Auto-update (default; emits the loader tag, `src=@2/engine/loader.js`, `data-prebid-url=@__VER__/…`) vs Pinned (emits the exact `@vX.Y.Z` engine URL, the old behavior).
@@ -384,6 +407,41 @@ The bundle is built via GitHub Actions (`build-prebid-bundle.yml`, manual dispat
 4. **Prebid bundle bot commit** — after triggering `build-prebid-bundle.yml`, wait for the bot commit and `git pull` before pushing your own changes (avoid diverged history)
 5. **Sequential Puppeteer tests** — don't run two browser sessions back-to-back in the same script; the second IMA init can timeout. Run as separate node processes.
 6. **IncrementX params** — only `placementId` is needed (not publisherId). Banner and video use separate placement IDs; confirm with SSP account team.
+8. **IMA supplies no play/pause or mute — the engine must overlay its own.** The
+   SDK renders only the controls the *creative* carries (countdown, ad label,
+   "why this ad", skip). Worse, for instream the ad container is raised to
+   `z-index:10` with `pointer-events:auto` for the break, so the video.js control
+   bar underneath is both hidden and unclickable — the player reads as having no
+   controls at all while an ad plays (reported by kurzy.cz, 2026-09-22).
+   `createAdControls()` draws the pair and is:
+   - **built once per slot**, cached on `container.__atpCtl` — building per ads
+     manager would stack another bar onto the mount for every waterfall attempt
+     and every refresh cycle;
+   - **rebound per manager** via `ctl.bind(mgr)` inside `ADS_MANAGER_LOADED`, so
+     a click always addresses the manager of the current cycle (the previous one
+     is destroyed);
+   - driven through `adsManager.pause()/resume()/setVolume()` — never the
+     `<video>` element, which would leave IMA's progress and quartile timers
+     running against a stopped creative;
+   - mirroring IMA's own `PAUSED`/`RESUMED`/`VOLUME_*` events, because a VPAID
+     creative can pause or mute without going through our buttons;
+   - `stopPropagation()`-ing its clicks, or every control tap would fire the ad
+     clickthrough.
+   Bottom-**left** is deliberate: IMA owns the bottom-right (countdown, "why this
+   ad", learn-more) and the top edge (ad label).
+9. **Only containers the engine *creates* get the engine's styles.** `ensureMount()`
+   applies its `cssText` in the `isNewContainer` branch, so a publisher-placed
+   placeholder div keeps its own (usually empty) styles. Two consequences, both
+   handled but easy to reintroduce:
+   - an outstream placeholder div is **not** collapsed by that cssText, so the
+     injected `<video>` (150px intrinsic height) left a permanent empty gap on a
+     slot that never filled — `ensureMount` now applies `height:0;overflow:hidden`
+     to a reused outstream container as well;
+   - it is `position:static`, which would anchor the absolutely-positioned ad
+     container and controls bar to some ancestor elsewhere on the page —
+     `createAdControls()` promotes it to `relative` when it is still static.
+   Instream is saved from the sizing half of this by video.js's own `vjs-fluid`
+   aspect-ratio handling; outstream has no video.js at all.
 7. **`ensureMount()` and the "publisher-placed div" pattern (fixed on `dev`, unreleased as of 2026-09-03).** Ad-ops teams often need the `<script>` tag itself in `<head>` to satisfy their trafficking system, and separately mark the display spot with a plain `<div id="...">`. This exposed two real bugs, both fixed in `engine/player.js`:
    - A container auto-created next to a script parented in `<head>` inherited `<head>`'s UA-stylesheet `display:none` — dependencies loaded, auctions ran, beacons fired, but nothing painted. Fixed: detect `currentScript` inside `<head>` and mount into `<body>` instead.
    - `ensureMount()` returned any pre-existing div matching `data-div-id`/config `divId` as-is, without checking it actually contained the `<video id="{divId}_video">` element `setupPlayer()`/`setupOutstream()` require. A genuinely *empty* publisher-placed placeholder div — the exact pattern we tell publishers to use — silently mounted nothing. Fixed: the video element is now built whenever it's missing, regardless of who created the container.
@@ -393,4 +451,6 @@ The bundle is built via GitHub Actions (`build-prebid-bundle.yml`, manual dispat
 
 ---
 
-*Last updated: v2.5.0 — 2026-06-03 (gotcha 7 added 2026-09-03, pending release)*
+*Last updated: 2026-09-22 — ad-time controls + outstream placeholder collapse
+(gotchas 8 and 9), unreleased on `dev`. The version/release sections above still
+describe the 2.5.0–2.6.1 line; use `git log` for the 2.6.x detail.*

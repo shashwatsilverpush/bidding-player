@@ -96,6 +96,7 @@ async def assemble_config(
         loop=cfg.loop,
         preload=cfg.preload,
         vpaid=cfg.vpaid,
+        adControls=cfg.adControls,
         divId=cfg.divId or settings.default_div_id,
         cacheUrl=cfg.cacheUrl or settings.default_cache_url,
         bidders=bidders,
