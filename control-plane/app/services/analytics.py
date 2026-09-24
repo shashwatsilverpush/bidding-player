@@ -232,7 +232,25 @@ async def summary(
         "avgCpmRaw": round(avg_raw, 4) if avg_raw is not None else None,
         "avgCpmBiased": round(avg_biased, 4) if avg_biased is not None else None,
         "biasUpliftPct": uplift,
-        **{k: money.get(k) for k in ("revenue", "ecpm", "rpm")},
+        # The HB / ad-server split comes from the same aggregate as the report,
+        # so a KPI tile always equals the report's Total row.
+        **{
+            k: money.get(k)
+            for k in (
+                "viewRate",
+                "noBid",
+                "noBidRate",
+                "prebidUnavailable",
+                "hbImpressions",
+                "hbImpShare",
+                "hbRevenue",
+                "hbEcpm",
+                "hbRpm",
+                "unfilled",
+                "unfilledRate",
+                "errorRate",
+            )
+        },  # fmt: skip
     }
 
 
@@ -436,15 +454,29 @@ def _derived(
     wins: int,
     impressions: int,
     modern_impressions: int,
+    hb_impressions: int,
     completes: int,
     errors: int,
     no_demand: int,
+    no_bid: int,
+    unfilled: int,
+    prebid_unavailable: int,
     avg_raw: Any,
     avg_biased: Any,
-    revenue: Any,
+    hb_revenue: Any,
 ) -> dict[str, Any]:
     """Every metric the report shows, from raw counts. Shared by report rows and
-    the totals row so a total can never be computed differently from its rows."""
+    the totals row so a total can never be computed differently from its rows.
+
+    Metrics are split by WHO produced them, because the two are routinely
+    confused when reconciling against a GAM report:
+
+    * header bidding (Prebid) — bid requests, no-bids, wins, HB impressions and
+      HB money. Measured by the player, bid-side.
+    * ad server (GAM) — ad requests, impressions, fill, unfilled, errors,
+      completes. GAM *revenue/eCPM* are not observable from the player (IMA
+      exposes no price) and need the GAM reporting join, so none is invented.
+    """
 
     def rate(a: int, b: int) -> float | None:
         return round(a / b, 4) if b else None
@@ -455,35 +487,50 @@ def _derived(
         fill, basis = rate(modern_impressions, opportunities), "ad_request"
     else:
         fill, basis = rate(impressions, requests), "bid_request(legacy)"
-    rev = float(revenue) if revenue is not None else 0.0
+    rev = float(hb_revenue) if hb_revenue is not None else 0.0
     return {
+        # page
         "loads": loads,
         "views": views,
-        "viewRate": rate(views, loads),
+        # player_view is only emitted by tags with data-lazy on. Zero views on
+        # real loads means "not measured", not "nobody saw it".
+        "viewRate": rate(views, loads) if views else None,
+        "adsPerLoad": round(impressions / loads, 3) if loads else None,
+        # header bidding
         "requests": requests,
-        "adRequests": ad_requests,
-        "adOpportunities": opportunities,
+        "noBid": no_bid,
+        "noBidRate": rate(no_bid, requests),
+        "prebidUnavailable": prebid_unavailable,
         "wins": wins,
         "winRate": rate(wins, requests),
+        "hbImpressions": hb_impressions,
+        "hbImpShare": rate(hb_impressions, impressions),
+        "avgCpmRaw": _money(avg_raw),
+        "avgCpmBiased": _money(avg_biased),
+        # HB money — raw CPM only, so floor bias never inflates it.
+        #   hbRevenue : winning bid CPMs / 1000, for wins whose opportunity rendered
+        #   hbEcpm    : hbRevenue per 1000 HB impressions
+        #   hbRpm     : hbRevenue per 1000 page loads
+        "hbRevenue": round(rev, 4),
+        "hbEcpm": round(rev / hb_impressions * 1000, 4) if hb_impressions else None,
+        "hbRpm": round(rev / loads * 1000, 4) if loads else None,
+        # ad server (GAM)
+        "adRequests": ad_requests,
+        "adOpportunities": opportunities,
         "impressions": impressions,
         "fillRate": fill,
         "fillRateBasis": basis,
+        "unfilled": unfilled,
+        "unfilledRate": rate(unfilled, opportunities),
+        "errors": errors,
+        # Per ATTEMPT: each waterfall tag tried can error on its own.
+        "errorRate": rate(errors, ad_requests),
         "completes": completes,
         "completeRate": rate(completes, impressions),
-        "errors": errors,
+        # Raw no_demand count, kept for API compatibility. It mixes "no bid"
+        # with "GAM did not fill" — the same opportunity can emit both — so it
+        # is not a rate of anything; use noBid / unfilled.
         "noDemand": no_demand,
-        "adsPerLoad": round(impressions / loads, 3) if loads else None,
-        "avgCpmRaw": _money(avg_raw),
-        "avgCpmBiased": _money(avg_biased),
-        # Derived money metrics — raw CPM only, so floor bias never inflates them.
-        #   revenue : sum of winning bid CPMs / 1000 for wins that rendered
-        #   ecpm    : revenue per 1000 impressions (ALL impressions, incl. ones GAM
-        #             filled without a header-bidding win — so it sits below
-        #             avgCpmRaw whenever direct/house demand fills)
-        #   rpm     : revenue per 1000 page loads
-        "revenue": round(rev, 4),
-        "ecpm": round(rev / impressions * 1000, 4) if impressions else None,
-        "rpm": round(rev / loads * 1000, 4) if loads else None,
     }
 
 
@@ -498,11 +545,17 @@ DIMENSIONS = (
     "engine_version",
     "refresh",
 )
-METRICS = (
-    "loads", "views", "viewRate", "requests", "adRequests", "adOpportunities", "wins",
-    "winRate", "impressions", "fillRate", "completes", "completeRate", "errors",
-    "noDemand", "adsPerLoad", "avgCpmRaw", "avgCpmBiased", "revenue", "ecpm", "rpm",
+# Column order of the CSV export: page, then header bidding, then ad server.
+PAGE_METRICS = ("loads", "views", "viewRate", "adsPerLoad")
+HB_METRICS = (
+    "requests", "noBid", "noBidRate", "prebidUnavailable", "wins", "winRate",
+    "hbImpressions", "hbImpShare", "avgCpmRaw", "avgCpmBiased", "hbRevenue", "hbEcpm", "hbRpm",
 )  # fmt: skip
+GAM_METRICS = (
+    "adRequests", "adOpportunities", "impressions", "fillRate", "unfilled", "unfilledRate",
+    "errors", "errorRate", "completes", "completeRate",
+)  # fmt: skip
+METRICS = (*PAGE_METRICS, *HB_METRICS, *GAM_METRICS)
 
 
 def _dim_expr(dim: str, tz: str) -> Any:
@@ -565,18 +618,29 @@ async def report(
     def cnt(event: str) -> ColumnElement[int]:
         return func.count().filter(Event.event_type == event)
 
-    # Impressions attributable to an opportunity; revenue only counts wins that
-    # actually rendered. Legacy (pre-2.7.0) rows carry no auction_id, so their
-    # wins cannot be matched to an impression and are counted as-is.
-    rendered = (
-        select(Event.auction_id)
-        .where(*conds, Event.event_type == "impression", Event.auction_id.isnot(None))
-        .correlate(None)
-        .scalar_subquery()
-    )
+    # HB attribution is by auction_id: an impression is an HB impression when
+    # its opportunity had an auction_win, and HB revenue only counts wins whose
+    # opportunity rendered. This is an upper bound — GAM can still pick a
+    # higher-priority line item over the hb_pb one, and the player cannot see
+    # which line item served. Legacy (pre-2.7.0) rows carry no auction_id, so a
+    # legacy win is counted as both revenue and an HB impression, symmetrically.
+    def aids(event: str) -> Any:
+        return (
+            select(Event.auction_id)
+            .where(*conds, Event.event_type == event, Event.auction_id.isnot(None))
+            .correlate(None)
+            .scalar_subquery()
+        )
+
     win_rendered = (Event.event_type == "auction_win") & (
-        Event.auction_id.is_(None) | Event.auction_id.in_(rendered)
+        Event.auction_id.is_(None) | Event.auction_id.in_(aids("impression"))
     )
+    hb_impression = (
+        (Event.event_type == "impression")
+        & Event.auction_id.isnot(None)
+        & Event.auction_id.in_(aids("auction_win"))
+    ) | ((Event.event_type == "auction_win") & Event.auction_id.is_(None))
+    phase = Event.props["phase"].astext
 
     stmt = select(
         *exprs,
@@ -596,9 +660,22 @@ async def report(
         cnt("ad_complete").label("completes"),
         cnt("ad_error").label("errors"),
         cnt("no_demand").label("no_demand"),
+        # no_demand carries a phase: auction / floor_min are header bidding
+        # finding no usable bid; waterfall_exhausted is the ad server not
+        # filling. One opportunity can emit both, so they must never be summed.
+        func.count()
+        .filter(Event.event_type == "no_demand", phase.in_(("auction", "floor_min")))
+        .label("no_bid"),
+        func.count()
+        .filter(Event.event_type == "no_demand", phase == "waterfall_exhausted")
+        .label("unfilled"),
+        func.count()
+        .filter(Event.event_type == "no_demand", phase == "prebid_unavailable")
+        .label("prebid_unavailable"),
+        func.count().filter(hb_impression).label("hb_impressions"),
         func.avg(Event.cpm_raw).label("avg_raw"),
         func.avg(Event.cpm_biased).label("avg_biased"),
-        (func.sum(Event.cpm_raw).filter(win_rendered) / 1000).label("revenue"),
+        (func.sum(Event.cpm_raw).filter(win_rendered) / 1000).label("hb_revenue"),
     ).select_from(Event)
     if any(d in CHAIN_DIMS for d in dimensions):
         # Inner joins: events whose placement no longer resolves (hard-deleted
@@ -631,12 +708,16 @@ async def report(
                 wins=r["wins"],
                 impressions=r["impressions"],
                 modern_impressions=r["modern_impressions"],
+                hb_impressions=r["hb_impressions"],
                 completes=r["completes"],
                 errors=r["errors"],
                 no_demand=r["no_demand"],
+                no_bid=r["no_bid"],
+                unfilled=r["unfilled"],
+                prebid_unavailable=r["prebid_unavailable"],
                 avg_raw=r["avg_raw"],
                 avg_biased=r["avg_biased"],
-                revenue=r["revenue"],
+                hb_revenue=r["hb_revenue"],
             )
         )
         out.append(rec)
@@ -733,3 +814,90 @@ async def filter_options(session: AsyncSession) -> dict[str, Any]:
         "devices": ["desktop", "mobile", "tablet", "ctv", "unknown"],
         "dimensions": list(DIMENSIONS),
     }  # fmt: skip
+
+
+# IMA / VAST error codes grouped by what they mean for "why didn't this fill".
+# The engine sends String(adError) — "AdError 1009: The VAST response document
+# is empty." — so the numeric code is parsed out of the text.
+#   side = gam     : the ad server answered, but with nothing usable
+#          network : the request never completed (blocked, timed out, offline)
+#          player  : an ad came back and failed to play (creative or player)
+ERROR_TYPES: tuple[tuple[str, str, str, frozenset[int]], ...] = (
+    ("no_ad", "No ad returned", "gam", frozenset({1009, 303})),
+    ("bad_vast", "Invalid VAST / trafficking", "gam",
+     frozenset({100, 101, 102, 200, 201, 202, 203})),
+    ("request_failed", "Request blocked / timed out", "network",
+     frozenset({301, 302, 1005, 1010, 1012})),
+    ("playback", "Creative failed to play", "player",
+     frozenset({400, 401, 402, 403, 405, 500, 501, 901, 1007, 1205})),
+)  # fmt: skip
+ERROR_OTHER = ("other", "Other / unknown", "unknown")
+
+
+def classify_error(code: int | None, phase: str | None) -> tuple[str, str, str]:
+    for key, label, side, codes in ERROR_TYPES:
+        if code in codes:
+            return key, label, side
+    # The loader phase fails before any ad response exists: IMA itself could not
+    # be reached or could not issue the request.
+    if code is None and phase == "ima_loader":
+        return "request_failed", "Request blocked / timed out", "network"
+    return ERROR_OTHER
+
+
+async def errors(session: AsyncSession, scope: Scope, *, by_day: bool = False) -> dict[str, Any]:
+    """Ad errors by type and code (optionally per day), with each type's share
+    of ad requests — the breakdown that tells a GAM no-fill apart from a
+    player-side playback failure."""
+    conds = _filters(scope)
+    code = func.substring(Event.props["errorCode"].astext, r"([0-9]{3,4})")
+    phase = Event.props["phase"].astext
+    day = func.date_trunc("day", func.timezone(scope.tz, Event.ts_server))
+    cols: list[Any] = [code.label("code"), phase.label("phase")]
+    if by_day:
+        cols.append(day.label("day"))
+    rows = (
+        (
+            await session.execute(
+                select(*cols, func.count().label("n"))
+                .where(*conds, Event.event_type == "ad_error")
+                .group_by(*cols)
+            )
+        )
+        .mappings()
+        .all()
+    )
+    ad_requests = (
+        await session.execute(select(func.count()).where(*conds, Event.event_type == "ad_request"))
+    ).scalar_one()
+
+    types: dict[str, dict[str, Any]] = {}
+    codes: dict[tuple[str, str], dict[str, Any]] = {}
+    per_day: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        c = int(r["code"]) if r["code"] else None
+        key, label, side = classify_error(c, r["phase"])
+        t = types.setdefault(key, {"type": key, "label": label, "side": side, "count": 0})
+        t["count"] += r["n"]
+        ck = (key, str(c) if c is not None else "none")
+        cd = codes.setdefault(ck, {"type": key, "code": c, "phase": r["phase"], "count": 0})
+        cd["count"] += r["n"]
+        if by_day:
+            d = _dim_value("day", r["day"])
+            row = per_day.setdefault(d, {"day": d, "total": 0})
+            row[key] = row.get(key, 0) + r["n"]
+            row["total"] += r["n"]
+
+    order = [t[0] for t in ERROR_TYPES] + [ERROR_OTHER[0]]
+    out_types = sorted(types.values(), key=lambda t: order.index(t["type"]))
+    for t in out_types:
+        t["share"] = round(t["count"] / ad_requests, 4) if ad_requests else None
+    return {
+        "adRequests": ad_requests,
+        "total": sum(t["count"] for t in out_types),
+        "types": out_types,
+        "codes": sorted(codes.values(), key=lambda c: -c["count"]),
+        "catalog": [{"type": k, "label": lb, "side": sd} for k, lb, sd, _ in ERROR_TYPES]
+        + [dict(zip(("type", "label", "side"), ERROR_OTHER, strict=True))],
+        "days": sorted(per_day.values(), key=lambda d: d["day"], reverse=True) if by_day else [],
+    }

@@ -109,7 +109,12 @@ def _opportunity(
         p = fill_p + (0.25 if (won and pos == 0) else 0.0)
         if rng.random() < min(p, 0.98):
             if rng.random() < 0.04:  # filled, then died mid-render
-                mk("ad_error", {"errorCode": "900", "phase": "ima"}, sid, ts)
+                mk(
+                    "ad_error",
+                    {"errorCode": "AdError 405: Problem displaying media file.", "phase": "ima"},
+                    sid,
+                    ts,
+                )
                 return
             mk(
                 "impression",
@@ -125,7 +130,9 @@ def _opportunity(
                 mk("ad_complete", {"viewedPct": 100.0, "quartiles": [1, 2, 3, 4]}, sid, ts)
             return
         # This tag returned nothing — record why, then fall through to the next.
-        mk("ad_error", {"errorCode": "1009", "phase": "ima_loader"}, sid, ts)
+        # Same shape the engine sends: String(adError) from IMA.
+        err, err_phase = rng.choices(_DEMO_ERRORS, weights=(70, 12, 10, 5, 3))[0]
+        mk("ad_error", {"errorCode": err, "phase": err_phase}, sid, ts)
 
     # Every tag in the chain failed.
     mk("no_demand", {"phase": "waterfall_exhausted", "fallbackServed": False}, sid, ts)
@@ -139,6 +146,14 @@ _DEMO_UAS = (
     "Mozilla/5.0 (SMART-TV; Linux; Tizen 7.0) AppleWebKit/537.36 SamsungBrowser/5.0 TV",
 )
 _DEMO_COUNTRIES = ("CZ", "IN", "US", "DE", "SK")
+# Why a tag failed, weighted like real video traffic: mostly empty responses.
+_DEMO_ERRORS = (
+    ("AdError 1009: The VAST response document is empty.", "ima_loader"),
+    ("AdError 301: VAST media file loading reached a timeout.", "ima_loader"),
+    ("AdError 402: Failed to load media assets from a URL.", "ima"),
+    ("AdError 303: No Ads VAST response after one or more Wrappers.", "ima_loader"),
+    ("AdError 100: VAST XML parsing error.", "ima_loader"),
+)
 
 
 async def seed_events(

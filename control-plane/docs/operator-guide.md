@@ -116,20 +116,37 @@ The dashboard generates a correct tag, but a publisher only monetizes once:
     A **Total** row sits at the bottom; **Export CSV** downloads every metric (up to 10k rows).
 - Per placement: the placement's **Analytics** tab (that placement only), including a
   **Day-wise** table that can be split by device, country, refresh or engine version.
-- **Money metrics** — all bid-side, from the **raw** (un-biased) CPM:
-  - *eCPM raw / biased* — average winning bid, before / after floor bias.
-  - *Revenue (est.)* — sum of winning-bid CPMs ÷ 1000, for wins that actually rendered.
-  - *eCPM (derived)* — revenue ÷ impressions × 1000. Every impression counts, including
-    ones GAM filled without a header-bidding win, so it sits below eCPM raw whenever
-    direct/house demand fills.
-  - *RPM* — revenue per 1000 page loads.
-- **Note:** these are **bid** values (what the auction produced), not GAM-settled
-  revenue — real revenue reconciliation is a later phase.
+- **Every metric is labelled by who produced it** — KPI tiles, funnel and report columns are
+  grouped into **Page**, **Header bidding (Prebid)** and **Ad server (GAM)**. The report's
+  *Columns* switch shows All / Header bidding / Ad server (GAM).
+  - *Page* — loads, View % (**—** = not measured: only `data-lazy` tags report
+    viewability), ads per load.
+  - *Header bidding* — bid requests, **No-bid %** (no usable bid, incl. under floor-min),
+    wins, win rate, **HB impressions** (impressions on opportunities HB won — an upper
+    bound, GAM may still serve a higher-priority line item), HB share, avg bid (raw) and
+    bid sent to GAM (biased), **HB revenue** (raw winning CPMs ÷ 1000 for rendered wins),
+    **HB eCPM** (per HB impression), **HB RPM** (per 1000 loads).
+  - *Ad server (GAM)* — ad requests, impressions (all demand), **GAM fill**, **Unfilled %**,
+    **Error %** (per ad request), completion.
+  - **GAM revenue / GAM eCPM are shown as "not connected"**: IMA exposes no price, so
+    AdX / direct / house revenue is only in GAM's own report until the GAM reporting join
+    (backlog #1) exists. Never compare HB revenue against GAM total revenue.
+- **Ad errors — why ads didn't fill**: IMA errors grouped by cause with the top IMA codes,
+  plus a per-day pivot. *No ad returned* (1009/303) and *Invalid VAST* are **GAM** side;
+  *Request blocked / timed out* (301/302/1005/1012) is **network**; *Creative failed to
+  play* (400–405, 901, …) is **player / creative** side.
+- **Header-bidding partners**: per-SSP bids, no-bids, timeouts, errors, CPM, latency, wins
+  — on the top-level page (respects filters) and on each placement.
+- **Reconciling with GAM** — expect our *ad requests* to run ~10–20% above GAM's (ad
+  blockers / closed pages stop calls before they reach GAM); *impressions* should match
+  within a few %. Set the dashboard **Timezone** to the GAM network's, or daily rows shift.
+  The chosen timezone and column view are remembered in your browser.
 - **Country** comes from the CDN/edge header in front of the collector (`CF-IPCountry`,
   `CloudFront-Viewer-Country`, `X-Vercel-IP-Country`, …). With no such proxy every row
   reads `unknown`.
 - API: `GET /v1/admin/analytics/report?dimensions=publisher,day&tz=…&date_from=…&date_to=…`
   (+ any filter, `sort`, `order`, `limit`); `/report.csv` for the same as CSV;
+  `/errors?by_day=true` for the error breakdown;
   `/filters` for the filter options. Summary/timeseries/bidders accept the same filters.
 - **Demo data (dev/staging only):** a placement's Analytics tab has a **Generate**
   button to insert synthetic events so the dashboards have data before real traffic.

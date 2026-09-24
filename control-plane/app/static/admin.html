@@ -63,7 +63,17 @@
   th.sort{cursor:pointer;user-select:none;} th.sort:hover,th.sort.on{color:var(--accent);}
   table.rep td{white-space:nowrap;} table.rep tfoot td{border-top:2px solid var(--line);border-bottom:none;background:var(--panel2);}
   a.drill{color:inherit;text-decoration:none;border-bottom:1px dashed var(--muted);} a.drill:hover{color:var(--accent);border-color:var(--accent);}
-  button.preset.on{border-color:var(--accent);color:var(--accent);background:var(--teal-soft);}
+  .kgrp{margin-top:12px;} .kgrp:first-child{margin-top:0;} .kgl{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.5px;margin:0 0 6px;display:flex;align-items:center;gap:6px;}
+  .kgl::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--muted);}
+  .g-hb .kgl{color:var(--lav);} .g-hb .kgl::before{background:var(--lav);} .g-gam .kgl{color:var(--accent);} .g-gam .kgl::before{background:var(--accent);}
+  .g-page .kgl{color:var(--muted);} .kgrp.g-hb .kpi{border-left:3px solid var(--lav);} .kgrp.g-gam .kpi{border-left:3px solid var(--accent);}
+  .hbbars .bar>i,.spark.hbbars i{background:var(--lav);}
+  .kpi.nc .v{color:var(--muted);} .kpi.nc{background:#fff;border-style:dashed;}
+  table.rep tr.band th{font-size:10px;letter-spacing:.6px;padding:5px 10px;border-bottom:none;}
+  table.rep tr.band th.g-hb{background:var(--lav-soft);color:var(--lav);} table.rep tr.band th.g-gam{background:var(--teal-soft);color:var(--accent);}
+  table.rep tr.band th.g-page{background:var(--panel2);}
+  table.rep .gstart{border-left:2px solid var(--line);}
+  button.colv.on,button.preset.on{border-color:var(--accent);color:var(--accent);background:var(--teal-soft);}
   button:disabled{opacity:.45;cursor:default;}
   .tblwrap{overflow-x:auto;}
   .bar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;} .bar>i{display:block;height:100%;background:var(--accent);}
@@ -508,47 +518,30 @@ async function paneAnalytics(el){const pid=S.plc.id;
     const [s,ts,bd,kv,tp]=await Promise.all([api(`/v1/admin/analytics/summary?placement_id=${pid}${rp}`),api(`/v1/admin/analytics/timeseries?placement_id=${pid}&bucket=day${rp}`),
       api(`/v1/admin/analytics/bidders?placement_id=${pid}${rp}`),api(`/v1/admin/analytics/key-values?placement_id=${pid}${rp}`),
       api(`/v1/admin/analytics/tag-positions?placement_id=${pid}${rp}`)]);
-    const basis=s.fillRateBasis==="ad_request"?`of ${s.adOpportunities} opportunities`:`of ${s.requests} bid reqs (legacy)`;
-    const kpis=[["Player loads",s.loads,s.views!=null?`${s.views} viewable`:""],["Bid requests",s.requests,"Prebid auctions"],
-      ["Ad requests",s.adRequests,s.waterfallDepth?`${s.waterfallDepth} tags/opportunity`:"VAST calls to GAM"],
-      ["Win rate",pct(s.winRate),`${s.wins} wins`],["Fill rate",pct(s.fillRate),basis],["Ads / load",s.adsPerLoad??"—","refresh multiplier"],
-      ["eCPM raw",money(s.avgCpmRaw),"actual bid"],["eCPM biased",money(s.avgCpmBiased),s.biasUpliftPct!=null?`+${s.biasUpliftPct}% to GAM`:""],
-      ["Revenue (est.)",money(s.revenue),"rendered wins, raw CPM"],["eCPM (derived)",money(s.ecpm),`RPM ${money(s.rpm)}`],["Completes",s.completes,pct(s.completeRate)],["No-demand/errors",s.noDemand+s.errors,""]];
-    // Two funnels, deliberately NOT one. Load/Viewable are counted per page load;
-    // everything from the bid request down is counted per ad opportunity, and
-    // refresh makes one load yield several. Stacking them in a single bar chart
-    // would show later steps overtaking earlier ones — the exact "intertwined
-    // metrics" confusion this split exists to prevent.
-    const pageSteps=[["Load",s.loads],["Viewable",s.views]];
-    // "Ad opportunity" (distinct auction_id), not raw ad_request attempts — a
-    // waterfall fires several attempts per opportunity, which would otherwise
-    // make this step overshoot the win count above it.
-    const oppSteps=[["Bid request",s.requests],["Win",s.wins],["Ad opportunity",s.adOpportunities],["Impression",s.impressions],["Complete",s.completes]];
-    const pmax=Math.max(1,...pageSteps.map(x=>x[1])),omax=Math.max(1,...oppSteps.map(x=>x[1]));
-    const fbar=(arr,mx)=>arr.map(([l,v])=>`<div><div class="flabel"><span>${l}</span><span>${v}</span></div><div class="bar"><i style="width:${((v||0)/mx*100).toFixed(1)}%"></i></div></div>`).join("");
     const wins={};ts.filter(r=>r.event==="auction_win").forEach(r=>wins[r.ts.slice(0,10)]=r.count);const days=Object.keys(wins).sort();const smax=Math.max(1,...days.map(d=>wins[d]));
     const bars=arr=>{const mx=Math.max(1,...arr.map(x=>x.count));return arr.map(x=>`<div><div class="flabel"><span>${esc(x.value)}</span><span>${x.count}</span></div><div class="bar"><i style="width:${(x.count/mx*100).toFixed(1)}%"></i></div></div>`).join("")||'<p class="muted">no data</p>';};
-    $("#anBody").innerHTML=`<div class="card"><h2>Overview</h2><div class="kpis">${kpis.map(([l,v,sub])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v??"—"}</div><div class="s">${sub||""}</div></div>`).join("")}</div></div>
-      <div class="grid2"><div class="card"><h2>Funnel</h2>
-        <p class="muted" style="margin:0 0 6px">Per page load</p><div class="funnel">${fbar(pageSteps,pmax)}</div>
-        <p class="muted" style="margin:14px 0 6px">Per ad opportunity ${tip("Counted once per ad opportunity, not per page load. With ad refresh on, a single page load produces several opportunities, so these totals can legitimately exceed the load count.")}</p><div class="funnel">${fbar(oppSteps,omax)}</div></div>
-      <div class="card"><h2>Wins over time</h2><div class="spark">${days.map(d=>`<i style="height:${(wins[d]/smax*100).toFixed(0)}%" title="${d}: ${wins[d]}"></i>`).join("")||'<span class="muted">no data</span>'}</div></div></div>
-      <div class="card"><h2>Per-bidder performance</h2>${bd.length?`<table><thead><tr><th>Bidder</th><th>Bids</th><th>No-bid</th><th>Timeout</th><th>Error</th><th>Avg CPM</th><th>Latency</th><th>Wins</th></tr></thead><tbody>`+
-        bd.map(r=>`<tr><td><b>${esc(r.bidder)}</b></td><td>${r.bid}</td><td>${r['no-bid']}</td><td>${r.timeout}</td><td>${r.error}</td><td>${money(r.avgCpm)}</td><td>${r.avgLatencyMs!=null?r.avgLatencyMs+' ms':'—'}</td><td>${r.wins}</td></tr>`).join("")+`</tbody></table>`:'<p class="muted">no bid data yet — generate demo data or wait for traffic</p>'}</div>
+    // Page / header bidding / ad server kept apart — see RGROUPS.
+    $("#anBody").innerHTML=`<div class="card"><h2>Overview</h2>${kpiGroups(s)}</div>
+      <div class="grid2"><div class="card"><h2>Funnel</h2><div class="funnel">${funnelHtml(s)}</div></div>
+      <div class="card"><h2>Header-bidding wins over time</h2><div class="spark hbbars">${days.map(d=>`<i style="height:${(wins[d]/smax*100).toFixed(0)}%" title="${d}: ${wins[d]}"></i>`).join("")||'<span class="muted">no data</span>'}</div></div></div>
+      <div class="card"><h2>Header-bidding partners</h2>${biddersHtml(bd)}</div>
       <div class="card"><h2>Ad tag waterfall</h2>${tp.length?`<p class="muted" style="margin:0 0 8px">Which position actually fills. Deeper tags are only reached when the ones above them fail.</p>
         <table><thead><tr><th>#</th><th>Tag</th><th>Reached</th><th>Filled</th><th>Fill rate</th></tr></thead><tbody>`+
         tp.map(r=>`<tr><td>${r.position}</td><td><b>${esc(r.label)}</b></td><td>${r.reached}</td><td>${r.filled}</td><td>${pct(r.fillRate)}</td></tr>`).join("")+`</tbody></table>`
         :'<p class="muted">No waterfall data yet — needs traffic from engine 2.7.0+ (older engines send no tagIndex).</p>'}</div>
       <div class="grid2"><div class="card"><h2>hb_pb buckets → GAM</h2><div class="funnel">${bars(kv.hb_pb)}</div></div><div class="card"><h2>Winning bidder</h2><div class="funnel">${bars(kv.hb_bidder)}</div></div></div>
-      <div class="card"><div class="hdr"><h2>Day-wise</h2><div style="display:flex;gap:8px;align-items:flex-end">
+      <div class="card"><h2>Ad errors — why ads didn't fill</h2><div id="anErr"></div></div>
+      <div class="card"><div class="hdr"><h2>Day-wise</h2><div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">${colViewBtns(rs.cols)}
         <div><label>then by</label><select id="anDw2"><option value="">— none —</option>${["device","country","refresh","engine_version"].map(d=>`<option value="${d}"${rs.dims[1]===d?" selected":""}>${DIM_L[d]}</option>`).join("")}</select></div>
         <button class="ghost small" id="anDwCsv" style="margin:0">Export CSV</button></div></div><div id="anDw"></div></div>`;
     const q=`&placement_id=${encodeURIComponent(pid)}${rp}&tz=${encodeURIComponent(LOCAL_TZ)}`;
+    errorsCard($("#anErr"),q).catch(e=>toast(e.message,"err"));
+    el.querySelectorAll(".colv").forEach(b=>b.onclick=()=>{rs.cols=b.dataset.v;pref.set("cols",rs.cols);el.querySelectorAll(".colv").forEach(x=>x.classList.toggle("on",x===b));drawDw().catch(e=>toast(e.message,"err"));});
     const drawDw=()=>reportTable($("#anDw"),{q,rs,onSort:(sort,order)=>{rs.sort=sort;rs.order=order;drawDw().catch(e=>toast(e.message,"err"));},empty:"No traffic in this range yet."});
     $("#anDw2").onchange=e=>{rs.dims=["day",e.target.value].filter(Boolean);rs.sort=rs.order=null;drawDw().catch(x=>toast(x.message,"err"));};
     $("#anDwCsv").onclick=()=>downloadCsv(`/v1/admin/analytics/report.csv?dimensions=${rs.dims.join(",")}${rs.sort?`&sort=${rs.sort}&order=${rs.order}`:""}${q}`,`${S.plc.name||pid}_${rs.dims.join("_")}.csv`).catch(e=>toast(e.message,"err"));
     await drawDw();};
-  const rs={dims:["day"],sort:null,order:null};
+  const rs={dims:["day"],sort:null,order:null,cols:pref.get("cols","all")};
   $("#anRef").onclick=load;$("#anR").onchange=load;
   $("#anSeed").onclick=async()=>{try{const r=await api("/v1/admin/analytics/dev/seed",{method:"POST",body:{placement_id:pid,sessions:parseInt($("#anN").value||"300",10)}});toast(`Seeded ${r.total} events`);load();}catch(e){toast(e.message,"err");}};
   await load();}
@@ -572,19 +565,72 @@ async function subDemand(el){const [cat,en]=await Promise.all([api("/v1/admin/de
 const DIM_L={day:"Day",week:"Week (Mon)",month:"Month",hour:"Hour",publisher:"Publisher",site:"Site",ad_unit:"Ad unit",placement:"Placement",
   format:"Format",player_type:"Player type",country:"Country",device:"Device",engine_version:"Engine version",refresh:"Initial vs refresh"};
 const TIME_DIMS=["day","week","month","hour"];
-// [key, header, tooltip]. Every metric the API returns is in the CSV; the table shows these.
-const RCOLS=[["loads","Loads","Page loads — the player tag booted."],["viewRate","View %","Share of loads that became viewable and released the auction."],
-  ["requests","Bid reqs","Prebid auctions run."],["adRequests","Ad reqs","VAST calls to the ad server — one per waterfall tag tried."],
-  ["wins","Wins","Auctions that produced a winning header bid."],["impressions","Imps","Ads that started playing."],
-  ["fillRate","Fill","Impressions per ad opportunity (distinct opportunities, not raw waterfall attempts)."],
-  ["adsPerLoad","Ads/load","Impressions per page load — the refresh multiplier; can exceed 1."],
-  ["avgCpmRaw","eCPM raw","Average winning bid CPM, before bias."],["avgCpmBiased","eCPM biased","Average CPM sent to GAM after floor bias."],
-  ["revenue","Revenue","Estimated header-bidding revenue: raw winning-bid CPMs ÷ 1000, counting only wins that rendered. Bid-side — not GAM-settled."],
-  ["ecpm","eCPM (derived)","Revenue ÷ impressions × 1000. Counts every impression, including ones GAM filled without a header-bidding win, so it sits below eCPM raw when direct/house demand fills."],
-  ["rpm","RPM","Revenue per 1000 page loads."]];
-const MONEY=new Set(["avgCpmRaw","avgCpmBiased","revenue","ecpm","rpm"]),PCT=new Set(["viewRate","fillRate","winRate","completeRate"]);
+// Metrics are grouped by WHO produced them. Reconciling against a GAM report
+// kept mixing header-bidding numbers (Prebid, measured bid-side by the player)
+// with ad-server numbers (what GAM served), so every table and KPI row keeps
+// the two visibly apart. GAM revenue/eCPM are not observable from the player
+// (IMA exposes no price) and are shown as "not connected", never estimated.
+// [key, header, tooltip]. Every metric the API returns is in the CSV.
+const RGROUPS=[
+  {key:"page",label:"Page",cls:"g-page",cols:[["loads","Loads","Page loads — the player tag booted."],
+    ["viewRate","View %","Share of loads that became viewable. — means not measured: only tags with data-lazy on report viewability."],
+    ["adsPerLoad","Ads/load","Impressions per page load — the refresh multiplier; can exceed 1."]]},
+  {key:"hb",label:"Header bidding (Prebid)",cls:"g-hb",cols:[["requests","Bid reqs","Prebid auctions run."],
+    ["noBidRate","No-bid %","Auctions with no usable bid (no bidder answered, or the best bid was under floor-min)."],
+    ["wins","Wins","Auctions that produced a winning header bid."],["winRate","Win rate","Wins ÷ bid requests."],
+    ["hbImpressions","HB imps","Impressions on opportunities where header bidding won the auction. Upper bound: GAM can still serve a higher-priority line item over the hb_pb one."],
+    ["hbImpShare","HB share","HB impressions ÷ all impressions."],
+    ["avgCpmRaw","Avg bid","Average winning bid CPM, raw (before bias)."],["avgCpmBiased","Bid to GAM","Average CPM sent to GAM as hb_pb, after floor bias."],
+    ["hbRevenue","HB revenue","Raw winning-bid CPMs ÷ 1000, for wins whose opportunity rendered. Bid-side estimate, not GAM-settled."],
+    ["hbEcpm","HB eCPM","HB revenue ÷ HB impressions × 1000."],["hbRpm","HB RPM","HB revenue per 1000 page loads."]]},
+  {key:"gam",label:"Ad server (GAM)",cls:"g-gam",cols:[["adRequests","Ad reqs","VAST calls to the ad server — one per waterfall tag tried. Expect ~10–20% more than GAM counts: ad blockers and closed pages stop some calls before they reach GAM."],
+    ["impressions","Imps","Ads that started playing (all demand: HB, AdX, direct, house)."],
+    ["fillRate","GAM fill","Impressions ÷ ad opportunities (distinct opportunities, not raw waterfall attempts)."],
+    ["unfilledRate","Unfilled %","Opportunities where every ad tag failed to return a playable ad."],
+    ["errorRate","Error %","IMA ad errors ÷ ad requests. See Ad errors below for the breakdown by cause."],
+    ["completeRate","Completion","Completes ÷ impressions."]]}];
+const MONEY=new Set(["avgCpmRaw","avgCpmBiased","hbRevenue","hbEcpm","hbRpm"]);
+const PCT=new Set(["viewRate","fillRate","winRate","completeRate","noBidRate","unfilledRate","errorRate","hbImpShare"]);
 const money=v=>v==null?"—":"$"+Number(v).toFixed(2),pct=v=>v==null?"—":(v*100).toFixed(1)+"%";
 const fmtM=(k,v)=>MONEY.has(k)?money(v):PCT.has(k)?pct(v):(v??"—");
+// Per-viewer convenience only (never shared state): remembered timezone and column view.
+const pref={get(k,d){try{return localStorage.getItem("cp_an_"+k)||d;}catch(_){return d;}},set(k,v){try{localStorage.setItem("cp_an_"+k,v);}catch(_){}}};
+const COL_VIEWS=[["all","All"],["hb","Header bidding"],["gam","Ad server (GAM)"]];
+const colViewBtns=cur=>`<div style="display:flex;gap:4px">${COL_VIEWS.map(([v,l])=>`<button class="ghost small colv${cur===v?" on":""}" data-v="${v}" style="margin:0">${l}</button>`).join("")}</div>`;
+// KPI tiles in the same three groups as the report columns.
+function kpiGroups(s){const basis=s.fillRateBasis==="ad_request"?`of ${s.adOpportunities} opportunities`:`of ${s.requests} bid reqs (legacy)`;
+  const nc=tip("The player cannot see what GAM earned: IMA exposes no price, and AdX / direct / house revenue is settled inside GAM. This needs the GAM reporting integration (backlog #1). Use GAM's own report until then.");
+  const groups=[["Page","g-page",[["Player loads",s.loads,""],["View %",pct(s.viewRate),s.viewRate==null?"not measured (no data-lazy)":`${s.views} viewable`],["Ads / load",s.adsPerLoad??"—","refresh multiplier"]]],
+    ["Header bidding (Prebid)","g-hb",[["Bid requests",s.requests,s.prebidUnavailable?`${s.prebidUnavailable} Prebid failed to load`:"Prebid auctions"],
+      ["Win rate",pct(s.winRate),`${s.wins} wins`],["No-bid rate",pct(s.noBidRate),`${s.noBid??0} no usable bid`],
+      ["HB impressions",s.hbImpressions,`${pct(s.hbImpShare)} of impressions`],
+      ["Avg bid",money(s.avgCpmRaw),s.avgCpmBiased!=null?`${money(s.avgCpmBiased)} sent to GAM${s.biasUpliftPct!=null?` (+${s.biasUpliftPct}%)`:""}`:"raw winning bid"],
+      ["HB revenue",money(s.hbRevenue),"bid-side estimate"],["HB eCPM",money(s.hbEcpm),"per HB impression"],["HB RPM",money(s.hbRpm),"per 1000 loads"]]],
+    ["Ad server (GAM)","g-gam",[["Ad requests",s.adRequests,s.waterfallDepth>1?`${s.waterfallDepth} tags / opportunity`:"VAST calls"],
+      ["Impressions",s.impressions,"all demand"],["GAM fill",pct(s.fillRate),basis],["Unfilled",pct(s.unfilledRate),`${s.unfilled??0} opportunities`],
+      ["Error rate",pct(s.errorRate),`${s.errors} errors`],["Completion",pct(s.completeRate),`${s.completes} completes`],
+      [`GAM revenue${nc}`,"—","not connected",1],[`GAM eCPM${nc}`,"—","not connected",1]]]];
+  return groups.map(([t,c,items])=>`<div class="kgrp ${c}"><div class="kgl">${t}</div><div class="kpis">${items.map(([l,v,sub,off])=>`<div class="kpi${off?" nc":""}"><div class="l">${l}</div><div class="v">${v??"—"}</div><div class="s">${sub||""}</div></div>`).join("")}</div></div>`).join("");}
+// Page / header-bidding / ad-server funnels — three scales, never stacked into one.
+function funnelHtml(s){const fbar=arr=>{const mx=Math.max(1,...arr.map(x=>x[1]||0));return arr.map(([l,v,note])=>`<div><div class="flabel"><span>${l}</span><span>${note||v}</span></div><div class="bar"><i style="width:${((v||0)/mx*100).toFixed(1)}%"></i></div></div>`).join("");};
+  return `<p class="muted" style="margin:0 0 6px">Per page load</p>${fbar([["Load",s.loads],["Viewable",s.views,s.viewRate==null?"not measured":null]])}
+    <p class="muted" style="margin:14px 0 6px">Header bidding (Prebid) ${tip("Counted per ad opportunity, not per page load — with refresh on these can exceed the load count.")}</p><div class="hbbars">${fbar([["Bid request",s.requests],["Win",s.wins],["HB impression",s.hbImpressions]])}</div>
+    <p class="muted" style="margin:14px 0 6px">Ad server (GAM)</p>${fbar([["Ad opportunity",s.adOpportunities],["Impression",s.impressions],["Complete",s.completes]])}`;}
+// Why ads didn't fill: IMA errors grouped by cause, with a per-day pivot.
+const SIDE_L={gam:["GAM","warn"],network:["Network","" ],player:["Player / creative","bad"],unknown:["Unknown",""]};
+async function errorsCard(el,q){const e=await api("/v1/admin/analytics/errors?by_day=true"+q);
+  if(!e.total){el.innerHTML=`<div class="empty">No ad errors in this range.</div>`;return;}
+  const present=e.catalog.filter(c=>e.types.some(t=>t.type===c.type));
+  const codes=type=>e.codes.filter(c=>c.type===type).slice(0,3).map(c=>`<code>${c.code??"—"}</code>`).join(" ");
+  el.innerHTML=`<p class="muted" style="margin:0 0 8px">${e.total} errors on ${e.adRequests} ad requests (${pct(e.adRequests?e.total/e.adRequests:null)}). <b>GAM</b> = the ad server answered with nothing usable; <b>Network</b> = the request never completed; <b>Player / creative</b> = an ad came back and failed to play.</p>
+    <div class="tblwrap"><table><thead><tr><th>Cause</th><th>Side</th><th>Errors</th><th>% of ad reqs</th><th>Top IMA codes</th></tr></thead><tbody>
+    ${e.types.map(t=>`<tr><td><b>${esc(t.label)}</b></td><td><span class="pill ${SIDE_L[t.side][1]}">${SIDE_L[t.side][0]}</span></td><td>${t.count}</td><td>${pct(t.share)}</td><td>${codes(t.type)}</td></tr>`).join("")}</tbody></table></div>
+    <p class="muted" style="margin:14px 0 6px">By day</p>
+    <div class="tblwrap"><table class="rep"><thead><tr><th>Day</th>${present.map(c=>`<th>${esc(c.label)}</th>`).join("")}<th>Total</th></tr></thead><tbody>
+    ${e.days.map(d=>`<tr><td>${d.day}</td>${present.map(c=>`<td>${d[c.type]||0}</td>`).join("")}<td><b>${d.total}</b></td></tr>`).join("")}</tbody></table></div>`;}
+function biddersHtml(bd){return bd.length?`<div class="tblwrap"><table><thead><tr><th>Bidder</th><th>Bids</th><th>No-bid</th><th>Timeout</th><th>Error</th><th>Avg CPM</th><th>Latency</th><th>Wins</th></tr></thead><tbody>`+
+  bd.map(r=>`<tr><td><b>${esc(r.bidder)}</b></td><td>${r.bid}</td><td>${r['no-bid']}</td><td>${r.timeout}</td><td>${r.error}</td><td>${money(r.avgCpm)}</td><td>${r.avgLatencyMs!=null?r.avgLatencyMs+' ms':'—'}</td><td>${r.wins}</td></tr>`).join("")+`</tbody></table></div>`
+  :'<p class="muted">No bid responses in this range — check that the SSPs are enabled for this publisher and that the domain is approved with them.</p>';}
 const ymd=(d,tz)=>new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
 const shiftDay=(s,n)=>{const d=new Date(s+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
 // Calendar ranges resolved in the report timezone, so "Yesterday" means the
@@ -608,18 +654,24 @@ async function reportTable(el,{q,rs,onSort,onDrill,empty}){
   const dims=rs.dims,sq=rs.sort?`&sort=${rs.sort}&order=${rs.order}`:"";
   const r=await api(`/v1/admin/analytics/report?dimensions=${dims.join(",")}${sq}${q}`);
   if(!r.rows.length){el.innerHTML=`<div class="empty">${empty||"No data for this selection."}</div>`;return r;}
+  // Column view: page context always, plus the chosen side (or both).
+  const groups=RGROUPS.filter(g=>g.key==="page"||(rs.cols||"all")==="all"||g.key===rs.cols);
+  const cols=groups.flatMap(g=>g.cols.map((c,i)=>[...c,g.cls,i===0]));
   const arrow=k=>r.sort===k?(r.order==="asc"?" ▲":" ▼"):"";
-  const th=(k,l,t)=>`<th class="sort${r.sort===k?" on":""}" data-sort="${k}"${t?` title="${esc(t)}"`:""}>${l}${arrow(k)}</th>`;
+  const th=(k,l,t,cls="")=>`<th class="sort${r.sort===k?" on":""} ${cls}" data-sort="${k}"${t?` title="${esc(t)}"`:""}>${l}${arrow(k)}</th>`;
+  const gcls=(c,first)=>`${c}${first?" gstart":""}`;
   const drillable=d=>onDrill&&["publisher","site","ad_unit"].includes(d);
   let prev=null;
   const body=r.rows.map(row=>{const lead=row[dims[0]];const rep=dims.length>1&&lead===prev&&r.sort===dims[0];prev=lead;
     return `<tr>${dims.map((d,i)=>{const v=row[d]??"—";const cell=drillable(d)?`<a href="#" class="drill" data-dim="${d}" data-id="${esc(row[d+"_id"])}" title="Drill into this ${esc(DIM_L[d].toLowerCase())}">${esc(v)}</a>`:esc(v);
       return `<td class="nowrap"${i===0&&rep?' style="color:var(--muted)"':""}>${i===0&&!TIME_DIMS.includes(d)?`<b>${cell}</b>`:cell}</td>`;}).join("")}
-      ${RCOLS.map(([k])=>`<td>${fmtM(k,row[k])}</td>`).join("")}</tr>`;}).join("");
+      ${cols.map(([k,,,c,f])=>`<td class="${gcls(c,f)}">${fmtM(k,row[k])}</td>`).join("")}</tr>`;}).join("");
   const t=r.totals||{};
-  el.innerHTML=`<div class="tblwrap"><table class="rep"><thead><tr>${dims.map(d=>th(d,DIM_L[d])).join("")}${RCOLS.map(([k,l,tt])=>th(k,l,tt)).join("")}</tr></thead>
-    <tbody>${body}</tbody><tfoot><tr><td colspan="${dims.length}"><b>Total</b></td>${RCOLS.map(([k])=>`<td><b>${fmtM(k,t[k])}</b></td>`).join("")}</tr></tfoot></table></div>
-    <p class="muted" style="margin:8px 0 0">${r.truncated?`Showing ${r.rows.length} of ${r.total} rows — export CSV for all. `:`${r.total} row${r.total===1?"":"s"}. `}Days in ${esc(r.tz)}. Click a column to sort${onDrill?", a name to drill in":""}.</p>`;
+  el.innerHTML=`<div class="tblwrap"><table class="rep"><thead>
+    <tr class="band"><th colspan="${dims.length}"></th>${groups.map(g=>`<th colspan="${g.cols.length}" class="${g.cls} gstart">${g.label}</th>`).join("")}</tr>
+    <tr>${dims.map(d=>th(d,DIM_L[d])).join("")}${cols.map(([k,l,tt,c,f])=>th(k,l,tt,gcls(c,f))).join("")}</tr></thead>
+    <tbody>${body}</tbody><tfoot><tr><td colspan="${dims.length}"><b>Total</b></td>${cols.map(([k,,,c,f])=>`<td class="${gcls(c,f)}"><b>${fmtM(k,t[k])}</b></td>`).join("")}</tr></tfoot></table></div>
+    <p class="muted" style="margin:8px 0 0">${r.truncated?`Showing ${r.rows.length} of ${r.total} rows — export CSV for all. `:`${r.total} row${r.total===1?"":"s"}. `}Days in ${esc(r.tz)}. Click a column to sort${onDrill?", a name to drill in":""}. GAM revenue &amp; eCPM are not available from the player — use GAM's report.</p>`;
   el.querySelectorAll("th[data-sort]").forEach(h=>h.onclick=()=>{const k=h.dataset.sort;
     onSort(k,r.sort===k?(r.order==="asc"?"desc":"asc"):(dims.includes(k)&&!TIME_DIMS.includes(k)?"asc":"desc"));});
   el.querySelectorAll("a.drill").forEach(a=>a.onclick=e=>{e.preventDefault();onDrill(a.dataset.dim,a.dataset.id);});
@@ -628,10 +680,10 @@ async function reportTable(el,{q,rs,onSort,onDrill,empty}){
 // ---- top-level Analytics (account-wide, dimensional) ----
 const LOCAL_TZ=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
 // Kept on S so filters survive navigating away and back.
-S.an=S.an||{range:"7",dfrom:"",dto:"",tz:"UTC",pub:"",site:"",au:"",plc:"",fmt:"",ptype:"",country:"",device:"",d1:"publisher",d2:"",sort:null,order:null};
+S.an=S.an||{range:"7",dfrom:"",dto:"",tz:pref.get("tz","UTC"),pub:"",site:"",au:"",plc:"",fmt:"",ptype:"",country:"",device:"",d1:"publisher",d2:"",sort:null,order:null,cols:pref.get("cols","all")};
 async function renderAnalyticsSection(m){const st=S.an;
   const opts=await api("/v1/admin/analytics/filters");
-  const tzs=[...new Set(["UTC",LOCAL_TZ,"Europe/Prague","Asia/Kolkata"])];
+  const tzs=[...new Set(["UTC",LOCAL_TZ,"Europe/Prague","Asia/Kolkata",st.tz])];
   const dimOpts=(sel,none)=>(none?`<option value="">— none —</option>`:"")+opts.dimensions.map(d=>`<option value="${d}"${sel===d?" selected":""}>${DIM_L[d]||d}</option>`).join("");
   const sel=(id,label,items,cur,all="All")=>`<div style="flex:1 1 150px;min-width:130px"><label>${label}</label><select id="${id}"><option value="">${all}</option>${items.map(o=>`<option value="${esc(o.id)}"${o.id===cur?" selected":""}>${esc(o.name)}${o.deleted?" (deleted)":""}</option>`).join("")}</select></div>`;
   const simple=a=>a.map(v=>({id:v,name:v}));
@@ -656,35 +708,30 @@ async function renderAnalyticsSection(m){const st=S.an;
         ${sel("fFmt","Format",simple(opts.formats),st.fmt)}${sel("fPt","Player type",simple(opts.player_types),st.ptype)}
         ${sel("fCc","Country",simple(opts.countries),st.country)}${sel("fDev","Device",simple(opts.devices),st.device)}
         <div style="flex:0 0 auto"><button class="ghost small" id="fClr" style="margin:0"${active?"":" disabled"}>Clear filters</button></div></div></details>
-    <div class="kpis" id="anKpis"></div></div>
+    <div id="anKpis"></div></div>
     <div class="grid2"><div class="card"><h2>Funnel</h2><div class="funnel" id="anFunnel"></div></div>
-    <div class="card"><h2>Wins over time (daily)</h2><div class="spark" id="anSpark"></div><p class="muted" id="anSparkLbl"></p></div></div>
+    <div class="card"><h2>Header-bidding wins over time (daily)</h2><div class="spark hbbars" id="anSpark"></div><p class="muted" id="anSparkLbl"></p></div></div>
     <div class="card"><div class="hdr"><h2>Report</h2>
       <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
         <div><label>Rows by</label><select id="anD1">${dimOpts(st.d1)}</select></div>
         <div><label>then by</label><select id="anD2">${dimOpts(st.d2,true)}</select></div>
         <div style="display:flex;gap:4px">${[["Day-wise",st.d1==="day"&&!st.d2,"day",""],["Publisher × day",st.d1==="publisher"&&st.d2==="day","publisher","day"],["Site × day",st.d1==="site"&&st.d2==="day","site","day"]].map(([l,on,a,b])=>`<button class="ghost small preset${on?" on":""}" data-a="${a}" data-b="${b}" style="margin:0">${l}</button>`).join("")}</div>
         <button class="ghost small" id="anCsv" style="margin:0">Export CSV</button></div></div>
-      <div id="anBreak"></div></div>`;
+      <div class="hdr" style="justify-content:flex-start;gap:10px"><span class="muted">Columns</span>${colViewBtns(st.cols)}</div>
+      <div id="anBreak"></div></div>
+    <div class="card"><h2>Ad errors — why ads didn't fill ${tip("IMA ad errors grouped by cause. A spike in <b>No ad returned</b> means GAM had nothing to serve; a spike in <b>Creative failed to play</b> points at the player or the creative.")}</h2><div id="anErr"></div></div>
+    <div class="card"><h2>Header-bidding partners</h2><div id="anBid"></div></div>`;
   const rerender=patch=>{Object.assign(st,patch);renderAnalyticsSection(m).catch(e=>toast(e.message,"err"));};
   const load=async()=>{const q=scopeQuery(st),qs="?"+q.slice(1);
     const [s,ts]=await Promise.all([api("/v1/admin/analytics/summary"+qs),api("/v1/admin/analytics/timeseries?bucket=day"+q)]);
-    $("#anKpis").innerHTML=[["Player loads",s.loads],["Bid requests",s.requests],["Ad requests",s.adRequests],["Win rate",pct(s.winRate)],["Fill rate",pct(s.fillRate)],["Ads / load",s.adsPerLoad],
-      ["eCPM raw",money(s.avgCpmRaw)],["eCPM biased",money(s.avgCpmBiased)],["Revenue (est.)",money(s.revenue)],["eCPM (derived)",money(s.ecpm)],["RPM",money(s.rpm)]]
-      .map(([l,v])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v??"—"}</div></div>`).join("");
-    // Split per-load from per-opportunity steps — see the placement Analytics tab.
-    const pageSteps=[["Load",s.loads],["Viewable",s.views]];
-    // "Ad opportunity" (distinct auction_id), not raw ad_request attempts — a
-    // waterfall fires several attempts per opportunity, which would otherwise
-    // make this step overshoot the win count above it.
-    const oppSteps=[["Bid request",s.requests],["Win",s.wins],["Ad opportunity",s.adOpportunities],["Impression",s.impressions],["Complete",s.completes]];
-    const pmax=Math.max(1,...pageSteps.map(x=>x[1])),omax=Math.max(1,...oppSteps.map(x=>x[1]));
-    const fbar=(arr,mx)=>arr.map(([l,v])=>`<div><div class="flabel"><span>${l}</span><span>${v}</span></div><div class="bar"><i style="width:${((v||0)/mx*100).toFixed(1)}%"></i></div></div>`).join("");
-    $("#anFunnel").innerHTML=`<p class="muted" style="margin:0 0 6px">Per page load</p>${fbar(pageSteps,pmax)}<p class="muted" style="margin:14px 0 6px">Per ad opportunity</p>${fbar(oppSteps,omax)}`;
+    $("#anKpis").innerHTML=kpiGroups(s);
+    $("#anFunnel").innerHTML=funnelHtml(s);
+    errorsCard($("#anErr"),q).catch(e=>toast(e.message,"err"));
+    api("/v1/admin/analytics/bidders"+qs).then(bd=>{$("#anBid").innerHTML=biddersHtml(bd);}).catch(e=>toast(e.message,"err"));
     const wins={};ts.filter(r=>r.event==="auction_win").forEach(r=>wins[r.ts.slice(0,10)]=r.count);const dys=Object.keys(wins).sort();const smax=Math.max(1,...dys.map(x=>wins[x]));
     $("#anSpark").innerHTML=dys.map(x=>`<i style="height:${(wins[x]/smax*100).toFixed(0)}%" title="${x}: ${wins[x]}"></i>`).join("")||'<span class="muted">no data</span>';
     $("#anSparkLbl").textContent=dys.length?`${dys[0]} → ${dys[dys.length-1]}`:"";
-    await reportTable($("#anBreak"),{q,rs:{dims:[st.d1,st.d2].filter(Boolean),sort:st.sort,order:st.order},
+    await reportTable($("#anBreak"),{q,rs:{dims:[st.d1,st.d2].filter(Boolean),sort:st.sort,order:st.order,cols:st.cols},
       onSort:(sort,order)=>{st.sort=sort;st.order=order;load().catch(e=>toast(e.message,"err"));},
       // Drill: narrow to the clicked entity and break down one level deeper.
       onDrill:(dim,id)=>{const next={publisher:["pub","site"],site:["site","ad_unit"],ad_unit:["au","placement"]}[dim];
@@ -694,7 +741,8 @@ async function renderAnalyticsSection(m){const st=S.an;
   $("#anR").onchange=e=>rerender({range:e.target.value});
   $("#anDf").onchange=e=>{st.dfrom=e.target.value;load().catch(x=>toast(x.message,"err"));};
   $("#anDt").onchange=e=>{st.dto=e.target.value;load().catch(x=>toast(x.message,"err"));};
-  $("#anTz").onchange=e=>{st.tz=e.target.value;load().catch(x=>toast(x.message,"err"));};
+  $("#anTz").onchange=e=>{st.tz=e.target.value;pref.set("tz",st.tz);load().catch(x=>toast(x.message,"err"));};
+  m.querySelectorAll(".colv").forEach(b=>b.onclick=()=>{pref.set("cols",b.dataset.v);rerender({cols:b.dataset.v});});
   // Changing a level clears the levels below it that no longer belong to it.
   $("#fPub").onchange=e=>rerender({pub:e.target.value,site:"",au:"",plc:""});
   $("#fSite").onchange=e=>rerender({site:e.target.value,au:"",plc:""});

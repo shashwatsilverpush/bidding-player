@@ -168,6 +168,17 @@ async def report_csv(
     )
 
 
+@router.get("/errors")
+async def errors(
+    session: AsyncSession = SessionDep,
+    scope: Scope = ScopeDep,
+    by_day: bool = Query(default=False),
+) -> dict[str, Any]:
+    """Ad errors grouped by type (no ad / request failed / playback / bad VAST)
+    and IMA code, with share of ad requests; optionally per day."""
+    return await analytics.errors(session, scope, by_day=by_day)
+
+
 @router.get("/filters")
 async def filters(session: AsyncSession = SessionDep) -> dict[str, Any]:
     """Options for the report filter bar (tenant chain, formats, countries, …)."""

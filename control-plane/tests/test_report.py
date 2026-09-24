@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import pytest
+from app.services.seed import BOOTSTRAP_ACCOUNT_ID
 from httpx import AsyncClient
 from tests.helpers import build_chain
 
@@ -104,17 +105,90 @@ async def test_sorting_and_limit(client: AsyncClient, auth_headers: dict[str, st
     assert len(capped["rows"]) == 2 and capped["truncated"] and capped["total"] > 2
 
 
-async def test_derived_ecpm_and_revenue(client: AsyncClient, auth_headers: dict[str, str]) -> None:
+async def test_hb_money_is_separate_from_ad_server(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
     await _seeded(client, auth_headers, 150)
     t = (await client.get(f"{R}?dimensions=day", headers=auth_headers)).json()["totals"]
-    assert t["revenue"] > 0
-    assert t["ecpm"] == pytest.approx(t["revenue"] / t["impressions"] * 1000, abs=1e-3)
-    assert t["rpm"] == pytest.approx(t["revenue"] / t["loads"] * 1000, abs=1e-3)
-    # Revenue counts only wins that rendered and uses RAW cpm, so derived eCPM
-    # can never exceed the average winning bid.
-    assert t["ecpm"] <= t["avgCpmRaw"]
+    assert t["hbRevenue"] > 0
+    # HB impressions are the subset of impressions whose opportunity HB won.
+    assert 0 < t["hbImpressions"] <= t["impressions"]
+    assert t["hbImpShare"] == pytest.approx(t["hbImpressions"] / t["impressions"], abs=1e-3)
+    assert t["hbEcpm"] == pytest.approx(t["hbRevenue"] / t["hbImpressions"] * 1000, abs=1e-3)
+    assert t["hbRpm"] == pytest.approx(t["hbRevenue"] / t["loads"] * 1000, abs=1e-3)
+    # No GAM money is invented: the player cannot observe it.
+    assert not {"revenue", "ecpm", "rpm", "gamRevenue", "gamEcpm"} & set(t)
     s = (await client.get("/v1/admin/analytics/summary", headers=auth_headers)).json()
-    assert s["ecpm"] == t["ecpm"] and s["revenue"] == t["revenue"]
+    assert s["hbEcpm"] == t["hbEcpm"] and s["hbRevenue"] == t["hbRevenue"]
+
+
+async def test_no_demand_split_into_no_bid_and_unfilled(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """One opportunity can emit BOTH a no-bid and an unfilled no_demand. The raw
+    count therefore exceeds opportunities; the split rates never exceed 1."""
+    await _seeded(client, auth_headers, 200)
+    t = (await client.get(f"{R}?dimensions=day", headers=auth_headers)).json()["totals"]
+    assert t["noBid"] + t["unfilled"] + t["prebidUnavailable"] == t["noDemand"]
+    assert t["noBid"] == t["requests"] - t["wins"]
+    assert t["unfilled"] + t["impressions"] <= t["adOpportunities"]
+    assert 0 < t["noBidRate"] < 1 and 0 < t["unfilledRate"] < 1
+    assert 0 < t["errorRate"] < 1
+
+
+async def test_view_rate_is_unmeasured_without_view_events(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    ids = await build_chain(client, auth_headers)
+    r = await client.post(
+        "/e",
+        json={
+            "v": 1, "event": "player_load", "ts": 1710000000000, "eventId": "evt-view-1",
+            "account": BOOTSTRAP_ACCOUNT_ID, "placementId": ids["placement_id"],
+            "sessionId": "s-1", "props": {"placement": "instream"},
+        },
+    )  # fmt: skip
+    assert r.status_code == 204
+    rep = (
+        await client.get(f"{R}?dimensions=day&placement_id={ids['placement_id']}",
+                         headers=auth_headers)
+    ).json()  # fmt: skip
+    assert rep["totals"]["loads"] == 1
+    assert rep["totals"]["viewRate"] is None
+
+
+async def test_errors_by_type_and_day(client: AsyncClient, auth_headers: dict[str, str]) -> None:
+    ids = await _seeded(client, auth_headers, 200)
+    e = (
+        await client.get(
+            f"/v1/admin/analytics/errors?by_day=true&placement_id={ids['placement_id']}",
+            headers=auth_headers,
+        )
+    ).json()
+    kinds = {t["type"]: t for t in e["types"]}
+    # Seeded errors are random draws; the rare types may not appear in a small
+    # sample (the classifier itself is covered by test_error_classifier).
+    assert "no_ad" in kinds and kinds["no_ad"]["side"] == "gam"
+    assert set(kinds) <= {"no_ad", "request_failed", "playback", "bad_vast", "other"}
+    assert kinds["no_ad"]["count"] > 0
+    assert e["total"] == sum(t["count"] for t in e["types"])
+    assert 1009 in {c["code"] for c in e["codes"] if c["type"] == "no_ad"}
+    assert sum(d["total"] for d in e["days"]) == e["total"]
+    rep = (
+        await client.get(f"{R}?dimensions=day&placement_id={ids['placement_id']}",
+                         headers=auth_headers)
+    ).json()  # fmt: skip
+    assert e["total"] == rep["totals"]["errors"]
+
+
+def test_error_classifier() -> None:
+    from app.services.analytics import classify_error
+
+    assert classify_error(1009, "ima_loader")[0] == "no_ad"
+    assert classify_error(402, "ima")[2] == "player"
+    assert classify_error(None, "ima_loader")[0] == "request_failed"
+    assert classify_error(None, "ima")[0] == "other"
+    assert classify_error(9999, "ima")[0] == "other"
 
 
 async def test_date_range_in_timezone(client: AsyncClient, auth_headers: dict[str, str]) -> None:
@@ -134,7 +208,9 @@ async def test_csv_export(client: AsyncClient, auth_headers: dict[str, str]) -> 
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
     header = r.text.splitlines()[0].split(",")
-    assert header[:3] == ["site", "day", "site_id"] and "ecpm" in header
+    assert header[:3] == ["site", "day", "site_id"]
+    assert {"hbEcpm", "fillRate", "unfilledRate", "noBidRate"} <= set(header)
+    assert "noDemand" not in header  # ambiguous raw count stays out of exports
 
 
 async def test_report_validation_and_filters_endpoint(
