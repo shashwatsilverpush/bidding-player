@@ -3,41 +3,130 @@
 All bid-side (Prebid) metrics. Note: eCPM here is the *bid* CPM the auction
 produced, not GAM-settled revenue — that reconciliation is Phase 2. `cpm_raw` vs
 `cpm_biased` are reported separately so bias uplift never inflates reported yield.
+
+Every read takes a :class:`Scope` — the same filter set (tenant chain, format,
+country, device, time window, timezone) — so the KPI tiles, funnel, charts and
+report table on one screen always describe exactly the same slice of traffic.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import Float, Integer, func, select
+from sqlalchemy import Float, Integer, case, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.models import AdUnit, Event, Placement, Publisher, Site
 
 
-def _filters(
-    placement_id: str | None, ts_from: datetime | None, ts_to: datetime | None
-) -> list[ColumnElement[bool]]:
+@dataclass(frozen=True)
+class Scope:
+    """Filters shared by every analytics read. ``tz`` decides where a "day"
+    starts, both for day buckets and for ``date_from``/``date_to``."""
+
+    publisher_id: str | None = None
+    site_id: str | None = None
+    ad_unit_id: str | None = None
+    placement_id: str | None = None
+    format: str | None = None
+    player_type: str | None = None
+    country: str | None = None
+    device: str | None = None
+    ts_from: datetime | None = None
+    ts_to: datetime | None = None
+    tz: str = "UTC"
+
+    @property
+    def needs_chain(self) -> bool:
+        return any((self.publisher_id, self.site_id, self.ad_unit_id, self.format))
+
+
+def window(
+    ts_from: datetime | None,
+    ts_to: datetime | None,
+    date_from: date | None,
+    date_to: date | None,
+    tz: str,
+) -> tuple[datetime | None, datetime | None]:
+    """Resolve the time window. Calendar dates are inclusive and interpreted in
+    ``tz`` (so "2026-09-24" in Europe/Prague is that day in Prague, not in UTC);
+    they win over raw timestamps when both are given."""
+    zone = ZoneInfo(tz)
+    if date_from is not None:
+        ts_from = datetime.combine(date_from, time.min, zone)
+    if date_to is not None:
+        # exclusive upper bound handled by <= on the last microsecond of the day
+        ts_to = datetime.combine(date_to + timedelta(days=1), time.min, zone) - timedelta(
+            microseconds=1
+        )
+    return ts_from, ts_to
+
+
+# Coarse device class from the User-Agent. Order matters: tablets and TVs also
+# advertise "Android", and iPads identify as desktop Safari only in iPadOS 13+
+# (those land in desktop — nothing server-side can tell them apart).
+device_class: ColumnElement[str] = case(
+    (Event.ua.is_(None), literal("unknown")),
+    (
+        Event.ua.op("~*")("smart-?tv|tizen|webos|roku|appletv|crkey|bravia|hbbtv|aft[a-z]"),
+        literal("ctv"),
+    ),
+    (Event.ua.op("~*")("ipad|tablet|kindle|silk|(android(?!.*mobile))"), literal("tablet")),
+    (Event.ua.op("~*")("mobi|iphone|ipod|android|windows phone"), literal("mobile")),
+    else_=literal("desktop"),
+)
+
+# instream / outstream, from the placement's own config.
+player_type_expr: ColumnElement[str] = func.coalesce(
+    Placement.config_json["placement"].astext, literal("instream")
+)
+
+
+def _filters(scope: Scope) -> list[ColumnElement[bool]]:
     conds: list[ColumnElement[bool]] = []
-    if placement_id:
-        conds.append(Event.placement_id == placement_id)
-    if ts_from is not None:
-        conds.append(Event.ts_server >= ts_from)
-    if ts_to is not None:
-        conds.append(Event.ts_server <= ts_to)
+    if scope.placement_id:
+        conds.append(Event.placement_id == scope.placement_id)
+    if scope.ts_from is not None:
+        conds.append(Event.ts_server >= scope.ts_from)
+    if scope.ts_to is not None:
+        conds.append(Event.ts_server <= scope.ts_to)
+    if scope.country:
+        if scope.country == "unknown":
+            conds.append(Event.ip_country.is_(None))
+        else:
+            conds.append(Event.ip_country == scope.country.upper())
+    if scope.device:
+        conds.append(device_class == scope.device)
+    if scope.needs_chain or scope.player_type:
+        # Tenant-chain filters resolve to a set of placement ids, so reads that
+        # never join the chain (summary, bidders, …) can still honour them.
+        sub = select(Placement.id).join(AdUnit, Placement.ad_unit_id == AdUnit.id)
+        sub = sub.join(Site, AdUnit.site_id == Site.id)
+        if scope.publisher_id:
+            sub = sub.where(Site.publisher_id == scope.publisher_id)
+        if scope.site_id:
+            sub = sub.where(Site.id == scope.site_id)
+        if scope.ad_unit_id:
+            sub = sub.where(AdUnit.id == scope.ad_unit_id)
+        if scope.format:
+            sub = sub.where(AdUnit.format == scope.format)
+        if scope.player_type:
+            sub = sub.where(player_type_expr == scope.player_type)
+        # correlate(None): the report query joins these same tables, and
+        # auto-correlation would otherwise bind the subquery to the outer row.
+        conds.append(Event.placement_id.in_(sub.correlate(None)))
     return conds
 
 
 async def summary(
     session: AsyncSession,
-    *,
-    placement_id: str | None,
-    ts_from: datetime | None,
-    ts_to: datetime | None,
+    scope: Scope,
 ) -> dict[str, Any]:
-    conds = _filters(placement_id, ts_from, ts_to)
+    conds = _filters(scope)
 
     rows = (
         await session.execute(
@@ -115,6 +204,7 @@ async def summary(
         ad_opportunities = 0
         fill_rate, fill_basis = rate(impressions, requests), "bid_request(legacy)"
 
+    money = await totals(session, scope)
     return {
         "counts": counts,
         "loads": loads,
@@ -142,17 +232,15 @@ async def summary(
         "avgCpmRaw": round(avg_raw, 4) if avg_raw is not None else None,
         "avgCpmBiased": round(avg_biased, 4) if avg_biased is not None else None,
         "biasUpliftPct": uplift,
+        **{k: money.get(k) for k in ("revenue", "ecpm", "rpm")},
     }
 
 
 async def by_bidder(
     session: AsyncSession,
-    *,
-    placement_id: str | None,
-    ts_from: datetime | None,
-    ts_to: datetime | None,
+    scope: Scope,
 ) -> list[dict[str, Any]]:
-    conds = _filters(placement_id, ts_from, ts_to)
+    conds = _filters(scope)
     bidder = Event.props["bidder"].astext
     status = Event.props["status"].astext
     cpm = Event.props["cpm"].astext.cast(Float)
@@ -225,10 +313,7 @@ async def by_bidder(
 
 async def by_tag_position(
     session: AsyncSession,
-    *,
-    placement_id: str | None,
-    ts_from: datetime | None,
-    ts_to: datetime | None,
+    scope: Scope,
 ) -> list[dict[str, Any]]:
     """Waterfall performance per position: how often each tag was reached, and
     how often it was the one that filled.
@@ -238,7 +323,7 @@ async def by_tag_position(
     joining on auction_id and taking the DEEPEST position reached for that
     opportunity, since the engine stops the chain as soon as a tag fills.
     """
-    conds = _filters(placement_id, ts_from, ts_to)
+    conds = _filters(scope)
     idx = Event.props["tagIndex"].astext.cast(Integer)
     label = Event.props["tagLabel"].astext
 
@@ -289,16 +374,13 @@ async def by_tag_position(
 
 async def timeseries(
     session: AsyncSession,
-    *,
-    placement_id: str | None,
-    ts_from: datetime | None,
-    ts_to: datetime | None,
+    scope: Scope,
     bucket: str = "day",
 ) -> list[dict[str, Any]]:
     if bucket not in ("hour", "day"):
         bucket = "day"
-    conds = _filters(placement_id, ts_from, ts_to)
-    trunc = func.date_trunc(bucket, Event.ts_server)
+    conds = _filters(scope)
+    trunc = func.date_trunc(bucket, func.timezone(scope.tz, Event.ts_server))
     rows = (
         await session.execute(
             select(trunc.label("ts"), Event.event_type, func.count())
@@ -315,12 +397,9 @@ async def timeseries(
 
 async def key_values(
     session: AsyncSession,
-    *,
-    placement_id: str | None,
-    ts_from: datetime | None,
-    ts_to: datetime | None,
+    scope: Scope,
 ) -> dict[str, Any]:
-    conds = _filters(placement_id, ts_from, ts_to)
+    conds = _filters(scope)
     hb_rows = (
         await session.execute(
             select(Event.hb_pb, func.count())
@@ -343,74 +422,314 @@ async def key_values(
     }
 
 
-# Dimension -> the grouping column (joined events -> placement -> ad_unit -> site -> publisher).
-_DIM_COLS = {
-    "publisher": Publisher.name,
-    "site": Site.domain,
-    "ad_unit": AdUnit.gam_ad_unit_path,
-    "placement": Placement.name,
-    "format": AdUnit.format,
+def _money(v: Any, nd: int = 4) -> float | None:
+    return round(float(v), nd) if v is not None else None
+
+
+def _derived(
+    *,
+    loads: int,
+    views: int,
+    requests: int,
+    ad_requests: int,
+    opportunities: int,
+    wins: int,
+    impressions: int,
+    modern_impressions: int,
+    completes: int,
+    errors: int,
+    no_demand: int,
+    avg_raw: Any,
+    avg_biased: Any,
+    revenue: Any,
+) -> dict[str, Any]:
+    """Every metric the report shows, from raw counts. Shared by report rows and
+    the totals row so a total can never be computed differently from its rows."""
+
+    def rate(a: int, b: int) -> float | None:
+        return round(a / b, 4) if b else None
+
+    # Same fill rule as summary(): distinct opportunities on the modern basis,
+    # bid requests for windows holding only pre-2.7.0 rows.
+    if opportunities:
+        fill, basis = rate(modern_impressions, opportunities), "ad_request"
+    else:
+        fill, basis = rate(impressions, requests), "bid_request(legacy)"
+    rev = float(revenue) if revenue is not None else 0.0
+    return {
+        "loads": loads,
+        "views": views,
+        "viewRate": rate(views, loads),
+        "requests": requests,
+        "adRequests": ad_requests,
+        "adOpportunities": opportunities,
+        "wins": wins,
+        "winRate": rate(wins, requests),
+        "impressions": impressions,
+        "fillRate": fill,
+        "fillRateBasis": basis,
+        "completes": completes,
+        "completeRate": rate(completes, impressions),
+        "errors": errors,
+        "noDemand": no_demand,
+        "adsPerLoad": round(impressions / loads, 3) if loads else None,
+        "avgCpmRaw": _money(avg_raw),
+        "avgCpmBiased": _money(avg_biased),
+        # Derived money metrics — raw CPM only, so floor bias never inflates them.
+        #   revenue : sum of winning bid CPMs / 1000 for wins that rendered
+        #   ecpm    : revenue per 1000 impressions (ALL impressions, incl. ones GAM
+        #             filled without a header-bidding win — so it sits below
+        #             avgCpmRaw whenever direct/house demand fills)
+        #   rpm     : revenue per 1000 page loads
+        "revenue": round(rev, 4),
+        "ecpm": round(rev / impressions * 1000, 4) if impressions else None,
+        "rpm": round(rev / loads * 1000, 4) if loads else None,
+    }
+
+
+# Report dimensions -> grouping expression. Time dimensions bucket in scope.tz.
+TIME_DIMS = ("day", "week", "month", "hour")
+CHAIN_DIMS = ("publisher", "site", "ad_unit", "placement", "format", "player_type")
+DIMENSIONS = (
+    *TIME_DIMS,
+    *CHAIN_DIMS,
+    "country",
+    "device",
+    "engine_version",
+    "refresh",
+)
+METRICS = (
+    "loads", "views", "viewRate", "requests", "adRequests", "adOpportunities", "wins",
+    "winRate", "impressions", "fillRate", "completes", "completeRate", "errors",
+    "noDemand", "adsPerLoad", "avgCpmRaw", "avgCpmBiased", "revenue", "ecpm", "rpm",
+)  # fmt: skip
+
+
+def _dim_expr(dim: str, tz: str) -> Any:
+    if dim in TIME_DIMS:
+        return func.date_trunc(dim, func.timezone(tz, Event.ts_server))
+    return {
+        "publisher": Publisher.name,
+        "site": Site.domain,
+        "ad_unit": AdUnit.gam_ad_unit_path,
+        "placement": Placement.name,
+        "format": AdUnit.format,
+        "player_type": player_type_expr,
+        "country": func.coalesce(Event.ip_country, literal("unknown")),
+        "device": device_class,
+        "engine_version": func.coalesce(Event.engine_version, literal("unknown")),
+        "refresh": case(
+            (func.coalesce(Event.refresh_index, 0) == 0, literal("initial")),
+            else_=literal("refresh"),
+        ),
+    }[dim]
+
+
+# Entity dimensions group by id as well as by display name: two publishers (or
+# sites) may share a name, and grouping on the name alone would silently merge
+# their traffic into one row.
+DIM_IDS: dict[str, Any] = {
+    "publisher": Publisher.id,
+    "site": Site.id,
+    "ad_unit": AdUnit.id,
+    "placement": Placement.id,
 }
 
 
-async def breakdown(
+def _dim_value(dim: str, v: Any) -> Any:
+    if dim in TIME_DIMS and isinstance(v, datetime):
+        if dim == "hour":
+            return v.strftime("%Y-%m-%d %H:00")
+        if dim == "month":
+            return v.strftime("%Y-%m")
+        return v.date().isoformat()  # day, and week (= its Monday)
+    return v
+
+
+async def report(
     session: AsyncSession,
+    scope: Scope,
     *,
-    dimension: str,
-    ts_from: datetime | None,
-    ts_to: datetime | None,
-) -> list[dict[str, Any]]:
-    """Per-dimension funnel metrics, joining events up the tenant chain.
-    dimension ∈ publisher | site | ad_unit | placement | format."""
-    dim = _DIM_COLS.get(dimension, Publisher.name)
+    dimensions: list[str],
+    sort: str | None = None,
+    order: str | None = None,
+    limit: int = 1000,
+) -> dict[str, Any]:
+    """Grouped funnel + money metrics by up to three dimensions (e.g. publisher x
+    day). Rows are sorted server-side on any dimension or metric, then capped at
+    ``limit``; ``total`` reports how many groups existed before the cap."""
+    conds = _filters(scope)
+    exprs = [_dim_expr(d, scope.tz).label(f"d{i}") for i, d in enumerate(dimensions)]
+    id_exprs = [DIM_IDS[d].label(f"id{i}") for i, d in enumerate(dimensions) if d in DIM_IDS]
 
     def cnt(event: str) -> ColumnElement[int]:
         return func.count().filter(Event.event_type == event)
 
-    conds: list[ColumnElement[bool]] = []
-    if ts_from is not None:
-        conds.append(Event.ts_server >= ts_from)
-    if ts_to is not None:
-        conds.append(Event.ts_server <= ts_to)
-
-    stmt = (
-        select(
-            dim.label("key"),
-            cnt("player_load").label("loads"),
-            cnt("bid_request").label("requests"),
-            cnt("ad_request").label("ad_requests"),
-            cnt("auction_win").label("wins"),
-            cnt("impression").label("impressions"),
-            func.avg(Event.cpm_raw).label("avg_raw"),
-            func.avg(Event.cpm_biased).label("avg_biased"),
-        )
-        .select_from(Event)
-        .join(Placement, Event.placement_id == Placement.id)
-        .join(AdUnit, Placement.ad_unit_id == AdUnit.id)
-        .join(Site, AdUnit.site_id == Site.id)
-        .join(Publisher, Site.publisher_id == Publisher.id)
-        .where(*conds)
-        .group_by(dim)
-        .order_by(cnt("player_load").desc())
+    # Impressions attributable to an opportunity; revenue only counts wins that
+    # actually rendered. Legacy (pre-2.7.0) rows carry no auction_id, so their
+    # wins cannot be matched to an impression and are counted as-is.
+    rendered = (
+        select(Event.auction_id)
+        .where(*conds, Event.event_type == "impression", Event.auction_id.isnot(None))
+        .correlate(None)
+        .scalar_subquery()
     )
-    rows = (await session.execute(stmt)).all()
-    out: list[dict[str, Any]] = []
-    for key, loads, requests, ad_requests, wins, imps, avg_raw, avg_biased in rows:
-        # Same denominator rule as summary(): fill is per ad request, with a
-        # legacy fallback to bid requests for pre-2.7.0 rows.
-        denom = ad_requests or requests
-        out.append(
-            {
-                "key": key,
-                "loads": loads,
-                "requests": requests,
-                "adRequests": ad_requests,
-                "wins": wins,
-                "impressions": imps,
-                "fillRate": round(imps / denom, 4) if denom else None,
-                "adsPerLoad": round(imps / loads, 3) if loads else None,
-                "avgCpmRaw": round(float(avg_raw), 4) if avg_raw is not None else None,
-                "avgCpmBiased": round(float(avg_biased), 4) if avg_biased is not None else None,
-            }
+    win_rendered = (Event.event_type == "auction_win") & (
+        Event.auction_id.is_(None) | Event.auction_id.in_(rendered)
+    )
+
+    stmt = select(
+        *exprs,
+        *id_exprs,
+        cnt("player_load").label("loads"),
+        cnt("player_view").label("views"),
+        cnt("bid_request").label("requests"),
+        cnt("ad_request").label("ad_requests"),
+        func.count(func.distinct(Event.auction_id))
+        .filter(Event.event_type == "ad_request")
+        .label("opportunities"),
+        cnt("auction_win").label("wins"),
+        cnt("impression").label("impressions"),
+        func.count()
+        .filter(Event.event_type == "impression", Event.auction_id.isnot(None))
+        .label("modern_impressions"),
+        cnt("ad_complete").label("completes"),
+        cnt("ad_error").label("errors"),
+        cnt("no_demand").label("no_demand"),
+        func.avg(Event.cpm_raw).label("avg_raw"),
+        func.avg(Event.cpm_biased).label("avg_biased"),
+        (func.sum(Event.cpm_raw).filter(win_rendered) / 1000).label("revenue"),
+    ).select_from(Event)
+    if any(d in CHAIN_DIMS for d in dimensions):
+        # Inner joins: events whose placement no longer resolves (hard-deleted
+        # chain) drop out of chain breakdowns, exactly as before.
+        stmt = (
+            stmt.join(Placement, Event.placement_id == Placement.id)
+            .join(AdUnit, Placement.ad_unit_id == AdUnit.id)
+            .join(Site, AdUnit.site_id == Site.id)
+            .join(Publisher, Site.publisher_id == Publisher.id)
         )
-    return out
+    stmt = stmt.where(*conds)
+    if exprs:
+        stmt = stmt.group_by(*exprs, *id_exprs)
+    rows = (await session.execute(stmt)).mappings().all()
+
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        rec: dict[str, Any] = {}
+        for i, d in enumerate(dimensions):
+            rec[d] = _dim_value(d, r[f"d{i}"])
+            if d in DIM_IDS:
+                rec[f"{d}_id"] = r[f"id{i}"]
+        rec.update(
+            _derived(
+                loads=r["loads"],
+                views=r["views"],
+                requests=r["requests"],
+                ad_requests=r["ad_requests"],
+                opportunities=r["opportunities"],
+                wins=r["wins"],
+                impressions=r["impressions"],
+                modern_impressions=r["modern_impressions"],
+                completes=r["completes"],
+                errors=r["errors"],
+                no_demand=r["no_demand"],
+                avg_raw=r["avg_raw"],
+                avg_biased=r["avg_biased"],
+                revenue=r["revenue"],
+            )
+        )
+        out.append(rec)
+
+    # Defaults: a time-led report is newest first; a single entity dimension is
+    # biggest first; a multi-dimension report (publisher x day) is grouped by
+    # its leading dimension so each publisher's days sit together.
+    if sort not in (*dimensions, *METRICS):
+        if not dimensions:
+            sort = "loads"
+        elif dimensions[0] in TIME_DIMS or len(dimensions) > 1:
+            sort = dimensions[0]
+        else:
+            sort = "loads"
+    if order not in ("asc", "desc"):
+        order = "asc" if sort in dimensions and sort not in TIME_DIMS else "desc"
+    # Nulls always sort last, whichever direction. Ties fall back to the other
+    # dimensions in order — entities A→Z, time newest first.
+    present = [r for r in out if r.get(sort) is not None]
+    missing = [r for r in out if r.get(sort) is None]
+    for d in reversed([d for d in dimensions if d != sort]):
+        present.sort(key=lambda r: str(r.get(d) or ""), reverse=d in TIME_DIMS)  # noqa: B023
+    present.sort(key=lambda r: r[sort], reverse=order == "desc")
+
+    return {
+        "dimensions": dimensions,
+        "sort": sort,
+        "order": order,
+        "tz": scope.tz,
+        "total": len(out),
+        "truncated": len(out) > limit,
+        "rows": (present + missing)[:limit],
+    }
+
+
+async def totals(session: AsyncSession, scope: Scope) -> dict[str, Any]:
+    """The report's grand-total row: the same aggregate with no grouping."""
+    rep = await report(session, scope, dimensions=[])
+    return rep["rows"][0] if rep["rows"] else {}
+
+
+async def breakdown(
+    session: AsyncSession,
+    scope: Scope,
+    *,
+    dimension: str,
+) -> list[dict[str, Any]]:
+    """Back-compat single-dimension shape: ``key`` + metrics, biggest first."""
+    rep = await report(session, scope, dimensions=[dimension], sort="loads", order="desc")
+    return [{"key": r.pop(dimension), **r} for r in rep["rows"]]
+
+
+async def filter_options(session: AsyncSession) -> dict[str, Any]:
+    """Everything the report's filter bar can offer. Soft-deleted entities are
+    included (their historical traffic is still reportable) and flagged."""
+    pubs = (await session.execute(select(Publisher).order_by(Publisher.name))).scalars().all()
+    sites = (await session.execute(select(Site).order_by(Site.domain))).scalars().all()
+    aus = (await session.execute(select(AdUnit).order_by(AdUnit.gam_ad_unit_path))).scalars().all()
+    plcs = (await session.execute(select(Placement).order_by(Placement.name))).scalars().all()
+    countries = (
+        (
+            await session.execute(
+                select(Event.ip_country)
+                .where(Event.ip_country.isnot(None))
+                .distinct()
+                .order_by(Event.ip_country)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "publishers": [
+            {"id": p.id, "name": p.name, "deleted": p.deleted_at is not None} for p in pubs
+        ],
+        "sites": [
+            {"id": s.id, "name": s.domain, "publisher_id": s.publisher_id,
+             "deleted": s.deleted_at is not None}
+            for s in sites
+        ],
+        "ad_units": [
+            {"id": a.id, "name": a.gam_ad_unit_path, "site_id": a.site_id, "format": a.format,
+             "deleted": a.deleted_at is not None}
+            for a in aus
+        ],
+        "placements": [
+            {"id": p.id, "name": p.name, "ad_unit_id": p.ad_unit_id,
+             "deleted": p.deleted_at is not None}
+            for p in plcs
+        ],
+        "formats": sorted({a.format for a in aus}),
+        "player_types": ["instream", "outstream"],
+        "countries": [*countries, "unknown"],
+        "devices": ["desktop", "mobile", "tablet", "ctv", "unknown"],
+        "dimensions": list(DIMENSIONS),
+    }  # fmt: skip

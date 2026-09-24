@@ -101,12 +101,36 @@ The dashboard generates a correct tag, but a publisher only monetizes once:
 5. **New SSP adapter** → the served Prebid bundle must include it (rebuild required).
 
 ## 13. View analytics
-- **Analytics** (top nav) — account-wide: funnel, daily wins, and a **breakdown by
-  publisher / site / ad unit / placement / format** (loads, requests, wins, impressions,
-  fill %, **eCPM raw vs biased**).
-- Per placement: the placement's **Analytics** tab (that placement only).
-- **Note:** eCPM shown is the **bid** CPM (what the auction produced), not GAM-settled
+- **Analytics** (top nav) — account-wide KPIs, funnel, daily wins and a **Report** table.
+  - **Range** — Today, Yesterday, Last 7 / 30 days, This month, Last month, All time or a
+    custom date range. Dates and day rows follow the chosen **Timezone** — pick the
+    publisher's own (e.g. `Europe/Prague`) when reconciling against their GAM report.
+  - **Filters** — publisher → site → ad unit → placement (each list only offers children of
+    the level above), format, player type (instream/outstream), country, device
+    (desktop / mobile / tablet / CTV, from the User-Agent). KPIs, funnel, chart and report
+    all respect the same filters.
+  - **Report** — *Rows by* + optional *then by* any of: day, week, month, hour, publisher,
+    site, ad unit, placement, format, player type, country, device, engine version,
+    initial vs refresh. Presets: **Day-wise**, **Publisher × day**, **Site × day**. Click a
+    column header to sort; click a publisher/site/ad-unit name to drill one level down.
+    A **Total** row sits at the bottom; **Export CSV** downloads every metric (up to 10k rows).
+- Per placement: the placement's **Analytics** tab (that placement only), including a
+  **Day-wise** table that can be split by device, country, refresh or engine version.
+- **Money metrics** — all bid-side, from the **raw** (un-biased) CPM:
+  - *eCPM raw / biased* — average winning bid, before / after floor bias.
+  - *Revenue (est.)* — sum of winning-bid CPMs ÷ 1000, for wins that actually rendered.
+  - *eCPM (derived)* — revenue ÷ impressions × 1000. Every impression counts, including
+    ones GAM filled without a header-bidding win, so it sits below eCPM raw whenever
+    direct/house demand fills.
+  - *RPM* — revenue per 1000 page loads.
+- **Note:** these are **bid** values (what the auction produced), not GAM-settled
   revenue — real revenue reconciliation is a later phase.
+- **Country** comes from the CDN/edge header in front of the collector (`CF-IPCountry`,
+  `CloudFront-Viewer-Country`, `X-Vercel-IP-Country`, …). With no such proxy every row
+  reads `unknown`.
+- API: `GET /v1/admin/analytics/report?dimensions=publisher,day&tz=…&date_from=…&date_to=…`
+  (+ any filter, `sort`, `order`, `limit`); `/report.csv` for the same as CSV;
+  `/filters` for the filter options. Summary/timeseries/bidders accept the same filters.
 - **Demo data (dev/staging only):** a placement's Analytics tab has a **Generate**
   button to insert synthetic events so the dashboards have data before real traffic.
   Disabled in production (`ALLOW_DEV_ENDPOINTS=false`).

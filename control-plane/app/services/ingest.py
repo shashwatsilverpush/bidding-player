@@ -38,6 +38,7 @@ async def ingest_event(
     *,
     ua: str | None,
     ip: str | None,
+    country: str | None = None,
 ) -> str:
     """Store one event. Returns 'stored' | 'duplicate' | 'dropped_unknown_account'
     | 'dropped_consent'. Never raises for business outcomes."""
@@ -82,7 +83,7 @@ async def ingest_event(
         row["page_url"] = event.pageUrl
         row["tc_string"] = event.consent.tcString if event.consent else None
         row["ua"] = ua
-        row["ip_country"] = lookup_country(ip)
+        row["ip_country"] = country or lookup_country(ip)
 
     # Promote win fields into columns.
     if isinstance(event, AuctionWinEvent):

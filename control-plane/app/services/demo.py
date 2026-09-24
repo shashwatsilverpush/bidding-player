@@ -131,6 +131,16 @@ def _opportunity(
     mk("no_demand", {"phase": "waterfall_exhausted", "fallbackServed": False}, sid, ts)
 
 
+# One UA per device class the report distinguishes (desktop/mobile/tablet/ctv).
+_DEMO_UAS = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
+    "Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 Chrome/128.0 Safari/537.36",
+    "Mozilla/5.0 (SMART-TV; Linux; Tizen 7.0) AppleWebKit/537.36 SamsungBrowser/5.0 TV",
+)
+_DEMO_COUNTRIES = ("CZ", "IN", "US", "DE", "SK")
+
+
 async def seed_events(
     session: AsyncSession,
     placement_id: str,
@@ -187,7 +197,7 @@ async def seed_events(
 
     # Set per opportunity by the loop below; every event inherits the identity of
     # the opportunity it belongs to.
-    cur: dict[str, Any] = {"auction_id": None, "refresh_index": 0}
+    cur: dict[str, Any] = {"auction_id": None, "refresh_index": 0, "ua": None, "country": None}
 
     def mk(event: str, props: dict[str, Any], sid: str, when: datetime, **extra: Any) -> None:
         rows.append(
@@ -205,6 +215,8 @@ async def seed_events(
                 "auction_id": cur["auction_id"],
                 "refresh_index": cur["refresh_index"],
                 "engine_version": "2.7.0",
+                "ua": cur["ua"],
+                "ip_country": cur["country"],
                 "props": props,
                 **extra,
             }
@@ -219,6 +231,8 @@ async def seed_events(
         )
         sid = gen_id("sess", 8)
         cur["auction_id"], cur["refresh_index"] = gen_id("auc", 12), 0
+        cur["ua"] = rng.choices(_DEMO_UAS, weights=(45, 38, 10, 7))[0]
+        cur["country"] = rng.choices(_DEMO_COUNTRIES, weights=(40, 25, 15, 10, 10))[0]
         mk("player_load", {"placement": placement_kind}, sid, ts)
 
         # ~8% of loads never scroll into view, so they never release an auction.

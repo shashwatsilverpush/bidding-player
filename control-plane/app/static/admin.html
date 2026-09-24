@@ -60,6 +60,11 @@
   .kpi .v{font-size:22px;font-weight:700;} .kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;} .kpi .s{font-size:11px;color:var(--muted);margin-top:2px;}
   table{width:100%;border-collapse:collapse;font-size:13px;} th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);overflow-wrap:anywhere;word-break:break-word;} th{color:var(--muted);font-size:11px;text-transform:uppercase;white-space:nowrap;}
   td.nowrap{white-space:nowrap;}
+  th.sort{cursor:pointer;user-select:none;} th.sort:hover,th.sort.on{color:var(--accent);}
+  table.rep td{white-space:nowrap;} table.rep tfoot td{border-top:2px solid var(--line);border-bottom:none;background:var(--panel2);}
+  a.drill{color:inherit;text-decoration:none;border-bottom:1px dashed var(--muted);} a.drill:hover{color:var(--accent);border-color:var(--accent);}
+  button.preset.on{border-color:var(--accent);color:var(--accent);background:var(--teal-soft);}
+  button:disabled{opacity:.45;cursor:default;}
   .tblwrap{overflow-x:auto;}
   .bar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;} .bar>i{display:block;height:100%;background:var(--accent);}
   .funnel .flabel{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;} .funnel>div{margin-bottom:8px;}
@@ -503,12 +508,12 @@ async function paneAnalytics(el){const pid=S.plc.id;
     const [s,ts,bd,kv,tp]=await Promise.all([api(`/v1/admin/analytics/summary?placement_id=${pid}${rp}`),api(`/v1/admin/analytics/timeseries?placement_id=${pid}&bucket=day${rp}`),
       api(`/v1/admin/analytics/bidders?placement_id=${pid}${rp}`),api(`/v1/admin/analytics/key-values?placement_id=${pid}${rp}`),
       api(`/v1/admin/analytics/tag-positions?placement_id=${pid}${rp}`)]);
-    const money=v=>v==null?"—":"$"+Number(v).toFixed(2),pct=v=>v==null?"—":(v*100).toFixed(1)+"%";
     const basis=s.fillRateBasis==="ad_request"?`of ${s.adOpportunities} opportunities`:`of ${s.requests} bid reqs (legacy)`;
     const kpis=[["Player loads",s.loads,s.views!=null?`${s.views} viewable`:""],["Bid requests",s.requests,"Prebid auctions"],
       ["Ad requests",s.adRequests,s.waterfallDepth?`${s.waterfallDepth} tags/opportunity`:"VAST calls to GAM"],
       ["Win rate",pct(s.winRate),`${s.wins} wins`],["Fill rate",pct(s.fillRate),basis],["Ads / load",s.adsPerLoad??"—","refresh multiplier"],
-      ["eCPM raw",money(s.avgCpmRaw),"actual bid"],["eCPM biased",money(s.avgCpmBiased),s.biasUpliftPct!=null?`+${s.biasUpliftPct}% to GAM`:""],["Completes",s.completes,pct(s.completeRate)],["No-demand/errors",s.noDemand+s.errors,""]];
+      ["eCPM raw",money(s.avgCpmRaw),"actual bid"],["eCPM biased",money(s.avgCpmBiased),s.biasUpliftPct!=null?`+${s.biasUpliftPct}% to GAM`:""],
+      ["Revenue (est.)",money(s.revenue),"rendered wins, raw CPM"],["eCPM (derived)",money(s.ecpm),`RPM ${money(s.rpm)}`],["Completes",s.completes,pct(s.completeRate)],["No-demand/errors",s.noDemand+s.errors,""]];
     // Two funnels, deliberately NOT one. Load/Viewable are counted per page load;
     // everything from the bid request down is counted per ad opportunity, and
     // refresh makes one load yield several. Stacking them in a single bar chart
@@ -534,7 +539,16 @@ async function paneAnalytics(el){const pid=S.plc.id;
         <table><thead><tr><th>#</th><th>Tag</th><th>Reached</th><th>Filled</th><th>Fill rate</th></tr></thead><tbody>`+
         tp.map(r=>`<tr><td>${r.position}</td><td><b>${esc(r.label)}</b></td><td>${r.reached}</td><td>${r.filled}</td><td>${pct(r.fillRate)}</td></tr>`).join("")+`</tbody></table>`
         :'<p class="muted">No waterfall data yet — needs traffic from engine 2.7.0+ (older engines send no tagIndex).</p>'}</div>
-      <div class="grid2"><div class="card"><h2>hb_pb buckets → GAM</h2><div class="funnel">${bars(kv.hb_pb)}</div></div><div class="card"><h2>Winning bidder</h2><div class="funnel">${bars(kv.hb_bidder)}</div></div></div>`;};
+      <div class="grid2"><div class="card"><h2>hb_pb buckets → GAM</h2><div class="funnel">${bars(kv.hb_pb)}</div></div><div class="card"><h2>Winning bidder</h2><div class="funnel">${bars(kv.hb_bidder)}</div></div></div>
+      <div class="card"><div class="hdr"><h2>Day-wise</h2><div style="display:flex;gap:8px;align-items:flex-end">
+        <div><label>then by</label><select id="anDw2"><option value="">— none —</option>${["device","country","refresh","engine_version"].map(d=>`<option value="${d}"${rs.dims[1]===d?" selected":""}>${DIM_L[d]}</option>`).join("")}</select></div>
+        <button class="ghost small" id="anDwCsv" style="margin:0">Export CSV</button></div></div><div id="anDw"></div></div>`;
+    const q=`&placement_id=${encodeURIComponent(pid)}${rp}&tz=${encodeURIComponent(LOCAL_TZ)}`;
+    const drawDw=()=>reportTable($("#anDw"),{q,rs,onSort:(sort,order)=>{rs.sort=sort;rs.order=order;drawDw().catch(e=>toast(e.message,"err"));},empty:"No traffic in this range yet."});
+    $("#anDw2").onchange=e=>{rs.dims=["day",e.target.value].filter(Boolean);rs.sort=rs.order=null;drawDw().catch(x=>toast(x.message,"err"));};
+    $("#anDwCsv").onclick=()=>downloadCsv(`/v1/admin/analytics/report.csv?dimensions=${rs.dims.join(",")}${rs.sort?`&sort=${rs.sort}&order=${rs.order}`:""}${q}`,`${S.plc.name||pid}_${rs.dims.join("_")}.csv`).catch(e=>toast(e.message,"err"));
+    await drawDw();};
+  const rs={dims:["day"],sort:null,order:null};
   $("#anRef").onclick=load;$("#anR").onchange=load;
   $("#anSeed").onclick=async()=>{try{const r=await api("/v1/admin/analytics/dev/seed",{method:"POST",body:{placement_id:pid,sessions:parseInt($("#anN").value||"300",10)}});toast(`Seeded ${r.total} events`);load();}catch(e){toast(e.message,"err");}};
   await load();}
@@ -554,26 +568,110 @@ async function subDemand(el){const [cat,en]=await Promise.all([api("/v1/admin/de
     const dis=li.querySelector("[data-dis]");if(dis)dis.onclick=async()=>{try{await api(`/v1/admin/publishers/${S.pub.id}/demand/${dp.code}`,{method:"DELETE"});toast(dp.label+" disabled");subDemand(el);}catch(x){toast(x.message,"err");}};
     ul.appendChild(li);});}
 
+// ---- shared reporting helpers (top-level Analytics + placement Analytics) ----
+const DIM_L={day:"Day",week:"Week (Mon)",month:"Month",hour:"Hour",publisher:"Publisher",site:"Site",ad_unit:"Ad unit",placement:"Placement",
+  format:"Format",player_type:"Player type",country:"Country",device:"Device",engine_version:"Engine version",refresh:"Initial vs refresh"};
+const TIME_DIMS=["day","week","month","hour"];
+// [key, header, tooltip]. Every metric the API returns is in the CSV; the table shows these.
+const RCOLS=[["loads","Loads","Page loads — the player tag booted."],["viewRate","View %","Share of loads that became viewable and released the auction."],
+  ["requests","Bid reqs","Prebid auctions run."],["adRequests","Ad reqs","VAST calls to the ad server — one per waterfall tag tried."],
+  ["wins","Wins","Auctions that produced a winning header bid."],["impressions","Imps","Ads that started playing."],
+  ["fillRate","Fill","Impressions per ad opportunity (distinct opportunities, not raw waterfall attempts)."],
+  ["adsPerLoad","Ads/load","Impressions per page load — the refresh multiplier; can exceed 1."],
+  ["avgCpmRaw","eCPM raw","Average winning bid CPM, before bias."],["avgCpmBiased","eCPM biased","Average CPM sent to GAM after floor bias."],
+  ["revenue","Revenue","Estimated header-bidding revenue: raw winning-bid CPMs ÷ 1000, counting only wins that rendered. Bid-side — not GAM-settled."],
+  ["ecpm","eCPM (derived)","Revenue ÷ impressions × 1000. Counts every impression, including ones GAM filled without a header-bidding win, so it sits below eCPM raw when direct/house demand fills."],
+  ["rpm","RPM","Revenue per 1000 page loads."]];
+const MONEY=new Set(["avgCpmRaw","avgCpmBiased","revenue","ecpm","rpm"]),PCT=new Set(["viewRate","fillRate","winRate","completeRate"]);
+const money=v=>v==null?"—":"$"+Number(v).toFixed(2),pct=v=>v==null?"—":(v*100).toFixed(1)+"%";
+const fmtM=(k,v)=>MONEY.has(k)?money(v):PCT.has(k)?pct(v):(v??"—");
+const ymd=(d,tz)=>new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
+const shiftDay=(s,n)=>{const d=new Date(s+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
+// Calendar ranges resolved in the report timezone, so "Yesterday" means the
+// publisher's yesterday when the report is in their timezone.
+function rangeDates(st){const t=ymd(new Date(),st.tz);
+  switch(st.range){case "today":return[t,t];case "yesterday":{const y=shiftDay(t,-1);return[y,y];}
+    case "7":return[shiftDay(t,-6),t];case "30":return[shiftDay(t,-29),t];
+    case "month":return[t.slice(0,8)+"01",t];
+    case "lastmonth":{const end=shiftDay(t.slice(0,8)+"01",-1);return[end.slice(0,8)+"01",end];}
+    case "custom":return[st.dfrom||null,st.dto||null];default:return[null,null];}}
+function scopeQuery(st){const [f,t]=rangeDates(st);const p=[["tz",st.tz],["date_from",f],["date_to",t],["publisher_id",st.pub],["site_id",st.site],
+  ["ad_unit_id",st.au],["placement_id",st.plc],["format",st.fmt],["player_type",st.ptype],["country",st.country],["device",st.device]];
+  return p.filter(([,v])=>v).map(([k,v])=>`&${k}=${encodeURIComponent(v)}`).join("");}
+async function downloadCsv(path,name){const h={};if(TOKEN)h.Authorization="Bearer "+TOKEN;const r=await fetch(path,{headers:h});
+  if(r.status===401){logout();throw new Error("Session expired — please log in again");}
+  if(!r.ok)throw new Error(`Export failed (${r.status})`);
+  const a=document.createElement("a");a.href=URL.createObjectURL(await r.blob());a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
+// Sortable, drillable report table. rs = {dims, sort, order}; q = scope query string.
+// onSort(sort,order) re-queries server-side; onDrill(dim,id) narrows the filter.
+async function reportTable(el,{q,rs,onSort,onDrill,empty}){
+  const dims=rs.dims,sq=rs.sort?`&sort=${rs.sort}&order=${rs.order}`:"";
+  const r=await api(`/v1/admin/analytics/report?dimensions=${dims.join(",")}${sq}${q}`);
+  if(!r.rows.length){el.innerHTML=`<div class="empty">${empty||"No data for this selection."}</div>`;return r;}
+  const arrow=k=>r.sort===k?(r.order==="asc"?" ▲":" ▼"):"";
+  const th=(k,l,t)=>`<th class="sort${r.sort===k?" on":""}" data-sort="${k}"${t?` title="${esc(t)}"`:""}>${l}${arrow(k)}</th>`;
+  const drillable=d=>onDrill&&["publisher","site","ad_unit"].includes(d);
+  let prev=null;
+  const body=r.rows.map(row=>{const lead=row[dims[0]];const rep=dims.length>1&&lead===prev&&r.sort===dims[0];prev=lead;
+    return `<tr>${dims.map((d,i)=>{const v=row[d]??"—";const cell=drillable(d)?`<a href="#" class="drill" data-dim="${d}" data-id="${esc(row[d+"_id"])}" title="Drill into this ${esc(DIM_L[d].toLowerCase())}">${esc(v)}</a>`:esc(v);
+      return `<td class="nowrap"${i===0&&rep?' style="color:var(--muted)"':""}>${i===0&&!TIME_DIMS.includes(d)?`<b>${cell}</b>`:cell}</td>`;}).join("")}
+      ${RCOLS.map(([k])=>`<td>${fmtM(k,row[k])}</td>`).join("")}</tr>`;}).join("");
+  const t=r.totals||{};
+  el.innerHTML=`<div class="tblwrap"><table class="rep"><thead><tr>${dims.map(d=>th(d,DIM_L[d])).join("")}${RCOLS.map(([k,l,tt])=>th(k,l,tt)).join("")}</tr></thead>
+    <tbody>${body}</tbody><tfoot><tr><td colspan="${dims.length}"><b>Total</b></td>${RCOLS.map(([k])=>`<td><b>${fmtM(k,t[k])}</b></td>`).join("")}</tr></tfoot></table></div>
+    <p class="muted" style="margin:8px 0 0">${r.truncated?`Showing ${r.rows.length} of ${r.total} rows — export CSV for all. `:`${r.total} row${r.total===1?"":"s"}. `}Days in ${esc(r.tz)}. Click a column to sort${onDrill?", a name to drill in":""}.</p>`;
+  el.querySelectorAll("th[data-sort]").forEach(h=>h.onclick=()=>{const k=h.dataset.sort;
+    onSort(k,r.sort===k?(r.order==="asc"?"desc":"asc"):(dims.includes(k)&&!TIME_DIMS.includes(k)?"asc":"desc"));});
+  el.querySelectorAll("a.drill").forEach(a=>a.onclick=e=>{e.preventDefault();onDrill(a.dataset.dim,a.dataset.id);});
+  return r;}
+
 // ---- top-level Analytics (account-wide, dimensional) ----
-async function renderAnalyticsSection(m){
-  m.innerHTML=`<div class="card"><div class="hdr"><h2>Analytics — all publishers</h2>
+const LOCAL_TZ=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
+// Kept on S so filters survive navigating away and back.
+S.an=S.an||{range:"7",dfrom:"",dto:"",tz:"UTC",pub:"",site:"",au:"",plc:"",fmt:"",ptype:"",country:"",device:"",d1:"publisher",d2:"",sort:null,order:null};
+async function renderAnalyticsSection(m){const st=S.an;
+  const opts=await api("/v1/admin/analytics/filters");
+  const tzs=[...new Set(["UTC",LOCAL_TZ,"Europe/Prague","Asia/Kolkata"])];
+  const dimOpts=(sel,none)=>(none?`<option value="">— none —</option>`:"")+opts.dimensions.map(d=>`<option value="${d}"${sel===d?" selected":""}>${DIM_L[d]||d}</option>`).join("");
+  const sel=(id,label,items,cur,all="All")=>`<div style="flex:1 1 150px;min-width:130px"><label>${label}</label><select id="${id}"><option value="">${all}</option>${items.map(o=>`<option value="${esc(o.id)}"${o.id===cur?" selected":""}>${esc(o.name)}${o.deleted?" (deleted)":""}</option>`).join("")}</select></div>`;
+  const simple=a=>a.map(v=>({id:v,name:v}));
+  // Cascade: each level only offers children of the level above it.
+  const siteIds=new Set(opts.sites.filter(s=>!st.pub||s.publisher_id===st.pub).map(s=>s.id));
+  const aus=opts.ad_units.filter(a=>siteIds.has(a.site_id)&&(!st.site||a.site_id===st.site));const auIds=new Set(aus.map(a=>a.id));
+  const plcs=opts.placements.filter(p=>auIds.has(p.ad_unit_id)&&(!st.au||p.ad_unit_id===st.au));
+  const nameOf=(arr,id)=>(arr.find(x=>x.id===id)||{}).name;
+  const scopeLbl=nameOf(opts.placements,st.plc)||nameOf(opts.ad_units,st.au)||nameOf(opts.sites,st.site)||nameOf(opts.publishers,st.pub)||"all publishers";
+  const active=["pub","site","au","plc","fmt","ptype","country","device"].filter(k=>st[k]).length;
+  m.innerHTML=`<div class="card"><div class="hdr"><h2>Analytics — ${esc(scopeLbl)}</h2>
     <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-      <div><label>Break down by</label><select id="anDim"><option value="publisher">Publisher</option><option value="site">Site</option><option value="ad_unit">Ad unit</option><option value="placement">Placement</option><option value="format">Format</option></select></div>
-      <div><label>Range</label><select id="anR"><option value="7">Last 7 days</option><option value="1">Last 24h</option><option value="30">Last 30 days</option><option value="0">All time</option></select></div>
+      <div><label>Range</label><select id="anR">${[["today","Today"],["yesterday","Yesterday"],["7","Last 7 days"],["30","Last 30 days"],["month","This month"],["lastmonth","Last month"],["0","All time"],["custom","Custom range…"]].map(([v,l])=>`<option value="${v}"${st.range===v?" selected":""}>${l}</option>`).join("")}</select></div>
+      <div id="anCustom" style="display:${st.range==="custom"?"flex":"none"};gap:6px"><div><label>From</label><input type="date" id="anDf" value="${esc(st.dfrom)}"/></div><div><label>To</label><input type="date" id="anDt" value="${esc(st.dto)}"/></div></div>
+      <div><label>Timezone ${tip("Where a day starts — for day/week/month rows, the wins chart and the date range. Use the publisher's timezone when reconciling with their GAM reports.")}</label><select id="anTz">${tzs.map(z=>`<option${z===st.tz?" selected":""}>${esc(z)}</option>`).join("")}</select></div>
       <button class="ghost small" id="anRef" style="margin:0">Refresh</button></div></div>
+    <details id="anFilt"${active?" open":""} style="margin-bottom:14px"><summary class="muted" style="cursor:pointer">Filters${active?` · <b style="color:var(--accent)">${active} active</b>`:""}</summary>
+      <div class="row" style="align-items:flex-end">
+        ${sel("fPub","Publisher",opts.publishers,st.pub)}${sel("fSite","Site",opts.sites.filter(s=>siteIds.has(s.id)),st.site)}
+        ${sel("fAu","Ad unit",aus,st.au)}${sel("fPlc","Placement",plcs,st.plc)}</div>
+      <div class="row" style="align-items:flex-end">
+        ${sel("fFmt","Format",simple(opts.formats),st.fmt)}${sel("fPt","Player type",simple(opts.player_types),st.ptype)}
+        ${sel("fCc","Country",simple(opts.countries),st.country)}${sel("fDev","Device",simple(opts.devices),st.device)}
+        <div style="flex:0 0 auto"><button class="ghost small" id="fClr" style="margin:0"${active?"":" disabled"}>Clear filters</button></div></div></details>
     <div class="kpis" id="anKpis"></div></div>
-    <div class="grid2"><div class="card"><h2>Funnel (all placements)</h2><div class="funnel" id="anFunnel"></div></div>
+    <div class="grid2"><div class="card"><h2>Funnel</h2><div class="funnel" id="anFunnel"></div></div>
     <div class="card"><h2>Wins over time (daily)</h2><div class="spark" id="anSpark"></div><p class="muted" id="anSparkLbl"></p></div></div>
-    <div class="card"><h2>By <span id="anDimLbl">publisher</span></h2><div id="anBreak"></div></div>`;
-  const money=v=>v==null?"—":"$"+Number(v).toFixed(2),pct=v=>v==null?"—":(v*100).toFixed(1)+"%";
-  const load=async()=>{
-    const d=parseInt($("#anR").value,10);const rp=d?`&from=${encodeURIComponent(new Date(Date.now()-d*864e5).toISOString())}`:"";
-    const q=rp?"?"+rp.slice(1):"";const dim=$("#anDim").value;$("#anDimLbl").textContent=dim.replace("_"," ");
-    const [s,ts,br]=await Promise.all([
-      api("/v1/admin/analytics/summary"+q),
-      api("/v1/admin/analytics/timeseries?bucket=day"+rp),
-      api("/v1/admin/analytics/breakdown?dimension="+dim+rp)]);
-    $("#anKpis").innerHTML=[["Player loads",s.loads],["Bid requests",s.requests],["Ad requests",s.adRequests],["Win rate",pct(s.winRate)],["Fill rate",pct(s.fillRate)],["Ads / load",s.adsPerLoad],["eCPM raw",money(s.avgCpmRaw)],["eCPM biased",money(s.avgCpmBiased)]].map(([l,v])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v??"—"}</div></div>`).join("");
+    <div class="card"><div class="hdr"><h2>Report</h2>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div><label>Rows by</label><select id="anD1">${dimOpts(st.d1)}</select></div>
+        <div><label>then by</label><select id="anD2">${dimOpts(st.d2,true)}</select></div>
+        <div style="display:flex;gap:4px">${[["Day-wise",st.d1==="day"&&!st.d2,"day",""],["Publisher × day",st.d1==="publisher"&&st.d2==="day","publisher","day"],["Site × day",st.d1==="site"&&st.d2==="day","site","day"]].map(([l,on,a,b])=>`<button class="ghost small preset${on?" on":""}" data-a="${a}" data-b="${b}" style="margin:0">${l}</button>`).join("")}</div>
+        <button class="ghost small" id="anCsv" style="margin:0">Export CSV</button></div></div>
+      <div id="anBreak"></div></div>`;
+  const rerender=patch=>{Object.assign(st,patch);renderAnalyticsSection(m).catch(e=>toast(e.message,"err"));};
+  const load=async()=>{const q=scopeQuery(st),qs="?"+q.slice(1);
+    const [s,ts]=await Promise.all([api("/v1/admin/analytics/summary"+qs),api("/v1/admin/analytics/timeseries?bucket=day"+q)]);
+    $("#anKpis").innerHTML=[["Player loads",s.loads],["Bid requests",s.requests],["Ad requests",s.adRequests],["Win rate",pct(s.winRate)],["Fill rate",pct(s.fillRate)],["Ads / load",s.adsPerLoad],
+      ["eCPM raw",money(s.avgCpmRaw)],["eCPM biased",money(s.avgCpmBiased)],["Revenue (est.)",money(s.revenue)],["eCPM (derived)",money(s.ecpm)],["RPM",money(s.rpm)]]
+      .map(([l,v])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v??"—"}</div></div>`).join("");
     // Split per-load from per-opportunity steps — see the placement Analytics tab.
     const pageSteps=[["Load",s.loads],["Viewable",s.views]];
     // "Ad opportunity" (distinct auction_id), not raw ad_request attempts — a
@@ -586,11 +684,29 @@ async function renderAnalyticsSection(m){
     const wins={};ts.filter(r=>r.event==="auction_win").forEach(r=>wins[r.ts.slice(0,10)]=r.count);const dys=Object.keys(wins).sort();const smax=Math.max(1,...dys.map(x=>wins[x]));
     $("#anSpark").innerHTML=dys.map(x=>`<i style="height:${(wins[x]/smax*100).toFixed(0)}%" title="${x}: ${wins[x]}"></i>`).join("")||'<span class="muted">no data</span>';
     $("#anSparkLbl").textContent=dys.length?`${dys[0]} → ${dys[dys.length-1]}`:"";
-    $("#anBreak").innerHTML=br.length?`<div class="tblwrap"><table><thead><tr><th>${esc(dim)}</th><th>Loads</th><th>Bid reqs</th><th>Ad reqs</th><th>Wins</th><th>Imps</th><th>Fill</th><th>Ads/load</th><th>eCPM raw</th><th>eCPM biased</th></tr></thead><tbody>`+
-      br.map(r=>`<tr><td style="max-width:260px"><b>${esc(r.key)}</b></td><td>${r.loads}</td><td>${r.requests}</td><td>${r.adRequests}</td><td>${r.wins}</td><td>${r.impressions}</td><td>${pct(r.fillRate)}</td><td>${r.adsPerLoad??"—"}</td><td>${money(r.avgCpmRaw)}</td><td>${money(r.avgCpmBiased)}</td></tr>`).join("")+`</tbody></table></div>`
-      :'<div class="empty">No data yet — generate demo data on a placement, or wait for live traffic.</div>';
-  };
-  $("#anRef").onclick=load;$("#anDim").onchange=load;$("#anR").onchange=load;
+    await reportTable($("#anBreak"),{q,rs:{dims:[st.d1,st.d2].filter(Boolean),sort:st.sort,order:st.order},
+      onSort:(sort,order)=>{st.sort=sort;st.order=order;load().catch(e=>toast(e.message,"err"));},
+      // Drill: narrow to the clicked entity and break down one level deeper.
+      onDrill:(dim,id)=>{const next={publisher:["pub","site"],site:["site","ad_unit"],ad_unit:["au","placement"]}[dim];
+        rerender({[next[0]]:id,d1:next[1],d2:st.d2===next[1]?"":st.d2,sort:null,order:null});},
+      empty:"No data yet — generate demo data on a placement, or wait for live traffic."});};
+  $("#anRef").onclick=()=>load().catch(e=>toast(e.message,"err"));
+  $("#anR").onchange=e=>rerender({range:e.target.value});
+  $("#anDf").onchange=e=>{st.dfrom=e.target.value;load().catch(x=>toast(x.message,"err"));};
+  $("#anDt").onchange=e=>{st.dto=e.target.value;load().catch(x=>toast(x.message,"err"));};
+  $("#anTz").onchange=e=>{st.tz=e.target.value;load().catch(x=>toast(x.message,"err"));};
+  // Changing a level clears the levels below it that no longer belong to it.
+  $("#fPub").onchange=e=>rerender({pub:e.target.value,site:"",au:"",plc:""});
+  $("#fSite").onchange=e=>rerender({site:e.target.value,au:"",plc:""});
+  $("#fAu").onchange=e=>rerender({au:e.target.value,plc:""});
+  [["fPlc","plc"],["fFmt","fmt"],["fPt","ptype"],["fCc","country"],["fDev","device"]].forEach(([id,k])=>$("#"+id).onchange=e=>rerender({[k]:e.target.value}));
+  $("#fClr").onclick=()=>rerender({pub:"",site:"",au:"",plc:"",fmt:"",ptype:"",country:"",device:""});
+  const setDims=(d1,d2)=>rerender({d1,d2:d2===d1?"":d2,sort:null,order:null});
+  $("#anD1").onchange=e=>setDims(e.target.value,st.d2);$("#anD2").onchange=e=>setDims(st.d1,e.target.value);
+  m.querySelectorAll(".preset").forEach(b=>b.onclick=()=>setDims(b.dataset.a,b.dataset.b));
+  $("#anCsv").onclick=async()=>{const dims=[st.d1,st.d2].filter(Boolean);const [f,t]=rangeDates(st);
+    try{await downloadCsv(`/v1/admin/analytics/report.csv?dimensions=${dims.join(",")}${st.sort?`&sort=${st.sort}&order=${st.order}`:""}${scopeQuery(st)}`,
+      `report_${dims.join("_")}_${f||"all"}${t&&t!==f?"_"+t:""}.csv`);}catch(e){toast(e.message,"err");}};
   await load();
 }
 
