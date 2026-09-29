@@ -669,6 +669,7 @@
         container.__atpAds = { adContainer: adContainer, adc: adc, loader: loader };
         var ctl = createAdControls(container, videoEl);
         loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (e) {
+          if (isStaleAdEvent(e)) return;
           adContainer.style.zIndex = "-1";
           adContainer.style.pointerEvents = "none";
           ctl.hide();
@@ -680,6 +681,7 @@
           advanceWaterfall("no_fill");
         }, false);
         loader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, function (e) {
+          if (isStaleAdEvent(e)) { try { e.getAdsManager(videoEl).destroy(); } catch (_) {} return; }
           var mgr = e.getAdsManager(videoEl);
           // Expose the manager so the sticky/floating logic can call mgr.resize()
           // and reflow the live ad creative when the player docks/undocks.
@@ -761,8 +763,19 @@
       req.linearAdSlotHeight = isOutstream()
         ? Math.round(w * 9 / 16)
         : (container.offsetHeight || 360);
-      loader.requestAds(req);
+      loader.requestAds(req, { atpAttempt: wfAttempt });
     } catch (e) { warn("requestAds: " + e.message); }
+  }
+
+  // True for a loader event answering a request the waterfall has already
+  // given up on (timed out and moved to the next tag, or ended the chain). The
+  // loader is shared across attempts, so without this a late empty VAST from
+  // tag 1 would skip tag 2 while it is still in flight, and a late fill would
+  // play an ad that reporting already booked as a no-fill.
+  function isStaleAdEvent(e) {
+    var ctx = null;
+    try { ctx = e && e.getUserRequestContext && e.getUserRequestContext(); } catch (_) {}
+    return !!ctx && ctx.atpAttempt !== undefined && ctx.atpAttempt !== wfAttempt;
   }
 
   // Outstream renderer. No content video — IMA renders the ad directly into
@@ -828,6 +841,7 @@
       var ctl = createAdControls(container, videoEl);
 
       loader.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, function (e) {
+        if (isStaleAdEvent(e)) return;
         warn("outstream loader error: " + ((e && e.getError && e.getError()) || "unknown"));
         beacon("ad_error", { phase: "ima_loader", errorCode: String((e && e.getError && e.getError()) || "") });
         // Don't collapse yet — a later tag in the chain may still fill. The slot
@@ -836,6 +850,7 @@
       }, false);
 
       loader.addEventListener(google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, function (e) {
+        if (isStaleAdEvent(e)) { try { e.getAdsManager(videoEl).destroy(); } catch (_) {} return; }
         var mgr = e.getAdsManager(videoEl);
         ctl.bind(mgr);
 
@@ -1055,6 +1070,15 @@
   // can show which position actually filled without ever mistaking three
   // attempts for three opportunities.
   var wfTags = [], wfIndex = 0, wfTargeting = null, wfFilled = false, wfTimer = null;
+  // Bumped per ad request; see isStaleAdEvent().
+  var wfAttempt = 0;
+  // The per-tag timer starts before IMA has even sent the request: on the first
+  // call it also covers loading IMA's bridge iframe, measured at ~3.4s on
+  // rssads.de — longer than the whole 3s default. The timeout exists to give
+  // LATER tags their turn, so the last tag has nothing to fall through to; it
+  // gets a long backstop only and otherwise waits for IMA's own verdict (IMA
+  // always ends a request with ADS_MANAGER_LOADED or AD_ERROR).
+  var LAST_TAG_BACKSTOP_MS = 15000;
 
   function clearWfTimer() { if (wfTimer) { clearTimeout(wfTimer); wfTimer = null; } }
 
@@ -1090,7 +1114,10 @@
       tagIndex: wfIndex, tagLabel: t.label
     });
     step(6, "Ad request " + (wfIndex + 1) + "/" + wfTags.length + " → " + t.label);
-    wfTimer = setTimeout(function () { advanceWaterfall("timeout"); }, t.timeoutMs);
+    wfAttempt++;
+    var isLast = wfIndex === wfTags.length - 1;
+    var waitMs = isLast ? Math.max(t.timeoutMs, LAST_TAG_BACKSTOP_MS) : t.timeoutMs;
+    wfTimer = setTimeout(function () { advanceWaterfall("timeout"); }, waitMs);
     if (isOutstream()) setupOutstream(url);
     else { setupPlayer(url); setupSticky(); }
   }
@@ -1110,6 +1137,7 @@
       deliverCurrentTag();
       return;
     }
+    wfAttempt++;  // any response still in flight now belongs to a closed opportunity
     step(6, "Waterfall exhausted after " + wfTags.length + " tag(s) (" + reason + ").");
     beacon("no_demand", { phase: "waterfall_exhausted", fallbackServed: false });
     if (isOutstream()) outstreamCollapse();
