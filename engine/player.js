@@ -1290,7 +1290,12 @@
   // plane blip can never blank the player. resolveConfig() ALWAYS resolves
   // (never rejects); in static mode (no data-config-url) it resolves instantly.
   var CFG_CACHE_KEY = "atp_cfg_" + (cfg.placementId || "default");
+  // How long boot waits for the network before falling back. Short when a
+  // last-known-good copy exists (it is a perfectly good answer); long when it
+  // does not, because the attribute defaults of a thin tag (config-url +
+  // placement-id only) describe no real player — no ad tag, wrong placement.
   var CFG_TIMEOUT_MS = 1500;
+  var CFG_TIMEOUT_NOCACHE_MS = 8000;
 
   function cfgCacheGet() {
     try { var s = localStorage.getItem(CFG_CACHE_KEY); return s ? JSON.parse(s) : null; } catch (_) { return null; }
@@ -1342,32 +1347,59 @@
     TELE_ON = !!(cfg.beaconUrl && cfg.account && cfg.placementId);
   }
 
+  // Resolves true when a runtime config (network or cache) was applied, false
+  // when the engine is running on attribute defaults alone.
+  //
+  // A timed-out fetch is NOT aborted: boot falls back, but the late response
+  // still lands in the cache so the next page view has it. Aborting it meant a
+  // control plane that was merely slower than the timeout (rssads.de on
+  // staging, ~1.7s TTFB) never populated the cache, and every visitor on every
+  // page view booted on defaults.
   function resolveConfig() {
-    if (!cfg.configUrl || !cfg.placementId) return Promise.resolve();  // static tag
+    if (!cfg.configUrl || !cfg.placementId) return Promise.resolve(false);  // static tag
     var url = cfg.configUrl.replace(/\/+$/, "") + "/" + encodeURIComponent(cfg.placementId);
-    if (typeof fetch !== "function") { applyRuntimeConfig(cfgCacheGet()); return Promise.resolve(); }
-    var ctrl = ("AbortController" in window) ? new AbortController() : null;
-    var to = setTimeout(function () { if (ctrl) try { ctrl.abort(); } catch (_) {} }, CFG_TIMEOUT_MS);
-    var opts = { credentials: "omit" };
-    if (ctrl) opts.signal = ctrl.signal;
-    return fetch(url, opts)
-      .then(function (r) { return r && r.ok ? r.json() : null; })
-      .then(function (rc) {
-        clearTimeout(to);
-        if (rc) { applyRuntimeConfig(rc); cfgCacheSet(rc); step("0.1", "Runtime config applied from control plane."); }
-        else { applyRuntimeConfig(cfgCacheGet()); warn("config fetch failed (non-OK); using cached/attribute defaults."); }
-      })
-      .catch(function () {
-        clearTimeout(to);
-        applyRuntimeConfig(cfgCacheGet());
-        warn("config fetch error/timeout; using cached/attribute defaults.");
-      });
+    var cached = cfgCacheGet();
+    function fallback(why) {
+      applyRuntimeConfig(cached);
+      warn("config " + why + "; using " + (cached ? "cached config." : "attribute defaults (no cached config)."));
+      return !!cached;
+    }
+    if (typeof fetch !== "function") return Promise.resolve(fallback("fetch unavailable"));
+    return new Promise(function (resolve) {
+      var settled = false;
+      function settle(v) { if (!settled) { settled = true; resolve(v); } }
+      var waitMs = cached ? CFG_TIMEOUT_MS : CFG_TIMEOUT_NOCACHE_MS;
+      var to = setTimeout(function () { settle(fallback("fetch timed out after " + waitMs + "ms")); }, waitMs);
+      fetch(url, { credentials: "omit" })
+        .then(function (r) { return r && r.ok ? r.json() : null; })
+        .then(function (rc) {
+          clearTimeout(to);
+          if (!rc) { settle(fallback("fetch failed (non-OK)")); return; }
+          cfgCacheSet(rc);
+          if (settled) { step("0.1", "Runtime config arrived after timeout — cached for the next page view."); return; }
+          applyRuntimeConfig(rc);
+          step("0.1", "Runtime config applied from control plane.");
+          settle(true);
+        })
+        .catch(function () { clearTimeout(to); settle(fallback("fetch error")); });
+    });
+  }
+
+  // A dynamic tag that got no config at all and carries no ad tag of its own
+  // has nothing to render: mounting would paint an empty default (instream,
+  // no content, no ad) player into the publisher's page. Stay invisible.
+  function nothingToRender(configApplied) {
+    return !!cfg.configUrl && !configApplied && !(cfg.adTags && cfg.adTags.length);
   }
 
   ready(function () {
     // Dynamic mode resolves config BEFORE mount/deps/auction so bidders, floors,
     // bias, VAST and prebidUrl reflect the backend. Static mode resolves instantly.
-    resolveConfig().then(function () {
+    resolveConfig().then(function (configApplied) {
+      if (nothingToRender(configApplied)) {
+        warn("No runtime config and no ad tag on the script — not mounting a player.");
+        return;
+      }
       loadCss("https://cdn.jsdelivr.net/npm/video.js@8/dist/video-js.min.css");
       ensureMount();
       beacon("player_load", {
