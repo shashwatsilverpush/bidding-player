@@ -203,3 +203,22 @@ async def test_disabled_bidder_excluded(client: AsyncClient, auth_headers: dict[
     )
     r = await client.get(f"/v1/config/{ids['placement_id']}")
     assert r.json()["bidders"] == []
+
+
+async def test_placement_type_switch_reaches_runtime_config(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    # The dashboard switches instream <-> outstream by PATCHing the full config
+    # with a new `placement`; the thin tag never changes, so the public config
+    # endpoint is the only place the switch can take effect.
+    ids = await build_chain(client, auth_headers)
+    path = f"/v1/admin/placements/{ids['placement_id']}"
+    for new_type in ("outstream", "instream"):
+        cur = (await client.get(path, headers=auth_headers)).json()["config"]
+        r = await client.patch(
+            path, headers=auth_headers, json={"config": {**cur, "placement": new_type}}
+        )
+        assert r.status_code == 200
+        cfg = (await client.get(f"/v1/config/{ids['placement_id']}")).json()
+        assert cfg["placement"] == new_type
+        assert cfg["adTag"] == cur["adTag"]  # the rest of the config survives the switch

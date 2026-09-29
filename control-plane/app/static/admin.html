@@ -320,21 +320,30 @@ async function renderAdUnit(m){crumb([{t:"Publishers",go:()=>go({pub:null})},{t:
     li.innerHTML=`<span>▶ ${esc(p.name)} <span class="pill">${p.config.placement}</span>${p.active?"":' <span class="pill warn">paused</span>'}</span><span><span class="pill ${st.cls}">${st.label}</span> <button class="btn small" data-edit style="margin:0">Edit</button> <button class="btn small danger" data-del style="margin:0">Delete</button> <span class="id">›</span></span>`;
     li.onclick=()=>go({plc:p,plcTab:"prebid"});
     li.querySelector("[data-edit]").onclick=e=>{e.stopPropagation();openForm({title:"Edit placement",submitLabel:"Save",
-      note:"Placement type, bidders, floors and the VAST tag are edited inside the placement (Prebid / GAM / Player Tag tabs).",
+      note:"Changing the type switches live traffic on the next config fetch — the publisher's tag does not change. Bidders, floors and the VAST tag are edited inside the placement (Prebid / GAM / Player Tag tabs).",
       fields:[{key:"name",label:"Name",value:p.name},
+        {key:"type",label:"Type",type:"select",value:p.config.placement,options:TYPE_OPTS},
         {key:"active",type:"checkbox",label:"Active (serves config; unchecked = paused → config 404)",value:p.active}],
       onSubmit:async v=>{if(!v.name.trim())throw new Error("Name required");
-        await api(`/v1/admin/placements/${p.id}`,{method:"PATCH",body:{name:v.name.trim(),active:v.active}});
-        toast("Placement updated");await renderAdUnit(m);}});};
+        const body={name:v.name.trim(),active:v.active};
+        if(v.type!==p.config.placement){const cur=(await api(`/v1/admin/placements/${p.id}`)).config;body.config=withType(cur,v.type);}
+        await api(`/v1/admin/placements/${p.id}`,{method:"PATCH",body});
+        toast(body.config?`Placement updated — now ${v.type}`:"Placement updated");await renderAdUnit(m);}});};
     li.querySelector("[data-del]").onclick=e=>{e.stopPropagation();askDelete({kind:"placement",path:`/v1/admin/placements/${p.id}`,name:p.name,after:()=>renderAdUnit(m)});};
     ul.appendChild(li);});
   $("#cNew").onclick=()=>openForm({title:"New placement",submitLabel:"Create",
     fields:[{key:"name",label:"Name",placeholder:"Homepage instream"},
-      {key:"type",label:"Type",type:"select",value:"instream",options:[{value:"instream",label:"instream"},{value:"outstream",label:"outstream"}]},
+      {key:"type",label:"Type",type:"select",value:"instream",options:TYPE_OPTS},
       {key:"channel",label:"Engine delivery",type:"select",value:"auto",options:[{value:"auto",label:"auto-update"},{value:"pinned",label:"pinned"}]}],
     onSubmit:async v=>{if(!v.name.trim())throw new Error("Name required");
-      const cfg={placement:v.type,timeout:1200,bias:"0.10"};if(v.type==="instream")cfg.video="https://vjs.zencdn.net/v/oceans.mp4";
+      const cfg=withType({timeout:1200,bias:"0.10"},v.type);
       const p=await api(`/v1/admin/ad-units/${S.au.id}/placements`,{method:"POST",body:{name:v.name.trim(),engine_channel:v.channel,config:cfg,active:true}});toast("Placement created");go({plc:p,plcTab:"prebid"});}});}
+
+// Instream plays the ad against a content video, so a placement set (or switched)
+// to instream needs one — seed the same demo video the create form always has.
+const DEMO_VIDEO="https://vjs.zencdn.net/v/oceans.mp4";
+const TYPE_OPTS=[{value:"instream",label:"instream"},{value:"outstream",label:"outstream"}];
+function withType(cfg,type){const c={...cfg,placement:type};if(type==="instream"&&!c.video)c.video=DEMO_VIDEO;return c;}
 
 function readiness(p,demandOn){const c=p.config;const miss=[];if(!c.adTag)miss.push("GAM tag");if(!demandOn)miss.push("demand");
   if(c.placement==="instream"&&!c.video)miss.push("video");
@@ -380,6 +389,8 @@ async function panePrebid(el){
 
 async function paneTag(el){const p=await getPlc();const c=p.config;
   el.innerHTML=`<div class="grid2"><div>
+      <div class="row"><div><label>Placement type ${tip("<b>instream</b>: a content video player; IMA pauses the content to play the ad, then resumes it. <b>outstream</b>: no content video — the slot stays collapsed until an ad fills, plays it muted in view, then collapses again. Switching takes effect on the publisher's page on the next config fetch; the tag does not change.")}</label><select id="tTy">${TYPE_OPTS.map(o=>`<option value="${o.value}">${o.label}</option>`).join("")}</select>
+      <p class="muted" id="tTyNote" style="margin:4px 0 0"></p></div></div>
       <div class="row"><div><label>Engine delivery ${tip("<b>auto-update (loader)</b>: the tag loads a tiny loader that always resolves the current stable engine from the release channel — ship engine updates with no re-integration. <b>pinned</b>: bakes one exact engine version into the tag (only changes when you regenerate it).")}</label><select id="tCh"><option value="auto">auto-update (loader)</option><option value="pinned">pinned</option></select></div>
       <div><label>Content video URL (instream) ${tip("The publisher's content video the ad plays against. IMA pauses this to play the ad, then resumes it. <b>Required for instream</b>; ignored for outstream. <b>Format:</b> MP4 (H.264/AVC + AAC) or HLS (<code>.m3u8</code>), served over HTTPS. Other containers — WebM, MOV, Ogg, DASH <code>.mpd</code> — are not supported and fail with “No compatible source”.")}</label><input id="tVid"/>
       <p class="muted" style="margin:4px 0 0">Accepts <b>MP4</b> (H.264 + AAC) or <b>HLS</b> <code>.m3u8</code>, HTTPS only. WebM/MOV/DASH are not supported.</p></div></div>
@@ -405,6 +416,7 @@ async function paneTag(el){const p=await getPlc();const c=p.config;
       <button class="btn ghost" id="tCheck">✓ Preflight check</button>
       <button class="btn ghost" id="tTest">▶ Test in browser</button></div>
       <div id="tChecks"></div></div></div>`;
+  $("#tTy").value=c.placement||"instream";
   $("#tCh").value=p.engine_channel==="auto"?"auto":"pinned";$("#tVid").value=c.video||"";$("#tDiv").value=c.divId||"";
   $("#tPre").value=c.preload||"metadata";$("#tVp").value=c.vpaid||"insecure";
   $("#tAp").checked=c.autoplay!==false;$("#tMu").checked=c.muted!==false;$("#tFl").checked=c.fluid!==false;$("#tLo").checked=!!c.loop;$("#tSt").checked=!!c.sticky;
@@ -413,14 +425,21 @@ async function paneTag(el){const p=await getPlc();const c=p.config;
   // Refresh cadence inputs are meaningless while refresh is off — dim them.
   const syncRf=()=>{const on=$("#tRf").checked;$("#tRfI").disabled=!on;$("#tRfM").disabled=!on;};
   $("#tRf").onchange=syncRf;syncRf();
+  // Content-video settings do nothing on an outstream slot — dim them, and warn
+  // before a save flips the live type under the publisher.
+  const syncTy=(changed)=>{const ty=$("#tTy").value,out=ty==="outstream";
+    ["tVid","tPre","tAp","tLo","tSt"].forEach(id=>{$("#"+id).disabled=out;});
+    if(changed&&ty==="instream"&&!$("#tVid").value.trim())$("#tVid").value=DEMO_VIDEO;
+    $("#tTyNote").innerHTML=ty!==(c.placement||"instream")?`⚠️ Saving switches this placement to <b>${ty}</b> on the live page (next config fetch).`:"";};
+  $("#tTy").onchange=()=>syncTy(true);syncTy(false);
   await genTag();
   $("#tSave").onclick=async()=>{try{const cur=(await getPlc()).config;
     await api(`/v1/admin/placements/${S.plc.id}`,{method:"PATCH",body:{engine_channel:$("#tCh").value,
-      config:{...cur,video:$("#tVid").value.trim()||null,divId:$("#tDiv").value.trim()||null,preload:$("#tPre").value,vpaid:$("#tVp").value,
+      config:{...withType(cur,$("#tTy").value),video:$("#tVid").value.trim()||null,divId:$("#tDiv").value.trim()||null,preload:$("#tPre").value,vpaid:$("#tVp").value,
         autoplay:$("#tAp").checked,muted:$("#tMu").checked,fluid:$("#tFl").checked,loop:$("#tLo").checked,sticky:$("#tSt").checked,
         lazy:$("#tLz").checked,adControls:$("#tAc").checked,refresh:$("#tRf").checked,
         refreshInterval:Math.max(30,parseInt($("#tRfI").value||"30",10)),refreshMax:Math.max(1,parseInt($("#tRfM").value||"10",10))}}});
-    toast("Saved");await genTag();}catch(e){toast(e.message,"err");}};
+    toast("Saved");await paneTag(el);}catch(e){toast(e.message,"err");}};
   $("#tCopy").onclick=()=>{navigator.clipboard.writeText($("#tOut").value);toast("Copied");};
   $("#tCheck").onclick=preflight;
   $("#tTest").onclick=()=>window.open(`/preview?p=${S.plc.id}&debug=true`,"_blank");}
